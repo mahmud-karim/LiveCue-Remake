@@ -4090,6 +4090,30 @@ check was last run for `<w>`." (with "Codex's version could not be read" in plac
 the version is null, and "the containment check has not been run yet" when nothing was recorded), then
 "Run the containment check, then choose Mark as checked in Settings."
 
+**Settled by the build (WP-W06)**, where the text above left a choice open:
+
+- `settings.json` is written without a byte-order mark, with line feeds and one final line feed, like
+  `pairing.json`. A byte-order mark in front of a file is accepted when it is read.
+- "Wrong JSON type" and "wrong value" are told apart, so that as much of a damaged file as possible stays
+  `Invalid` (which keeps the ledger) rather than `Unreadable` (which keeps nothing). `Unreadable`: not a JSON
+  object; a member of the ten of the first format missing; a member, or a member of a ledger entry, of the
+  wrong JSON type; a ledger entry that is not an object or lacks one of its five members. `Invalid`: a number
+  that is not a 32-bit integer (`OutOfRange`, `NotAllowed` or `UnsupportedVersion` by its field); a mode text
+  other than the two words (`NotAllowed`); a ledger entry whose mode is neither word or whose `createdAt` is
+  not an ISO 8601 time (`BadFormat`, that entry only).
+- A ledger `target` must be the port in its plain decimal form: `http://127.0.0.1:047841` is `BadFormat`.
+- `createdAt` is stored as UTC to the second. An entry that is saved and loaded again therefore differs from
+  the one in memory by its fraction of a second: code that looks for "this entry" in the ledger of a later
+  load compares mode, port, path and target, or builds its entries with whole seconds.
+- The "letters" and "digits" of the Codex version text are the ASCII ones.
+- `LabFolderResolver` holds a lab folder given for one run (the console host's `--lab`) to the same rule as
+  the setting.
+- `CodexLocator`: the configured path must be absolute; an entry of `PATH` that is not an absolute path is
+  skipped (it would depend on the current folder); `%LOCALAPPDATA%` is read through
+  `IHostFileSystem.GetEnvironmentVariable`, the only source the seam offers.
+- `ReadVersionAsync` and `IsSignedInAsync` answer "unknown" and "not signed in" for a path the process runner
+  refuses to start, instead of throwing.
+
 ### 4.15 Hosting: the mapping manager (`Tailscale/`)
 
 **Reading the serve status** (`ServeStatusParser`). The document must be a JSON object; otherwise
@@ -4257,6 +4281,44 @@ mode, and in JSON mode it leaves out the members `Transcript`, `PartialTranscrip
 is given. Third, a start that returns `ExposedInPrivateMode` prints its text and exits 2, like a
 prerequisite failure. Fourth, a stale containment check (`ContainmentCheckIsStale`) prints its warning line
 once after the checks and changes no exit code.
+
+**Settled by the build (WP-W06)**, where the text above left a choice open:
+
+- Supervisor. The three inspections of a start (step 4a, the one after `PortInUse`, step 8) are made for the
+  settings in force for that run, the overrides of the run applied: the exposure report is about the port the
+  relay really asks for. `InspectConnectionAsync` on demand uses the saved settings. A start that arrives
+  while a stored-pairing reset holds the gate waits for it; one that arrives while another start or a stop is
+  under way returns `AlreadyRunning` at once. `StopAsync` gives the relay W-02 plus one second, on the
+  supervisor's clock, for its stop and its dispose together, and then abandons that instance.
+- `EndpointResolver` removes one trailing dot from the name and nothing else: a name with a space or a line
+  break gives null.
+- `HostProgram.RunAsync(args, services, output, cancel)`: `output` is a `HostOutput(Writer, IsRedirected)`.
+- Exit codes: 0 after a clean stop, a passed `--check-only` and a shown pairing; 2 for a usage error, a failed
+  prerequisite, the refusal of check 6a and a pairing that cannot be shown; 3 for a relay start fault and for
+  a relay that stops by itself while the host runs (the host then ends instead of waiting for Ctrl+C; it
+  never restarts the relay).
+- Arguments. `--data-dir`, `--codex` and `--lab` are made absolute against the current folder. A `--data-dir`
+  that is the previous LiveCue's `%LOCALAPPDATA%\LiveCue` folder, or lies inside it, is a usage error.
+- Text lines. A `RelayFaulted` event prints `Relay fault: <CODE>.`; the text of architecture 3.11 is the
+  host's last line. `PhoneSeen` prints "iPhone seen." once until another line is printed. `--check-only`
+  prints its result line first and the containment warning after it.
+- JSON lines (`--events json`): `type` is the record's name, then `at`, then the record's other members in
+  camel case; an event of the relay is written as itself, not wrapped in `RelayEventForwarded`. So that every
+  line of a run is one JSON object, the host's own lines are objects too:
+  `{"type":"Warning","message":…}` for the containment warning and
+  `{"type":"Failure","message":…,"exitCode":…}` for the text it ends with. `--check-only` and
+  `--show-pairing` print text in either form.
+- `--show-pairing`: a failed check other than the two Codex checks prints its text of architecture 3.11; no
+  endpoint prints "The PC address could not be resolved."; no pairing file prints "No pairing has been
+  created yet. Start LiveCue once, then run this again."; an unreadable one prints the text that
+  architecture 3.11 gives for `PAIRING_STORE_UNREADABLE`. The line for a redirected output on the default
+  folder is "The pairing is shown only in an interactive console. Run --show-pairing in a terminal window,
+  without redirecting its output."
+- Terminal QR. `TerminalQr` encodes the payload text itself, with the parameters of `QrMatrix.Encode` (4.7)
+  and the QR package the relay already ships, because the relay's public surface hands out a matrix only from
+  a running relay. Light modules are the written characters and dark modules are left empty, so that the
+  code is the right way round on a dark terminal. For this one run the console is switched to UTF-8 and
+  switched back; a redirected output keeps its encoding.
 
 ---
 

@@ -5,9 +5,24 @@ using LiveCue.Relay.Protocol;
 namespace LiveCue.Hosting;
 
 /// <summary>
-/// One relay instance per start (architecture 3.3 and 3.11), with the step order of W-design 4.16.
+/// One relay instance per start (architecture 3.3 and 3.11), with the step order of W-design 4.16:
+///
+/// <code>
+/// 1   State Checking                                              CheckingStarted
+/// 2   the prerequisite checks; the loaded settings are adopted    PrerequisitesChecked
+/// 3   a failed check ends the start
+/// 4   the relay's options: port, mode, endpoint, folders, Codex
+/// 4a  Private mode: no Funnel handler may point at the relay port ConnectionInspected, when it refuses
+/// 5   State Starting; the relay is created                        RelayStarting
+/// 6   the relay starts                                            RelayEventForwarded for each event
+/// 7   State Running
+/// 8   the mapping inspection                                      ConnectionInspected
+/// </code>
+///
 /// Thread-safe; Start, Stop and ResetStoredPairing are serialised. No member ever runs a Tailscale write
-/// command: the only mapping call made here is the read-only inspection.
+/// command: the only mapping call made here is the read-only inspection (rule TS-9). With an endpoint
+/// given for the run (the console host's <c>--endpoint</c>) no mapping is involved, and steps 4a and 8
+/// and the inspection after a port-in-use fault are left out.
 /// </summary>
 internal sealed class RelaySupervisor : IRelaySupervisor
 {
@@ -77,18 +92,22 @@ internal sealed class RelaySupervisor : IRelaySupervisor
 
     public ChannelReader<HostEvent> Events => _events.Reader;
 
+    /// <summary>True when Tailscale mappings carry the relay's traffic: no endpoint was given for the run.</summary>
+    private bool MappingsAreInvolved => _overrides.Endpoint is null;
+
     public async Task<StartResult> StartAsync(CancellationToken ct)
     {
-        if (_state != SupervisorState.Stopped || !await _gate.WaitAsync(0, ct).ConfigureAwait(false))
+        if (_state != SupervisorState.Stopped)
         {
-            return new StartResult(StartOutcome.AlreadyRunning, null, null, null);
+            return AlreadyRunning;
         }
 
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_state != SupervisorState.Stopped)
             {
-                return new StartResult(StartOutcome.AlreadyRunning, null, null, null);
+                return AlreadyRunning;
             }
 
             try
@@ -98,7 +117,7 @@ internal sealed class RelaySupervisor : IRelaySupervisor
             catch
             {
                 // Cancellation, or a relay that threw something unexpected: nothing is left running.
-                await DropRelayAsync().ConfigureAwait(false);
+                await DropRelayAsync(CancellationToken.None).ConfigureAwait(false);
                 _state = SupervisorState.Stopped;
                 throw;
             }
@@ -121,13 +140,21 @@ internal sealed class RelaySupervisor : IRelaySupervisor
             }
 
             _state = SupervisorState.Stopping;
+
+            // W-02 plus one second for the whole stop. A relay that takes longer is abandoned: the
+            // supervisor is stopped either way, and nothing waits for that instance again.
+            using var budget = new CancellationTokenSource(ProtocolConstants.WindowCloseWait, _clock);
             try
             {
-                await relay.StopAsync(ct).ConfigureAwait(false);
+                await relay.StopAsync(ct).WaitAsync(budget.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (budget.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                // Out of time. The instance is dropped below without waiting for it.
             }
             finally
             {
-                await DropRelayAsync().ConfigureAwait(false);
+                await DropRelayAsync(budget.Token).ConfigureAwait(false);
                 _state = SupervisorState.Stopped;
             }
         }
@@ -187,10 +214,12 @@ internal sealed class RelaySupervisor : IRelaySupervisor
         _events.Writer.TryComplete();
     }
 
+    private static StartResult AlreadyRunning => new(StartOutcome.AlreadyRunning, null, null, null);
+
     private PrerequisiteOptions CheckOptions() => new(
         _options.DataDirectory,
         _overrides.CodexPath,
-        SkipTailscale: _overrides.Endpoint is not null);
+        SkipTailscale: !MappingsAreInvolved);
 
     private async Task<StartResult> StartCoreAsync(CancellationToken ct)
     {
@@ -198,7 +227,7 @@ internal sealed class RelaySupervisor : IRelaySupervisor
         _state = SupervisorState.Checking;
         Publish(new CheckingStarted(_clock.GetUtcNow()));
 
-        // Step 2.
+        // Step 2. Check 1 creates the data folder, so it exists before a relay writes into it.
         var report = await _prerequisites.CheckAsync(CheckOptions(), ct).ConfigureAwait(false);
         var settings = report.SettingsLoad.Settings;
         _settings = settings;
@@ -211,13 +240,12 @@ internal sealed class RelaySupervisor : IRelaySupervisor
             return new StartResult(StartOutcome.PrerequisiteFailed, report, null, PrerequisiteTexts.Failure(failure.Id));
         }
 
-        // Step 4.
+        // Step 4. What this run uses: the settings, with the overrides of the run on top.
         var port = _overrides.Port ?? settings.RelayPort;
         var mode = _overrides.Mode ?? settings.ConnectionMode;
+        var inForce = settings with { RelayPort = port, ConnectionMode = mode };
         var endpoint = _overrides.Endpoint
-            ?? (report.DnsName is { } dnsName
-                ? _endpoints.Resolve(settings with { ConnectionMode = mode }, dnsName)
-                : null);
+            ?? (report.DnsName is { } dnsName ? _endpoints.Resolve(inForce, dnsName) : null);
         if (endpoint is null)
         {
             return FaultWithoutRelay(report, RelayFaultCode.InvalidEndpoint, port);
@@ -235,9 +263,24 @@ internal sealed class RelaySupervisor : IRelaySupervisor
             Mode: mode,
             DataDirectory: _options.DataDirectory,
             CodexExecutablePath: report.CodexExecutablePath,
-            LabFolder: _overrides.LabFolder ?? LabFolderResolver.Resolve(settings, _files),
+            LabFolder: LabFolderResolver.Resolve(_overrides.LabFolder ?? settings.AsrLabFolder, _files),
             LabPort: settings.AsrLabPort,
             RelayVersion: _options.RelayVersion);
+
+        // Step 4a, check 6a of architecture 3.11. In Private mode the relay does not start while a
+        // handler with Funnel on forwards to its port: the internet could reach it. A serve status that
+        // cannot be read has an empty exposure report and does not stop the start.
+        if (MappingsAreInvolved && mode == ConnectionMode.Private)
+        {
+            var exposure = await _mappings.InspectAsync(inForce, ct).ConfigureAwait(false);
+            if (exposure.HasFunnelExposure)
+            {
+                Publish(new ConnectionInspected(_clock.GetUtcNow(), exposure));
+                _state = SupervisorState.Stopped;
+                return new StartResult(
+                    StartOutcome.ExposedInPrivateMode, report, null, PrerequisiteTexts.ExposedInPrivateMode);
+            }
+        }
 
         // Step 5. The events a relay publishes while it starts are forwarded as soon as its start
         // returns, in order and before anything else; from then on the pump forwards them.
@@ -254,8 +297,24 @@ internal sealed class RelaySupervisor : IRelaySupervisor
         catch (RelayStartException exception)
         {
             ForwardWhatIsQueued(relay);
-            await DropRelayAsync().ConfigureAwait(false);
-            return Fault(report, exception.Code, port);
+            await DropRelayAsync(CancellationToken.None).ConfigureAwait(false);
+
+            // A port that is taken while a Tailscale mapping points at it is more than a second
+            // window: the program that has the port may have received the phone's requests.
+            var mappingPointsAtPort = false;
+            if (exception.Code == RelayFaultCode.PortInUse && MappingsAreInvolved)
+            {
+                var inspection = await _mappings.InspectAsync(inForce, ct).ConfigureAwait(false);
+                Publish(new ConnectionInspected(_clock.GetUtcNow(), inspection));
+                mappingPointsAtPort = inspection.Exposure.Count > 0;
+            }
+
+            _state = SupervisorState.Stopped;
+            return new StartResult(
+                StartOutcome.RelayFault,
+                report,
+                exception.Code,
+                PrerequisiteTexts.StartFault(exception.Code, port, mappingPointsAtPort));
         }
 
         ForwardWhatIsQueued(relay);
@@ -265,10 +324,10 @@ internal sealed class RelaySupervisor : IRelaySupervisor
         _runningOptions = options;
         _state = SupervisorState.Running;
 
-        // Step 8. Read-only; skipped when the endpoint was given, because no mapping is involved then.
-        if (_overrides.Endpoint is null)
+        // Step 8. Read-only, and not a failure whatever it shows.
+        if (MappingsAreInvolved)
         {
-            var inspection = await _mappings.InspectAsync(settings, ct).ConfigureAwait(false);
+            var inspection = await _mappings.InspectAsync(inForce, ct).ConfigureAwait(false);
             Publish(new ConnectionInspected(_clock.GetUtcNow(), inspection));
         }
 
@@ -277,36 +336,43 @@ internal sealed class RelaySupervisor : IRelaySupervisor
 
     /// <summary>
     /// A start that fails before any relay exists. Hosts follow events, so the fault is published in the
-    /// shape a relay's own start fault has.
+    /// shape a relay's own start fault has, with the text a host shows.
     /// </summary>
     private StartResult FaultWithoutRelay(PrerequisiteReport report, RelayFaultCode code, int port)
     {
         var now = _clock.GetUtcNow();
-        Publish(new RelayEventForwarded(now, new RelayFaulted(now, code, PrerequisiteTexts.StartFault(code, port))));
-        return Fault(report, code, port);
-    }
-
-    private StartResult Fault(PrerequisiteReport report, RelayFaultCode code, int port)
-    {
+        var text = PrerequisiteTexts.StartFault(code, port);
+        Publish(new RelayEventForwarded(now, new RelayFaulted(now, code, text)));
         _state = SupervisorState.Stopped;
-        return new StartResult(StartOutcome.RelayFault, report, code, PrerequisiteTexts.StartFault(code, port));
+        return new StartResult(StartOutcome.RelayFault, report, code, text);
     }
 
-    /// <summary>Disposes the current instance, if any, after its remaining events have been forwarded.</summary>
-    private async Task DropRelayAsync()
+    /// <summary>
+    /// Disposes the current instance, if any, and forwards the events it still holds. When
+    /// <paramref name="giveUp"/> fires first, the instance is abandoned instead of waited for.
+    /// </summary>
+    private async Task DropRelayAsync(CancellationToken giveUp)
     {
         var relay = _relay;
+        var pump = _pump;
         _relay = null;
         _runningOptions = null;
+        _pump = Task.CompletedTask;
         if (relay is null)
         {
             return;
         }
 
-        await relay.DisposeAsync().ConfigureAwait(false);
-        await _pump.ConfigureAwait(false);
-        _pump = Task.CompletedTask;
-        ForwardWhatIsQueued(relay);
+        try
+        {
+            await relay.DisposeAsync().AsTask().WaitAsync(giveUp).ConfigureAwait(false);
+            await pump.WaitAsync(giveUp).ConfigureAwait(false);
+            ForwardWhatIsQueued(relay);
+        }
+        catch (OperationCanceledException) when (giveUp.IsCancellationRequested)
+        {
+            // Abandoned. Whatever that instance still publishes is not waited for.
+        }
     }
 
     private void ForwardWhatIsQueued(IRelay relay)
@@ -347,7 +413,7 @@ internal sealed class RelaySupervisor : IRelaySupervisor
         {
             if (ReferenceEquals(_relay, relay))
             {
-                await DropRelayAsync().ConfigureAwait(false);
+                await DropRelayAsync(CancellationToken.None).ConfigureAwait(false);
                 _state = SupervisorState.Stopped;
             }
         }

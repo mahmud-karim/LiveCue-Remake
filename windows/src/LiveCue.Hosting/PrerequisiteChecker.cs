@@ -1,12 +1,24 @@
+using System.Security;
+
 namespace LiveCue.Hosting;
 
 /// <summary>
-/// Checks 1 to 6 of architecture 3.11, in order, each at most once (W-design 4.14).
+/// Checks 1 to 6 of architecture 3.11, in order, each at most once (W-design 4.14):
 ///
-/// First version (foundation): check 1 is real (the data folder exists or is created, and the settings
-/// are loaded). Checks 2 and 3 pass without looking for Codex. The Tailscale checks are not evaluated
-/// when an endpoint override is in force; otherwise check 4 fails, because the foundation's Tailscale
-/// CLI reports "not installed", and checks 5 and 6 are not checked. Work package WP-W06 builds the rest.
+/// <code>
+/// 1 DataFolder          the folder exists or was created; settings.json is then loaded
+/// 2 CodexFound          the locator has no problem                         detail: the path
+/// 3 CodexSignedIn       "codex login status" exits with 0
+/// 4 TailscaleInstalled  the CLI has an executable path
+/// 5 TailscaleOnline     the status was read and says online
+/// 6 TailscaleDnsName    the status carries this PC's name                  detail: the name
+/// </code>
+///
+/// Every check needs 1; 3 needs 2; 5 needs 4; 6 needs 5. A check whose dependency failed is not
+/// checked. The Codex checks and the Tailscale checks do not depend on each other, so one run reports a
+/// failure of each. A settings file that is invalid or unreadable is not a failure: the defaults apply
+/// and the report carries the load result. When Codex was found its version is read once, whatever
+/// check 3 says. The work runs on the thread pool.
 /// </summary>
 internal sealed class PrerequisiteChecker : IPrerequisiteChecker
 {
@@ -38,47 +50,109 @@ internal sealed class PrerequisiteChecker : IPrerequisiteChecker
     public Task<PrerequisiteReport> CheckAsync(PrerequisiteOptions options, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(options);
-        _ = _codex;
-        _ = _signIn;
-        return Task.Run(() => Check(options, ct), ct);
+        return Task.Run(() => CheckCoreAsync(options, ct), ct);
     }
 
-    private PrerequisiteReport Check(PrerequisiteOptions options, CancellationToken ct)
+    private static PrerequisiteResult Result(PrerequisiteId id, bool? passed, string? detail = null) => new(
+        id,
+        passed switch
+        {
+            true => PrerequisiteState.Passed,
+            false => PrerequisiteState.Failed,
+            null => PrerequisiteState.NotChecked,
+        },
+        passed == true ? detail : null);
+
+    private async Task<PrerequisiteReport> CheckCoreAsync(PrerequisiteOptions options, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
-        var folderUsable = EnsureDataFolder(options.DataDirectory);
-        var load = folderUsable
-            ? _settings.Load()
-            : new SettingsLoadResult(RelaySettings.Default, SettingsFileState.Missing, []);
-        var codexPath = options.CodexPathOverride ?? load.Settings.CodexExecutablePath;
+        // Check 1. Nothing else is looked at when the data folder cannot be opened.
+        if (!EnsureDataFolder(options.DataDirectory))
+        {
+            return new PrerequisiteReport(
+                [
+                    Result(PrerequisiteId.DataFolder, false),
+                    Result(PrerequisiteId.CodexFound, null),
+                    Result(PrerequisiteId.CodexSignedIn, null),
+                    Result(PrerequisiteId.TailscaleInstalled, null),
+                    Result(PrerequisiteId.TailscaleOnline, null),
+                    Result(PrerequisiteId.TailscaleDnsName, null),
+                ],
+                new SettingsLoadResult(RelaySettings.Default, SettingsFileState.Missing, []),
+                CodexExecutablePath: null,
+                DnsName: null);
+        }
 
-        var afterFolder = folderUsable ? PrerequisiteState.Passed : PrerequisiteState.NotChecked;
-        var tailscaleInstalled = !folderUsable || options.SkipTailscale
-            ? PrerequisiteState.NotChecked
-            : _tailscale.ExecutablePath is null ? PrerequisiteState.Failed : PrerequisiteState.Passed;
+        var load = _settings.Load();
 
-        PrerequisiteResult[] results =
-        [
-            new(PrerequisiteId.DataFolder, folderUsable ? PrerequisiteState.Passed : PrerequisiteState.Failed, null),
-            new(PrerequisiteId.CodexFound, afterFolder, folderUsable ? codexPath : null),
-            new(PrerequisiteId.CodexSignedIn, afterFolder, null),
-            new(PrerequisiteId.TailscaleInstalled, tailscaleInstalled, null),
-            new(PrerequisiteId.TailscaleOnline, PrerequisiteState.NotChecked, null),
-            new(PrerequisiteId.TailscaleDnsName, PrerequisiteState.NotChecked, null),
-        ];
+        // Checks 2 and 3, and the version of the Codex that was found.
+        var location = _codex.Locate(options.CodexPathOverride ?? load.Settings.CodexExecutablePath);
+        var codexPath = location.Problem == CodexProblem.None ? location.Path : null;
+        bool? signedIn = null;
+        string? codexVersion = null;
+        if (codexPath is not null)
+        {
+            signedIn = await _signIn.IsSignedInAsync(codexPath, ct).ConfigureAwait(false);
+            codexVersion = await _signIn.ReadVersionAsync(codexPath, ct).ConfigureAwait(false);
+        }
 
-        return new PrerequisiteReport(results, load, codexPath, DnsName: null);
+        // Checks 4 to 6, unless an endpoint was given for this run.
+        bool? installed = null;
+        bool? online = null;
+        bool? named = null;
+        string? dnsName = null;
+        if (!options.SkipTailscale)
+        {
+            ct.ThrowIfCancellationRequested();
+            installed = _tailscale.ExecutablePath is not null;
+            if (installed == true)
+            {
+                var status = await _tailscale.ReadStatusAsync(ct).ConfigureAwait(false);
+                online = status is { Failure: TailscaleReadFailure.None, Value.Online: true };
+                if (online == true)
+                {
+                    dnsName = status.Value!.DnsName;
+                    named = dnsName is not null;
+                }
+            }
+        }
+
+        ct.ThrowIfCancellationRequested();
+        return new PrerequisiteReport(
+            [
+                Result(PrerequisiteId.DataFolder, true),
+                Result(PrerequisiteId.CodexFound, codexPath is not null, codexPath),
+                Result(PrerequisiteId.CodexSignedIn, signedIn),
+                Result(PrerequisiteId.TailscaleInstalled, installed),
+                Result(PrerequisiteId.TailscaleOnline, online),
+                Result(PrerequisiteId.TailscaleDnsName, named, dnsName),
+            ],
+            load,
+            codexPath,
+            dnsName,
+            codexVersion);
     }
 
+    /// <summary>True when the folder exists afterwards. Creating it is the only write of the checks.</summary>
     private bool EnsureDataFolder(string dataDirectory)
     {
         try
         {
-            _files.CreateDirectory(dataDirectory);
+            if (string.IsNullOrWhiteSpace(dataDirectory))
+            {
+                return false;
+            }
+
+            if (!_files.DirectoryExists(dataDirectory))
+            {
+                _files.CreateDirectory(dataDirectory);
+            }
+
             return _files.DirectoryExists(dataDirectory);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        catch (Exception exception) when (exception
+            is IOException or UnauthorizedAccessException or SecurityException or ArgumentException or NotSupportedException)
         {
             return false;
         }

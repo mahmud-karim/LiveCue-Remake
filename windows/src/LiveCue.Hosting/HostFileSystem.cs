@@ -1,3 +1,5 @@
+using System.Security;
+
 namespace LiveCue.Hosting;
 
 /// <summary>The production file system and environment of the hosting library.</summary>
@@ -5,11 +7,12 @@ internal sealed class HostFileSystem : IHostFileSystem
 {
     public string BaseDirectory => AppContext.BaseDirectory;
 
+    /// <summary>From the known-folder API, never from the <c>ProgramFiles</c> environment variable.</summary>
     public string ProgramFilesDirectory => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 
     public bool IsOnFixedLocalDrive(string path)
     {
-        if (path is null || path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\')
+        if (!IsDriveLetterPath(path))
         {
             return false;
         }
@@ -38,13 +41,22 @@ internal sealed class HostFileSystem : IHostFileSystem
     {
         ArgumentNullException.ThrowIfNull(contents);
         var pending = path + ".pending";
-        using (var stream = new FileStream(pending, FileMode.Create, FileAccess.Write, FileShare.None))
+        try
         {
-            stream.Write(contents);
-            stream.Flush(flushToDisk: true);
-        }
+            using (var stream = new FileStream(pending, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(contents);
+                stream.Flush(flushToDisk: true);
+            }
 
-        File.Move(pending, path, overwrite: true);
+            File.Move(pending, path, overwrite: true);
+        }
+        catch
+        {
+            // The old file is intact; a half-written pending file is not left beside it.
+            TryDelete(pending);
+            throw;
+        }
     }
 
     public IReadOnlyList<FoundFile> FindFiles(string directory, string fileName, int maxDepth)
@@ -53,6 +65,10 @@ internal sealed class HostFileSystem : IHostFileSystem
         Search(directory, fileName, maxDepth, found);
         return found;
     }
+
+    /// <summary>A drive letter, a colon and a backslash: the only path form that can name a local volume.</summary>
+    internal static bool IsDriveLetterPath(string? path) =>
+        path is { Length: >= 3 } && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] == '\\';
 
     private static void Search(string directory, string fileName, int depthLeft, List<FoundFile> found)
     {
@@ -74,9 +90,21 @@ internal sealed class HostFileSystem : IHostFileSystem
                 Search(child, fileName, depthLeft - 1, found);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or SecurityException or ArgumentException)
         {
             // Folders that cannot be read are skipped.
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Nothing more can be done about a file that cannot even be deleted.
         }
     }
 }
