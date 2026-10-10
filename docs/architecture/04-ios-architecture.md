@@ -1483,6 +1483,29 @@ struct QRScannerView: UIViewControllerRepresentable {
 enum BackupExclusion { static func exclude(_ url: URL) } // sets isExcludedFromBackup; failures are ignored
 ```
 
+What the declarations leave open, as built by WP-06. No declaration changes; the members named here are
+internal additions that the unit tests use.
+
+- `URLSessionHTTPTransport` keeps one session for its lifetime, so requests to one host share a connection.
+  The session's own idle timeout is 300 s, so that only the timeout a request brings can end it. When a
+  body breaks off, the bytes that arrived are yielded before the failure. When the reader's task is
+  cancelled the body stream ends without an error, as `AsyncThrowingStream` does, and the request is
+  cancelled; `send` and the start of `stream` throw `.cancelled`. A second initialiser,
+  `init(resourceTimeout:protocolClasses:)`, lets a test answer requests with a URL protocol.
+- `URLSessionWebSocketTransport`: the upgrade request's idle timeout is 60 s. A `receive()` whose task is
+  cancelled throws `.cancelled` at once and loses nothing: the message it was waiting for goes to the next
+  `receive()`. One `receive()` waits at a time; a second one throws `.other`. A close frame of the peer is
+  delivered once as `.closed`; the system's code 1006 ("no close frame") is not a close and the failure is
+  thrown instead. After that message, and after `close`, `send` and `receive` throw `.other`. A reason
+  longer than 123 bytes is cut. An address whose scheme is not `wss` or `ws` throws `.other`.
+- `URLErrorMapping` returns a `TransportFailure` unchanged.
+- `QRScannerView`: no camera, or a camera that cannot be an input, is `cameraUnavailable`; an output that
+  cannot be added or does not offer QR codes is `scannerUnavailable`. Nothing is reported after the view
+  went away.
+- Tests beyond the plan of 6.2, in `URLErrorMappingTests.swift`: the class `URLSessionTransportTests`
+  proves the private session, the request, the response head, the chunk rule and the refused redirect,
+  and runs whole requests against a URL protocol inside the test. No test opens a socket.
+
 #### 3.2.2 Stores (architecture 4.10)
 
 ```swift
@@ -1576,6 +1599,24 @@ struct FilePairingStore: PairingStoring {
     init(keychain: KeychainStore = KeychainStore(), names: StorageNames.Names, directory: URL? = nil)   // nil = Application Support
 }
 ```
+
+What the declarations leave open, as built by WP-06. No declaration changes.
+
+- `FileSessionStore`: a file is the JSON object `{"savedAt": …, "session": …}`. A file whose name is not
+  `<id of the session inside it>.json` is skipped like one that does not decode, so no session can appear
+  twice. `contains(id:)` is true when the session's file exists. Deleting an absent session succeeds.
+  `closeInterruptedSessions` keeps each file's last-saved time.
+- `UserDefaultsPreferencesStore` stores each configuration as JSON data written with `LiveCueJSON`, and
+  reads every value from the defaults each time, so two stores over the same defaults agree.
+- `FilePairingStore`: a file larger than C-18 is treated as absent without being read. After a refused
+  Keychain write the store deletes the item and then looks at what the Keychain holds: only an older
+  pairing that is still readable there makes `save` throw, and it throws the refusal of the write. A
+  Keychain that refuses every call (LiveContainer without its groups) therefore leaves the pairing in the
+  file and `save` succeeds. The Keychain calls go through the internal `PairingKeychainAccess`, which a
+  test replaces to make single calls fail.
+- Protection classes cannot be read back in a simulator, which keeps none. `FilePairingStoreTests` and
+  `FileSessionStoreTests` assert the writing options and check the class only where the system reports
+  one; backup exclusion is read back from the file.
 
 #### 3.2.3 Connectivity types and the relay gateway
 

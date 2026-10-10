@@ -13,6 +13,28 @@ import LiveCueCore
         secrets: any SecretStoring,
         pairingStore: any PairingStoring
     ) {
-        // STUB(WP-06)
+        preferences.speechProvider = mode.onDeviceReady ? .parakeet : .meta
+
+        if !mode.openRouterPersistenceTest {
+            preferences.resetAssistantConfiguration()
+        }
+
+        // A store that refuses does not stop the launch: the test that needs the value fails on it.
+        if !mode.metaKeyPersistence {
+            try? secrets.save(FixtureValues.metaKey, for: .metaAPIKey)
+        }
+        if mode.metaNoKey {
+            try? secrets.remove(.metaAPIKey)
+        }
+        if mode.openRouterUIReset {
+            try? secrets.remove(.openRouterAPIKey)
+        }
+
+        if mode.savePairingFixture {
+            try? pairingStore.save(FixtureValues.pairing)
+        }
+        if mode.dropTestKeychain {
+            pairingStore.removeKeychainCopy()
+        }
     }
 }
