@@ -4,10 +4,13 @@ import SwiftUI
 /// The only screen of the toolchain spike: the Daylight ground, the name, and one glass button.
 ///
 /// It exists to prove that the app builds, links its packages, launches and renders on iOS 26 and iOS 18.
-/// The accessibility identifiers are read by `PlaceholderUITests`.
+/// The accessibility identifiers are read by `PlaceholderUITests`. Under `-ui-testing` it also shows
+/// whether the Keychain works in this build.
 struct PlaceholderRootView: View {
     @Environment(\.theme) private var theme
     @State private var tapCount = 0
+    /// The outcome of `KeychainProbe`, or `nil` outside UI tests.
+    @State private var keychainState: String?
 
     var body: some View {
         ZStack {
@@ -51,9 +54,21 @@ struct PlaceholderRootView: View {
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(theme.ink.secondary)
                     .accessibilityIdentifier("placeholder.tapCount")
+
+                if let keychainState {
+                    Text("Keychain: \(keychainState)")
+                        .font(.footnote)
+                        .foregroundStyle(theme.ink.secondary)
+                        .accessibilityIdentifier("placeholder.keychain")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+        }
+        .task {
+            if TestSeam.isUITesting {
+                keychainState = KeychainProbe.run()
+            }
         }
     }
 

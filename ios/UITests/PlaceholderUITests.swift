@@ -12,6 +12,7 @@ final class PlaceholderUITests: XCTestCase {
     @MainActor
     func testPlaceholderShowsTheNameAndAWorkingGlassButton() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
         app.launch()
 
         // The title carries the header trait, so it is looked up by identifier alone, whatever its type.
@@ -34,6 +35,11 @@ final class PlaceholderUITests: XCTestCase {
         XCTAssertEqual(button.label, "Tap the glass")
         XCTAssertTrue(button.isHittable, "The glass button cannot be tapped.")
         XCTAssertEqual(text("placeholder.tapCount", in: app).label, "Taps: 0")
+
+        // Simulator builds are signed ad hoc with Support/Simulator.entitlements so that this works.
+        let keychain = text("placeholder.keychain", in: app)
+        XCTAssertTrue(keychain.waitForExistence(timeout: 10), "The Keychain check did not report.")
+        XCTAssertEqual(keychain.label, "Keychain: available")
 
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         screenshot.name = "placeholder"
