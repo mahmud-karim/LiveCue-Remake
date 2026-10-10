@@ -33,7 +33,7 @@ settings:
 
 packages:
   LiveCueCore:
-    path: Core
+    path: LiveCueCore
   FluidAudio:
     url: https://github.com/FluidInference/FluidAudio
     exactVersion: 0.15.6
@@ -68,12 +68,17 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - audio
-        NSMicrophoneUsageDescription: LiveCue Remake listens through the microphone to transcribe the conversation while a session is running.
-        NSCameraUsageDescription: LiveCue Remake uses the camera to scan the pairing code shown on your PC.
+        NSMicrophoneUsageDescription: "LiveCue transcribes audio on this iPhone, sends it to your PC for local speech models, or streams it directly to Meta for cloud transcription, depending on your selected provider."
+        NSCameraUsageDescription: "LiveCue scans the pairing QR code displayed on your Windows PC."
+        NSLocalNetworkUsageDescription: "LiveCue connects privately to your Windows PC."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mahmudkarim.LiveCueRemake
         TARGETED_DEVICE_FAMILY: "1"
+        # Simulator builds only. An unsigned binary carries no entitlements, so Keychain calls fail in
+        # simulator tests; with ad hoc signing on, Xcode embeds these as simulated entitlements.
+        # Device builds stay unsigned and carry none.
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Support/Simulator.entitlements
         SUPPORTS_MACCATALYST: "NO"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
@@ -104,6 +109,11 @@ schemes:
       config: Debug
     test:
       config: Debug
+      # Coverage for our own code only, not for the speech packages.
+      gatherCoverageData: true
+      coverageTargets:
+        - LiveCueRemake
+        - package: LiveCueCore/LiveCueCore
       targets:
         - package: LiveCueCore/LiveCueCoreTests
         - name: LiveCueRemakeUITests

@@ -1,18 +1,19 @@
 import SwiftUI
 
-// The only file in the app that names iOS 26 Liquid Glass symbols.
+// The only file in the app that names iOS 26 Liquid Glass symbols. CI fails if one appears elsewhere
+// (scripts/ci/lint_swift.sh).
 //
 // The app is built with the iOS 26 SDK and deploys back to iOS 18.0. Everything below is called the same
 // way on both systems: on iOS 26 it uses the system material, and before that it draws the fallback from
 // `docs/design/01-design-system.md` section 3.3. Rules that keep this compiling for iOS 18:
 //
-// 1. A type introduced in iOS 26 (`Glass`, `GlassEffectContainer`, `ToolbarSpacer`, the glass button
-//    styles) is named only inside `if #available(iOS 26.0, *)` or a declaration marked `@available`.
+// 1. Every iOS 26 symbol sits inside `if #available(iOS 26.0, *)`. No iOS 26 type appears in a signature.
 // 2. The two branches of an availability check are never merged with `?:`; their types differ.
 // 3. Nothing is drawn on top of native glass: no stroke, shadow, sheen or opacity. Those tokens belong to
 //    the fallback only.
 //
 // Glass is for the chrome layer (controls that float above content). Panels, cards and rows are not glass.
+// Only the regular variant is used, and tint is reserved for the one prominent button.
 
 /// Facts about the glass path in use.
 enum LiquidGlass {
@@ -25,39 +26,16 @@ enum LiquidGlass {
     }
 }
 
-// MARK: - Describing glass
-
-/// Describes a glass surface without naming an iOS 26 type, so it can appear in any signature.
-///
-/// Only the regular variant exists here. The clear variant is for controls over media and needs a dimming
-/// layer this app does not have. Tint is reserved for the one prominent button; see `LCGlassButton`.
-struct LCGlass: Equatable, Sendable {
-    /// Set only on surfaces that respond to touch. The system then supplies the pressed state.
-    var isInteractive = false
-
-    static let regular = LCGlass()
-
-    func interactive(_ isEnabled: Bool = true) -> LCGlass {
-        var copy = self
-        copy.isInteractive = isEnabled
-        return copy
-    }
-
-    @available(iOS 26.0, *)
-    fileprivate var system: Glass {
-        isInteractive ? Glass.regular.interactive() : Glass.regular
-    }
-}
-
 // MARK: - Surfaces
 
 extension View {
-    /// Puts chrome-layer glass behind this view, in `shape`.
+    /// Chrome-layer glass behind this view. Native on iOS 26, built from a material and tokens before that.
     ///
-    /// Apply it after the view's own padding and appearance modifiers. On iOS 18 an interactive surface
-    /// gets no pressed state from this modifier; use `LCGlassButton` for anything that is tapped.
-    func lcGlass(_ glass: LCGlass = .regular, in shape: some InsettableShape = Capsule()) -> some View {
-        modifier(LCGlassSurface(glass: glass, shape: shape))
+    /// Apply it after the view's own padding and appearance modifiers. Pass `interactive: true` only for
+    /// surfaces that respond to touch; the system then supplies the pressed state. On iOS 18 this modifier
+    /// draws no pressed state, so use `LCGlassButton` for anything that is tapped.
+    func daylightChrome<S: InsettableShape>(in shape: S, interactive: Bool = false) -> some View {
+        modifier(DaylightChrome(shape: shape, isInteractive: interactive))
     }
 
     /// Gives a glass surface an identity so that it morphs between states inside one `LCGlassContainer`.
@@ -72,15 +50,15 @@ extension View {
     }
 }
 
-private struct LCGlassSurface<S: InsettableShape>: ViewModifier {
-    let glass: LCGlass
+private struct DaylightChrome<S: InsettableShape>: ViewModifier {
     let shape: S
+    let isInteractive: Bool
 
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content.glassEffect(glass.system, in: shape)
+            content.glassEffect(.regular.interactive(isInteractive), in: shape)
         } else {
-            content.background { LCFallbackChrome(shape: shape) }
+            content.background { FallbackChrome(shape: shape) }
         }
     }
 }
@@ -141,7 +119,7 @@ struct LCGlassButton<Label: View>: View {
             }
         } else {
             Button(action: action) { label }
-                .buttonStyle(LCFallbackGlassButtonStyle(isProminent: isProminent))
+                .buttonStyle(FallbackGlassButtonStyle(isProminent: isProminent))
         }
     }
 }
@@ -204,7 +182,7 @@ struct LCToolbarFixedSpacer: ToolbarContent {
 ///
 /// Bottom to top: material with the floating shadow, the floating fill, an optional sheen, the edge stroke.
 /// With Reduce Transparency on, the material and translucent fill give way to one opaque fill.
-private struct LCFallbackChrome<S: InsettableShape>: View {
+private struct FallbackChrome<S: InsettableShape>: View {
     let shape: S
     var showsSheen = true
     var isPressed = false
@@ -255,7 +233,7 @@ private struct LCFallbackChrome<S: InsettableShape>: View {
 }
 
 /// The iOS 18 look of `LCGlassButton`. The sheen is left off: the design system keeps it for panels and bars.
-private struct LCFallbackGlassButtonStyle: ButtonStyle {
+private struct FallbackGlassButtonStyle: ButtonStyle {
     let isProminent: Bool
 
     @Environment(\.theme) private var theme
@@ -278,7 +256,7 @@ private struct LCFallbackGlassButtonStyle: ButtonStyle {
                     Capsule()
                         .strokeBorder(theme.stroke.onAccent, lineWidth: 1)
                 } else {
-                    LCFallbackChrome(shape: Capsule(), showsSheen: false, isPressed: configuration.isPressed)
+                    FallbackChrome(shape: Capsule(), showsSheen: false, isPressed: configuration.isPressed)
                 }
             }
             .contentShape(Capsule())

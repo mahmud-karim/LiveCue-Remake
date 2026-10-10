@@ -21,7 +21,8 @@ import zlib
 
 SIZE = 1024
 DEFAULT_OUTPUT = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "ios", "App", "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png"
+    os.path.dirname(os.path.abspath(__file__)),
+    "..", "ios", "App", "Resources", "Assets.xcassets", "AppIcon.appiconset", "AppIcon.png",
 )
 
 Color = tuple[float, float, float]

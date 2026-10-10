@@ -44,55 +44,55 @@ class ParseVersionTests(unittest.TestCase):
 
 
 class ChooseTests(unittest.TestCase):
-    def test_picks_the_newest_runtime_within_the_sdk_limit(self):
+    def test_picks_exactly_the_requested_runtime(self):
         simulators = listing(
-            [runtime("26.2"), runtime("26.4.1"), runtime("26.5")],
-            {"26.2": [device("iPhone 17")], "26.4.1": [device("iPhone 17")], "26.5": [device("iPhone 17")]},
+            [runtime("18.5"), runtime("18.6"), runtime("26.2"), runtime("26.5")],
+            {
+                "18.5": [device("iPhone 16")],
+                "18.6": [device("iPhone 16")],
+                "26.2": [device("iPhone 17")],
+                "26.5": [device("iPhone 17")],
+            },
         )
-        self.assertEqual(choose(simulators, 26, (26, 2)).runtime_version, "26.2")
-        self.assertEqual(choose(simulators, 26, (26, 4)).runtime_version, "26.4.1")
-        self.assertEqual(choose(simulators, 26, None).runtime_version, "26.5")
+        self.assertEqual(choose(simulators, (26, 2)).runtime_version, "26.2")
+        selection = choose(simulators, (18, 6))
+        self.assertEqual((selection.runtime_version, selection.name, selection.udid), ("18.6", "iPhone 16", "UDID-iPhone-16"))
 
-    def test_picks_the_requested_major_version(self):
-        simulators = listing(
-            [runtime("18.5"), runtime("18.6"), runtime("26.2")],
-            {"18.5": [device("iPhone 16")], "18.6": [device("iPhone 16")], "26.2": [device("iPhone 17")]},
-        )
-        selection = choose(simulators, 18, (26, 2))
-        self.assertEqual((selection.runtime_version, selection.name), ("18.6", "iPhone 16"))
-        self.assertEqual(selection.udid, "UDID-iPhone-16")
+    def test_treats_a_patch_release_as_the_requested_runtime(self):
+        simulators = listing([runtime("26.4.1"), runtime("26.5")], {"26.4.1": [device("iPhone 17")]})
+        self.assertEqual(choose(simulators, (26, 4)).runtime_version, "26.4.1")
 
-    def test_prefers_standard_models_then_falls_back_to_any_iphone(self):
-        phones = [device("iPhone 16 Pro Max"), device("iPad (A16)"), device("iPhone 16"), device("iPhone 16e")]
-        self.assertEqual(choose(listing([runtime("18.6")], {"18.6": phones}), 18).name, "iPhone 16")
+    def test_prefers_models_in_order_then_any_iphone_by_name(self):
+        phones = [device("iPhone 16 Pro Max"), device("iPad (A16)"), device("iPhone 16"), device("iPhone 16 Pro")]
+        self.assertEqual(choose(listing([runtime("18.6")], {"18.6": phones}), (18, 6)).name, "iPhone 16 Pro")
+
+        newer = [device("iPhone 16 Pro"), device("iPhone 17"), device("iPhone Air")]
+        self.assertEqual(choose(listing([runtime("26.2")], {"26.2": newer}), (26, 2)).name, "iPhone 17")
 
         others = [device("iPad (A16)"), device("iPhone SE (3rd generation)"), device("iPhone 16e")]
-        self.assertEqual(choose(listing([runtime("18.6")], {"18.6": others}), 18).name, "iPhone 16e")
+        self.assertEqual(choose(listing([runtime("18.6")], {"18.6": others}), (18, 6)).name, "iPhone 16e")
 
-    def test_ignores_unavailable_runtimes_and_devices(self):
-        simulators = listing(
-            [runtime("26.2"), runtime("26.5", available=False)],
-            {"26.2": [device("iPhone 17", available=False), device("iPhone Air")], "26.5": [device("iPhone 17")]},
-        )
-        selection = choose(simulators, 26)
-        self.assertEqual((selection.runtime_version, selection.name), ("26.2", "iPhone Air"))
+    def test_ignores_unavailable_devices(self):
+        simulators = listing([runtime("26.2")], {"26.2": [device("iPhone 17 Pro", available=False), device("iPhone Air")]})
+        self.assertEqual(choose(simulators, (26, 2)).name, "iPhone Air")
 
     def test_asks_for_a_new_device_when_the_runtime_has_no_iphone(self):
         simulators = listing(
-            [runtime("26.2", device_types=["iPad (A16)", "iPhone 17 Pro", "iPhone 17"])],
+            [runtime("26.2", device_types=["iPad (A16)", "iPhone 17", "iPhone 17 Pro"])],
             {"26.2": [device("iPad (A16)")]},
         )
-        selection = choose(simulators, 26)
+        selection = choose(simulators, (26, 2))
         self.assertIsNone(selection.udid)
-        self.assertEqual(selection.device_type_id, "type.iPhone-17")
+        self.assertEqual(selection.device_type_id, "type.iPhone-17-Pro")
         self.assertEqual(selection.runtime_id, PREFIX + "iOS-26-2")
 
-    def test_fails_with_the_installed_runtimes_when_none_match(self):
+    def test_fails_with_the_installed_runtimes_when_the_runtime_is_missing(self):
         simulators = listing([runtime("26.2"), runtime("26.5", available=False)], {})
-        with self.assertRaises(SelectionError) as raised:
-            choose(simulators, 18, (26, 2))
-        self.assertIn("iOS 18", str(raised.exception))
-        self.assertIn("26.5 (unavailable)", str(raised.exception))
+        for wanted in ((18, 6), (26, 5)):
+            with self.assertRaises(SelectionError) as raised:
+                choose(simulators, wanted)
+            self.assertIn("is not installed", str(raised.exception))
+            self.assertIn("26.5 (unavailable), 26.2", str(raised.exception))
 
     def test_reads_the_version_from_the_identifier_when_the_field_is_missing(self):
         entry = runtime("18.6")

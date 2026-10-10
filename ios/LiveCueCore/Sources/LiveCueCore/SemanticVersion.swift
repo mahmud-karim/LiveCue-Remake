@@ -1,3 +1,5 @@
+import Foundation
+
 /// A three-part version number such as `1.0.0`.
 public struct SemanticVersion: Hashable, Sendable {
     public let major: Int

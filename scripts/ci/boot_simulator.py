@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("udid", help="simulator device identifier")
     parser.add_argument("--attempts", type=int, default=3)
-    parser.add_argument("--timeout", type=float, default=240, help="seconds allowed per attempt")
+    parser.add_argument("--timeout", type=float, default=180, help="seconds allowed per attempt")
     arguments = parser.parse_args(argv)
 
     if boot(arguments.udid, arguments.attempts, arguments.timeout):

@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Choose an iPhone simulator for a CI test run.
+"""Choose an iPhone simulator on one iOS runtime for a CI test run.
 
-Picks the newest installed iOS runtime of one major version that the selected Xcode can use,
-then the preferred iPhone model on it. If that runtime has no iPhone device yet, one is created.
+    python3 scripts/ci/select_simulator.py --runtime 26.2
 
-    python3 scripts/ci/select_simulator.py --os-major 26
+Only iPhone devices on exactly that runtime are considered (a patch release such as 26.2.1
+counts as 26.2). The preferred model is taken; if the runtime has no iPhone device, one is
+created; if the runtime is not installed, the step fails and lists what is.
 
 The device identifier is printed to standard output; everything else goes to standard error.
 Under GitHub Actions the step outputs `udid`, `name` and `runtime` are written as well.
-
-A runtime newer than the simulator SDK of the selected Xcode belongs to a newer Xcode on the same
-image, so it is never chosen. The limit is read from `xcrun` unless `--max-version` is given.
 """
 
 from __future__ import annotations
@@ -22,17 +20,8 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-# Standard-size models first: they are the common case and keep screenshots small.
-PREFERRED_MODELS = [
-    "iPhone 17",
-    "iPhone 17 Pro",
-    "iPhone 16",
-    "iPhone 16 Pro",
-    "iPhone Air",
-    "iPhone 17 Pro Max",
-    "iPhone 16 Pro Max",
-    "iPhone 16 Plus",
-]
+# In order of preference; any other iPhone follows by name.
+PREFERRED_MODELS = ["iPhone 17 Pro", "iPhone 17", "iPhone 16 Pro", "iPhone 16"]
 
 CREATED_DEVICE_PREFIX = "LiveCue CI"
 
@@ -74,7 +63,7 @@ def model_rank(name: str) -> tuple[int, str]:
 
 
 def ios_runtimes(listing: dict) -> list[tuple[Version, dict]]:
-    """Every iOS runtime in a `simctl list -j` listing with its parsed version, newest first."""
+    """Every iOS runtime in a `simctl list --json` listing with its parsed version, newest first."""
     found = []
     for runtime in listing.get("runtimes", []):
         identifier = runtime.get("identifier", "")
@@ -89,30 +78,24 @@ def ios_runtimes(listing: dict) -> list[tuple[Version, dict]]:
     return found
 
 
-def choose(listing: dict, os_major: int, max_version: Version | None = None) -> Selection:
-    """Picks a simulator from a `simctl list -j` listing. Does not run anything.
-
-    The limit compares major and minor only, so a 26.2.1 runtime is allowed under a 26.2 SDK.
-    """
-    usable = [
+def choose(listing: dict, wanted: Version) -> Selection:
+    """Picks a simulator from a `simctl list --json` listing. Does not run anything."""
+    matching = [
         (version, runtime)
         for version, runtime in ios_runtimes(listing)
-        if runtime.get("isAvailable", False)
-        and version[0] == os_major
-        and (max_version is None or version[:2] <= max_version[:2])
+        if runtime.get("isAvailable", False) and version[: len(wanted)] == wanted
     ]
-    if not usable:
+    if not matching:
         installed = ", ".join(
             format_version(version) + ("" if runtime.get("isAvailable", False) else " (unavailable)")
             for version, runtime in ios_runtimes(listing)
         )
-        limit = f" up to {format_version(max_version)}" if max_version else ""
         raise SelectionError(
-            f"No available iOS {os_major} simulator runtime{limit} was found. "
+            f"The iOS {format_version(wanted)} simulator runtime is not installed on this runner image. "
             f"Installed iOS runtimes: {installed or 'none'}."
         )
 
-    version, runtime = usable[0]
+    version, runtime = matching[0]
     runtime_id = runtime["identifier"]
 
     devices = [
@@ -142,11 +125,8 @@ def xcrun(*arguments: str) -> str:
     return subprocess.run(["xcrun", *arguments], check=True, capture_output=True, text=True).stdout
 
 
-def simulator_sdk_version() -> Version:
-    return parse_version(xcrun("--sdk", "iphonesimulator", "--show-sdk-version").strip())
-
-
 def describe(listing: dict, log) -> None:
+    print("iOS simulator runtimes on this image:", file=log)
     for version, runtime in ios_runtimes(listing):
         devices = listing.get("devices", {}).get(runtime.get("identifier", ""), [])
         phones = sum(1 for device in devices if device.get("isAvailable") and device.get("name", "").startswith("iPhone"))
@@ -156,18 +136,16 @@ def describe(listing: dict, log) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--os-major", type=int, required=True, help="iOS major version to test on, for example 26")
-    parser.add_argument("--max-version", help="newest runtime allowed; default: the selected Xcode's simulator SDK")
+    parser.add_argument("--runtime", required=True, help="iOS runtime version to test on, for example 26.2")
     arguments = parser.parse_args(argv)
     log = sys.stderr
 
     try:
-        max_version = parse_version(arguments.max_version) if arguments.max_version else simulator_sdk_version()
+        wanted = parse_version(arguments.runtime)
         listing = json.loads(xcrun("simctl", "list", "--json"))
-        print(f"iOS simulator runtimes (limit {format_version(max_version)}):", file=log)
         describe(listing, log)
 
-        selection = choose(listing, arguments.os_major, max_version)
+        selection = choose(listing, wanted)
         udid = selection.udid
         if udid is None:
             name = f"{CREATED_DEVICE_PREFIX} {selection.name}"
@@ -182,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"Selected {selection.name} on iOS {selection.runtime_version} ({udid})", file=log)
+    log.flush()
 
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:

@@ -1,7 +1,8 @@
 name: iOS
 
-# Builds and tests the iPhone app on free GitHub-hosted runners. No secrets are used, nothing is
-# signed, and no speech model is downloaded or run.
+# Builds and tests the iPhone app on free GitHub-hosted runners. No secrets are used and no signing
+# identity is needed: simulator builds are signed ad hoc and the device build is unsigned. No speech
+# model is downloaded or run.
 
 on:
   push:
@@ -35,6 +36,7 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
   PROJECT: ios/LiveCueRemake.xcodeproj
   SCHEME: LiveCueRemake
+  APP_NAME: LiveCueRemake
   # What the built app must report. Change these together with ios/project.yml.
   BUNDLE_ID: com.mahmudkarim.LiveCueRemake
   APP_VERSION: "1.0.0"
@@ -63,38 +65,40 @@ jobs:
     runs-on: ubuntu-latest
     # The same compiler line as the pinned Xcode (Swift 6.2).
     container: swift:6.2-noble
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
       - name: Show the toolchain
         run: swift --version
 
+      # Glass symbols stay in the one wrapper file; the core imports only Foundation.
+      - name: Lint the Swift sources
+        run: bash scripts/ci/lint_swift.sh
+
       - name: Build
-        run: swift build --package-path ios/Core
+        run: swift build --package-path ios/LiveCueCore
 
       - name: Test
-        run: swift test --package-path ios/Core
+        run: swift test --package-path ios/LiveCueCore
 
-  simulator-tests:
-    name: Simulator tests (${{ matrix.name }})
+  ios-tests:
+    name: iOS tests (${{ matrix.leg }}, iOS ${{ matrix.runtime }})
     needs: [ci-scripts, core-linux]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 50
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         include:
           # Native Liquid Glass.
-          - name: iOS 26
+          - leg: glass
             runner: macos-26
-            ios-major: 26
-            slug: ios26
-          # The fallback. Only the macos-15 image has iOS 18 simulator runtimes.
-          - name: iOS 18
+            runtime: "26.2"
+          # The material fallback. Only the macos-15 image has iOS 18 simulator runtimes.
+          - leg: fallback
             runner: macos-15
-            ios-major: 18
-            slug: ios18
+            runtime: "18.6"
     steps:
       - uses: actions/checkout@v7
 
@@ -102,50 +106,74 @@ jobs:
         run: bash scripts/ci/require_xcode.sh
 
       - name: Generate the Xcode project and resolve packages
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
       - name: Select a simulator
         id: simulator
-        run: python3 scripts/ci/select_simulator.py --os-major "${{ matrix.ios-major }}"
+        run: python3 scripts/ci/select_simulator.py --runtime "${{ matrix.runtime }}"
 
       - name: Boot the simulator
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: python3 scripts/ci/boot_simulator.py "${{ steps.simulator.outputs.udid }}"
 
+      # Signing is off in the project. Tests switch ad hoc signing on so that the simulator build
+      # carries the entitlements of ios/Support/Simulator.entitlements and Keychain calls work.
       - name: Run unit and UI tests
-        timeout-minutes: 35
+        timeout-minutes: 30
         run: |
-          bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild.log test \
+          bash scripts/ci/xcodebuild_logged.sh "artifacts/xcodebuild-${{ matrix.leg }}.log" test \
             -project "$PROJECT" -scheme "$SCHEME" \
             -destination "platform=iOS Simulator,arch=arm64,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -resultBundlePath artifacts/Tests.xcresult \
+            -resultBundlePath "artifacts/Tests-${{ matrix.leg }}.xcresult" \
             -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 180 \
-            -maximum-test-execution-time-allowance 300 \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 180 \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=-
+
+      - name: Show the app's signature and entitlements after a failure
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          app="$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/$APP_NAME.app"
+          codesign --display --verbose=2 --entitlements - "$app" || true
+          for binary in "$app/$APP_NAME" "$app/$APP_NAME.debug.dylib"; do
+            if [[ -f "$binary" ]]; then
+              echo "Simulated entitlements in $(basename "$binary"):"
+              xcrun otool -s __TEXT __entitlements -V "$binary" | tail -n 30 || true
+            fi
+          done
 
       # xcodebuild also succeeds when a scheme stops running one of its bundles; this check does not.
       - name: Check that both test bundles ran
         if: ${{ !cancelled() }}
         run: |
-          python3 scripts/ci/check_test_results.py artifacts/Tests.xcresult \
+          python3 scripts/ci/check_test_results.py "artifacts/Tests-${{ matrix.leg }}.xcresult" \
             --require-bundle LiveCueCoreTests --require-bundle LiveCueRemakeUITests \
-            --save artifacts/test-results.json
+            --save "artifacts/test-results-${{ matrix.leg }}.json"
+
+      - name: Save a final screenshot
+        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          mkdir -p artifacts
+          xcrun simctl io "${{ steps.simulator.outputs.udid }}" screenshot "artifacts/final-screen-${{ matrix.leg }}.png"
 
       - name: Export screenshots from the result bundle
         if: ${{ !cancelled() }}
         run: |
-          python3 scripts/ci/export_screenshots.py artifacts/Tests.xcresult artifacts/screenshots \
-            --prefix "${{ matrix.slug }}-${{ steps.simulator.outputs.runtime }}"
+          python3 scripts/ci/export_screenshots.py "artifacts/Tests-${{ matrix.leg }}.xcresult" \
+            "artifacts/screenshots-${{ matrix.leg }}" \
+            --prefix "${{ matrix.leg }}-ios${{ steps.simulator.outputs.runtime }}"
 
       - name: Upload the result bundle, log and screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: simulator-tests-${{ matrix.slug }}
+          name: ios-test-evidence-${{ matrix.leg }}
           path: artifacts/
           if-no-files-found: warn
           retention-days: 14
@@ -154,10 +182,9 @@ jobs:
     name: Device build (unsigned IPA)
     needs: [ci-scripts, core-linux]
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 35
     env:
-      APP_NAME: LiveCueRemake
-      IPA_NAME: LiveCue-Remake.ipa
+      IPA_NAME: LiveCueRemake.ipa
     steps:
       - uses: actions/checkout@v7
 
@@ -165,11 +192,11 @@ jobs:
         run: bash scripts/ci/require_xcode.sh
 
       - name: Generate the Xcode project and resolve packages
-        timeout-minutes: 15
+        timeout-minutes: 10
         run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
       - name: Build the Release app for devices, unsigned
-        timeout-minutes: 35
+        timeout-minutes: 25
         run: |
           bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild-device.log build \
             -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
@@ -187,6 +214,8 @@ jobs:
           echo "Contents of $APP_NAME.app:"
           ls -la "$app"
           xcrun lipo -info "$app/$APP_NAME"
+          # For the record: an unsigned device build has no signature and so no entitlements.
+          codesign --display --verbose=2 --entitlements - "$app" 2>&1 || true
 
           mkdir -p "$RUNNER_TEMP/Package/Payload"
           ditto "$app" "$RUNNER_TEMP/Package/Payload/$APP_NAME.app"
