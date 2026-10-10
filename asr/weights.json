@@ -1,0 +1,102 @@
+{
+  "nemotron": {
+    "name": "Nemotron 3.5 ASR streaming 0.6B",
+    "repository": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+    "revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+    "license": "OpenMDW-1.1",
+    "licenseUrl": "https://openmdw.ai/license/1-1/",
+    "totalBytes": 2552819964,
+    "files": [
+      {
+        "path": "config.json",
+        "size": 1376,
+        "gitSha1": "3ba627e56b655f0600b652b273c6d1e05fbc78e4"
+      },
+      {
+        "path": "generation_config.json",
+        "size": 193,
+        "gitSha1": "b7ca70126139d1bfe866146bb414f372903effdb"
+      },
+      {
+        "path": "model.safetensors",
+        "size": 2552062944,
+        "sha256": "9eebdd6590289cb3030f310858f3df93256600a800a3e8200c5993d5f967e174"
+      },
+      {
+        "path": "processor_config.json",
+        "size": 2519,
+        "gitSha1": "d430fe73aa4a2a97b2a0ea606f768b5e71765c3d"
+      },
+      {
+        "path": "tokenizer.json",
+        "size": 752051,
+        "gitSha1": "425c659bba34d7116233c6e102d2948c26e114f7"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 881,
+        "gitSha1": "33e468c971b257265e23a56ca113d2e86b363b30"
+      }
+    ]
+  },
+  "qwen3": {
+    "name": "Qwen3-ASR 1.7B",
+    "repository": "Qwen/Qwen3-ASR-1.7B",
+    "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5",
+    "license": "Apache-2.0",
+    "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+    "totalBytes": 4703055333,
+    "files": [
+      {
+        "path": "chat_template.json",
+        "size": 1161,
+        "gitSha1": "c44736493efd71ec96218cc626904698cdb13235"
+      },
+      {
+        "path": "config.json",
+        "size": 6194,
+        "gitSha1": "2bc16c9d4ca08963715cfb94d879799b9adbd0e9"
+      },
+      {
+        "path": "generation_config.json",
+        "size": 142,
+        "gitSha1": "7382a4d347c0a865b76bb1b8277f66a5ac312854"
+      },
+      {
+        "path": "merges.txt",
+        "size": 1671853,
+        "gitSha1": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+      },
+      {
+        "path": "model-00001-of-00002.safetensors",
+        "size": 4220320824,
+        "sha256": "a4cd1f1a04d90b757dc7f7dd26254e69a013b19e80efe590a83c6a3bde8608d6"
+      },
+      {
+        "path": "model-00002-of-00002.safetensors",
+        "size": 478200688,
+        "sha256": "6e0b9d9e09e2e0238e7ef3cc8a484ab387e91b90f1900bedf88bc92d7929ccfc"
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "size": 64821,
+        "gitSha1": "1048a4eb4f21fef9aea06d8568a784b2b5595689"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "size": 330,
+        "gitSha1": "8f7f07346466d5d494ec0d4969d1c3d0190eed72"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size": 12487,
+        "gitSha1": "b93109843922a40c6654c5449d3bf95372267c66"
+      },
+      {
+        "path": "vocab.json",
+        "size": 2776833,
+        "gitSha1": "4783fe10ac3adce15ac8f358ef5462739852c569"
+      }
+    ]
+  }
+}
