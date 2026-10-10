@@ -186,15 +186,26 @@ internal sealed class SpeechRig : IAsyncDisposable
 
     /// <summary>
     /// Opens a stream that is admitted: its first frame, <c>loading</c>, has been read. While the lease
-    /// of an earlier stream is still on its way back the attempt is refused with SPEECH_BUSY; it is then
-    /// repeated, for a short real time.
+    /// or the place of an earlier stream is still on its way back, the attempt is refused with
+    /// SPEECH_BUSY or with HTTP 429; it is then repeated, for a short real time.
     /// </summary>
     public async Task<SpeechPhone> OpenAdmittedAsync(string model = "nemotron")
     {
         var patience = Stopwatch.StartNew();
         while (true)
         {
-            var phone = await OpenAsync(model);
+            Assert.True(patience.Elapsed < TimeSpan.FromSeconds(10), "The speech lease was not released.");
+            SpeechPhone phone;
+            try
+            {
+                phone = await OpenAsync(model);
+            }
+            catch (WebSocketException)
+            {
+                await Task.Delay(10);
+                continue;
+            }
+
             var first = await phone.ReceiveTextAsync();
             if (first is not null && SpeechPhone.TypeOf(SpeechPhone.Parse(first)) == "loading")
             {
@@ -205,7 +216,6 @@ internal sealed class SpeechRig : IAsyncDisposable
             Assert.True(
                 first is not null && first.Contains("SPEECH_BUSY", StringComparison.Ordinal),
                 $"The stream was neither admitted nor refused as busy: {first}");
-            Assert.True(patience.Elapsed < TimeSpan.FromSeconds(10), "The speech lease was not released.");
             await Task.Delay(10);
         }
     }

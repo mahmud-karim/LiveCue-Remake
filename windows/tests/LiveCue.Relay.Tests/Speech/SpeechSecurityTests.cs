@@ -17,6 +17,9 @@ public sealed class SpeechSecurityTests
 
         // Fewer frames, but a write that cannot finish (W-04): dropped when that time has passed.
         await UnreadingPhone.StallsTheWriterAsync();
+
+        // A dropped socket holds nothing: four in a row, and all four places are free afterwards.
+        await UnreadingPhone.DroppedSocketsGiveTheirPlacesBackAsync();
     }
 
     [Fact]

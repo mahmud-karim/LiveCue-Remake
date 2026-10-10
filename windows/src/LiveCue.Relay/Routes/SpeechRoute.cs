@@ -76,8 +76,9 @@ internal sealed class SpeechRoute : IRouteHandler
 
                 if (socket.State != WebSocketState.Closed)
                 {
-                    // No completed close handshake: the stream aborted the socket. Aborting the connection
-                    // as well ends a write that a phone which does not read would otherwise keep pending.
+                    // No completed close handshake: the stream aborted the socket. The connection is aborted
+                    // here as well, so that dropping it never depends on how the server core ends an
+                    // upgraded request whose output a phone that does not read has left unsent.
                     context.Http.Abort();
                 }
             }
