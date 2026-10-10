@@ -28,8 +28,9 @@ public struct RelaySpeechNegotiation: Sendable {
     }
 
     /// Throws `RelayFailure`: an `error` frame's code; L-SPEECH-NOT-CONFIRMED for a `ready` naming another
-    /// provider or sample rate; L-UNEXPECTED-FRAME for any other frame before `ready` or for text that is
-    /// not a frame.
+    /// provider or sample rate; L-UNEXPECTED-FRAME for `speechStart`, `transcript`, `speechComplete` or
+    /// `streamComplete` before `ready`, and for text that is not a frame. `.unknown` is `Step.ignore` in
+    /// every state.
     public mutating func receive(text: String) throws -> Step {
         // STUB(WP-04)
         throw RelayFailure.local(.unexpectedFrame, origin: .stream)

@@ -22,4 +22,12 @@ import Observation
         // STUB(WP-09)
         throw RelayFailure.local(.network)
     }
+
+    /// Added by the review. Pure: nothing is sent or saved. Non-nil when a pairing is saved and the host
+    /// of `address` (after the manual-entry rules) differs from the saved host; nil when nothing is
+    /// saved, when the hosts are equal, and when `address` does not parse (the verify call reports that).
+    func replacement(forAddress address: String) -> PairingReplacement? {
+        // STUB(WP-09)
+        nil
+    }
 }

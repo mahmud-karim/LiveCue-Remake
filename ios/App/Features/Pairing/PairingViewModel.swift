@@ -30,6 +30,9 @@ import Observation
     /// Both fields not empty and not verifying.
     var canVerify: Bool { false } // STUB(WP-11)
     var isVerifying: Bool { false } // STUB(WP-11)
+    /// Added by the review: replacing a saved PC by another host needs a confirmation. Non-nil while
+    /// the confirmation is shown.
+    var replacementPrompt: PairingReplacement? { nil } // STUB(WP-11)
 
     /// address = the saved endpoint; token and paste box emptied.
     func appeared() {
@@ -52,6 +55,16 @@ import Observation
 
     /// On failure: alert with the message; the fields keep their text.
     func verifyAndPair() async {
+        // STUB(WP-11)
+    }
+
+    /// Added by the review. Clears the prompt, then verifies and pairs.
+    func confirmReplacement() async {
+        // STUB(WP-11)
+    }
+
+    /// Added by the review. Clears the prompt; nothing was sent, the saved pairing stays.
+    func cancelReplacement() {
         // STUB(WP-11)
     }
 }

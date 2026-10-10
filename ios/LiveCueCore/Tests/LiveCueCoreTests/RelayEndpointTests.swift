@@ -87,6 +87,33 @@ final class RelayEndpointTests: XCTestCase {
         XCTAssertNotEqual(RelayEndpoint(parsing: "https://pc.example.test/a"), RelayEndpoint(parsing: "https://pc.example.test/A"))
     }
 
+    // MARK: - Host
+
+    func testHostIsTheLowerCaseHostWithoutSchemePortOrPath() {
+        let rows: [(text: String, host: String)] = [
+            ("https://pc.example.test", "pc.example.test"),
+            ("https://pc.example.test/", "pc.example.test"),
+            ("https://pc.example.test:11443/", "pc.example.test"),
+            ("https://pc.example.test/livecue/", "pc.example.test"),
+            ("https://pc.example.test:10000/livecue/", "pc.example.test"),
+            ("https://PC-1.Example.TEST:1/A/b", "pc-1.example.test"),
+            ("https://192.0.2.7:11443/", "192.0.2.7"),
+            ("https://localhost", "localhost")
+        ]
+        for row in rows {
+            XCTAssertEqual(RelayEndpoint(parsing: row.text)?.host, row.host, row.text)
+        }
+    }
+
+    func testHostIgnoresPortAndPathWhenComparingEndpoints() {
+        let direct = RelayEndpoint(parsing: "https://pc.example.test:11443/")
+        let mounted = RelayEndpoint(parsing: "https://PC.example.test:10000/livecue/")
+        XCTAssertNotNil(direct)
+        XCTAssertNotEqual(direct, mounted)
+        XCTAssertEqual(direct?.host, mounted?.host)
+        XCTAssertNotEqual(direct?.host, RelayEndpoint(parsing: "https://other.example.test:11443/")?.host)
+    }
+
     // MARK: - Rejections (protocol 4.3)
 
     func testRejectsEverythingOutsideTheGrammar() {
@@ -102,6 +129,11 @@ final class RelayEndpointTests: XCTestCase {
             ("pc.example.test", "no scheme"),
             (" https://pc.example.test/", "leading space: nothing is trimmed"),
             ("https://pc.example.test/ ", "trailing space: nothing is trimmed"),
+            ("https://pc.example.test/\n", "line feed after the path (ST-13)"),
+            ("https://pc.example.test\n", "line feed after the host (ST-13)"),
+            ("https://pc.example.test:11443\n", "line feed after the port (ST-13)"),
+            ("https://pc.example.test/livecue/\r\n", "carriage return and line feed after the path (ST-13)"),
+            ("https://pc.example.test/\u{2028}", "U+2028 after the path (ST-13)"),
             ("https://user@pc.example.test/", "user name"),
             ("https://user:pass@pc.example.test/", "user name and password"),
             ("https://pc.example.test/?a=1", "query"),
