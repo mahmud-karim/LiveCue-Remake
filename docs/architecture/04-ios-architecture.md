@@ -1083,6 +1083,14 @@ public struct RelaySpeechNegotiation: Sendable {
 }
 ```
 
+As built by WP-04 and held by `RelaySpeechNegotiationTests`: text that is not a frame throws
+`L-UNEXPECTED-FRAME` in every state, as the comment of `receive(text:)` reads. After `ready`, a `loading`
+and a second `ready` are `Step.ignore`. An `error` frame's `message` is kept as `relayText` only for a code
+this build does not know, so a known code equals `RelayFailure.wire(_:origin: .stream)`. `ending` with
+`insideWindow` false is `L-STREAM-DROPPED` whatever the close code and reason. A refused upgrade carries
+`httpStatus` only when it is `L-HTTP`. `failure(for: .cancelled)` is `L-NETWORK`; the session never asks,
+because it turns a cancelled transport into `CancellationError` first (protocol 13.6 row 1).
+
 #### 3.1.7 Caption merge, framing, pending audio
 
 ```swift
@@ -1140,6 +1148,11 @@ public struct PendingAudioBuffer: Sendable {
 }
 ```
 
+As built by WP-04: a `speechStart` for a turn records its start again, and never reopens a completed turn.
+`PendingAudioBuffer.sampleCount` and the cap count the kept overlap too. `complete` returns "" and changes
+nothing for a snapshot taken before a `reset()` or already completed once. A snapshot shorter than the
+overlap is kept whole, and the cursor is then its end.
+
 #### 3.1.8 Meta realtime (spec 02 section 5; contract unchanged)
 
 ```swift
@@ -1184,6 +1197,11 @@ public enum MetaConnectionTest {
     public static func run(key: String, transport: any WebSocketTransport, timing: CoreTiming = .system) async throws
 }
 ```
+
+As built by WP-04: `MetaConnectionTest.run` does not wait for Meta's close after `endStream`; it closes the
+socket itself. A refused upgrade, a send failure, and a close or a drop before the acknowledgement are
+`connection`; a first message that is not text is `authentication`. The same holds for the start of a Meta
+`SpeechStreamSession`.
 
 #### 3.1.9 Streaming speech session (Meta and relay)
 
@@ -1250,6 +1268,30 @@ Usage emitted by the session: `begin` when ready; `update(sentMs:)` after each f
 (`bytes / (sampleRate × 2 / 1000)`); `update(processedMs:hasTranscript:)` for each inbound event;
 `firstText` at the first non-empty partial; `finalization` at the relay's `streamComplete` or at Meta's
 normal close; `finish(completed:)` exactly once.
+
+What the declarations leave open, as built by WP-04 and held by the two `SpeechStreamSession…Tests` files:
+
+- A stream that ends interrupted delivers `.failed` as its last event, also when that happens inside
+  `finish()`: a close code other than 1000, a drop, or the 15 s passing (`L-STREAM-DROPPED` for the relay,
+  `MetaSpeechError.connection` for Meta). Only `abort()` ends a stream without `.failed`. The order at the
+  end is: socket closed, `usage(.finish)`, `.failed`, end of `events`.
+- `start()` throws `CancellationError` when its task is cancelled and when `abort()` or `finish()` is called
+  while it waits. A second `start()` ends the stream and throws.
+- The 15 s of `finish()` count from the call, so they bound the flush and `endStream` as well as the wait
+  for the close (AC-IOS-047).
+- `connected(setupSeconds:)` is the relay's `handshakeMs`, in seconds, for the relay dialect and the phone's
+  own time from the connection attempt to the acknowledgement for Meta. `firstWords` and `firstText` count from the
+  moment the provider was ready, and fire at the first non-empty partial or, when a turn completes without
+  one, at its segment. `finalization` is the relay's `finalizationMs` when the frame has one, otherwise the
+  time since `finish()` was called; for Meta it is always the latter.
+- The `update` for an inbound event is sent also when the event has neither a position nor text. `.partial`
+  is sent only when the text changed, and a segment before the partial that no longer holds it.
+- A binary inbound message is ignored, except as Meta's first message, where it fails the acknowledgement.
+- The phone closes with code 1000 when the peer ended the stream (a close frame, or a relay `error` frame)
+  and with 1001 when it cuts the stream itself (a limit, a local failure, `abort()`).
+- The session ends every wait by closing the socket. A transport whose `receive()` ends when `close` is
+  called, and whose `open` ends when its task is cancelled, leaves no task behind; nothing else depends on
+  either.
 
 #### 3.1.10 OpenRouter (spec 02 section 4; contract unchanged)
 
