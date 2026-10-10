@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Description>The LiveCue relay: an HTTP server bound to loopback that any .NET process can host.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Kestrel comes from the shared framework, so there is no package to restore or pin. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LiveCue.Relay.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+<Project>
+
+  <!-- Central package management: every package version used under windows/ is pinned here. -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Tests">
+    <!-- xunit.v3 runs on Microsoft.Testing.Platform (see "test" in global.json); no VSTest packages. -->
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+
+</Project>
