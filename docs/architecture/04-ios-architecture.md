@@ -19,6 +19,7 @@ Contents
 6. [Test plan](#6-test-plan)
 7. [Work packages](#7-work-packages)
 8. [Compile-risk checklist](#8-compile-risk-checklist)
+9. [Changes after review](#9-changes-after-review)
 
 Conventions
 
@@ -277,7 +278,7 @@ compiler refuses two files of the same name in one module.
 | `Persistence/FileSessionStore.swift` | Sessions on disk: one JSON file per session under Application Support (R-33) | WP-06 |
 | `Persistence/UserDefaultsPreferencesStore.swift` | Preferences in `UserDefaults.standard` | WP-06 |
 | `Persistence/KeychainSecretStore.swift` | API keys in the Keychain | WP-06 |
-| `Persistence/FilePairingStore.swift` | Pairing file plus Keychain copy | WP-06 |
+| `Persistence/FilePairingStore.swift` | Pairing: the Keychain item (the authority) and the fallback file (3.2.2) | WP-06 |
 | `Persistence/HistoryModel.swift` | Stored sessions in memory, delete | WP-09 |
 | `Platform/AppClock.swift` | Clock protocol and `SystemClock` | WP-01 |
 | `Platform/PermissionProviding.swift` | Microphone and camera permission protocol | WP-01 |
@@ -476,7 +477,7 @@ public struct SessionMemory: Codable, Equatable, Sendable {
     public var summary: String
     public var facts: [String]
     public var openQuestions: [String]
-    public var throughSegmentId: UUID?   // a string that is not a UUID fails decoding of this value
+    public var throughSegmentId: UUID?   // a string that is not a UUID fails decoding of the whole value; a relay reply is therefore never decoded directly (3.1.5)
     public init(summary: String = "", facts: [String] = [], openQuestions: [String] = [], throughSegmentId: UUID? = nil)
 }
 
@@ -693,10 +694,13 @@ public enum APIKeyShape: Equatable, Sendable {
 public struct PairingPayload: Equatable, Sendable {
     public let endpoint: String                          // canonical form (protocol 4.3)
     public let token: String
-    /// Rules V-1 to V-4. Throws `PairingPayloadError.invalid`.
+    /// Rules V-1 to V-4. Throws `PairingPayloadError.invalid`. V-4 is a whole-text check done by a
+    /// character loop (exactly 43 characters of the token alphabet), never a pattern ending in `$`: a
+    /// token followed by a line feed, a carriage return or any other character is invalid.
     public static func parse(_ text: String) throws -> PairingPayload
     /// Manual entry of protocol 4.3: trims the address, lower-cases a leading "https://" written in any
-    /// case, applies V-3 and V-4. The token is used exactly as typed.
+    /// case, applies V-3 and V-4. The token is used exactly as typed and is NOT trimmed: one that ends in
+    /// a line break or a space fails V-4.
     public static func manual(address: String, token: String) throws -> PairingPayload
     /// `{"endpoint":"…","token":"…"}`: members in this order, no whitespace. The stored and QR form.
     public var storedText: String { get }
@@ -877,6 +881,9 @@ public enum RelayRoute: Equatable, Sendable {
 public struct RelayEndpoint: Equatable, Sendable {
     /// "https://" + lower-case host + optional ":port" + path ending in exactly one "/".
     public let canonical: String
+    /// The lower-case host of `canonical`, without scheme, port or path. Added by the review for the
+    /// "replace this PC?" confirmation (5.9).
+    public var host: String { get }
     /// The grammar of protocol 4.3, parsed by hand. No trimming and no case change of the scheme.
     public init?(parsing text: String)
     /// `canonical` + the route path without its leading slash. Text concatenation only.
@@ -973,7 +980,9 @@ public struct RelayClient: Sendable {
     /// always nil: the reply's value is never read (protocol 13.5).
     public func assist(_ request: AssistRequest, pairing: PairingPayload) async throws -> AssistResponse
     public func summarize(_ request: SummaryRequest, pairing: PairingPayload) async throws -> SummaryResponse
-    /// Route 9, best effort. Never throws; both answers count as done.
+    /// Route 9, best effort. Never throws; both answers count as done. The id in the path is
+    /// `requestId.uuidString`, the same upper-case text the encoder wrote in the body: the relay compares
+    /// ids byte for byte.
     public func cancel(requestId: UUID, pairing: PairingPayload) async
 }
 ```
@@ -982,6 +991,15 @@ Rules inside `RelayClient` that callers rely on:
 
 - The route's phone timeout is a total time, raced against `timing.sleep`. When it wins, the outcome is
   `L-TIMEOUT` (row 3), also if the transport then reports cancellation.
+- Every relay request is built with `HTTPRequest.timeout` (the transport's idle timeout) equal to the
+  route's phone timeout plus 10 s, so the transport's own timer can never end a request before the total
+  timer does. A slow route always ends as `L-TIMEOUT`, never as a transport time-out (row 5).
+- The assist reply is never decoded with the synthesised decoder of `AssistResponse` directly: its `memory`
+  is a `SessionMemory`, whose marker must be a UUID. The relay always sends `memory.throughSegmentId` as
+  `null` (protocol 8.3), but the phone does not rely on that: it tolerates and ignores any string there.
+  `RelayClient` parses the reply with `JSONValue.parse`, removes the member `memory.throughSegmentId` when
+  `memory` is an object, encodes that value again and decodes `AssistResponse` from the result. A reply
+  that fails this is `L-UNREADABLE` (protocol 13.6 row 8).
 - For `assist` and `summarize`: when the phone timeout wins, or when the calling task is cancelled while the
   request is in flight, the client starts **one** unstructured task that sends `cancel(requestId:)` and does
   not wait for it. Nothing else in the app sends route 9. Deleting a session whose summary is in flight
@@ -1003,7 +1021,8 @@ public enum RelaySpeechFrame: Equatable, Sendable {
     case error(code: String, message: String)
     case unknown                                         // a JSON object of another type: ignored
     /// nil when the text is not a JSON object with a string `type`. Members of the wrong JSON type are
-    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`.
+    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`. `loading` with a
+    /// missing member is still `loading`, with 0 or "" in its place.
     public static func parse(_ text: String) -> RelaySpeechFrame?
 }
 
@@ -1024,8 +1043,9 @@ public struct RelaySpeechNegotiation: Sendable {
     public private(set) var isReady: Bool
     public private(set) var endStreamSent: Bool
     /// Throws `RelayFailure`: an `error` frame's code; L-SPEECH-NOT-CONFIRMED for a `ready` naming another
-    /// provider or sample rate; L-UNEXPECTED-FRAME for any other frame before `ready` or for text that is
-    /// not a frame.
+    /// provider or sample rate; L-UNEXPECTED-FRAME for `speechStart`, `transcript`, `speechComplete` or
+    /// `streamComplete` before `ready`, and for text that is not a frame. `.unknown` is `Step.ignore` in
+    /// every state.
     public mutating func receive(text: String) throws -> Step
     public mutating func markEndStreamSent()
     /// How the stream ended, given the close. `insideWindow` is false when C-60 passed first.
@@ -1185,7 +1205,8 @@ public actor SpeechStreamSession {
     public init(dialect: SpeechStreamDialect, transport: any WebSocketTransport, timing: CoreTiming = .system)
     /// Opens the socket and returns when the provider is ready for audio: the Meta acknowledgement
     /// (limit 30 s) or the relay's valid `ready` (limit C-59). Emits `.status` while waiting, then
-    /// `.status(.connected)` and `.usage(.begin)`. Throws `SpeechStreamFailure` or `CancellationError`;
+    /// `.status(.connected)` and `.usage(.begin)`. For the relay dialect, when C-59 passes first the socket
+    /// is closed and the failure is `.relay(.local(.timeout, origin: .stream))`. Throws `SpeechStreamFailure` or `CancellationError`;
     /// after a throw the socket is closed and `events` has finished.
     public func start() async throws
     /// PCM16 mono at the dialect's rate, any length. Frames it and sends it. Ignored before `start`
@@ -1387,7 +1408,8 @@ struct URLSessionHTTPTransport: HTTPTransport {
 }
 
 // Platform/URLSessionWebSocketTransport.swift
-// One ephemeral URLSession per connection, invalidated on close. `open` resumes the task and waits for
+// One ephemeral URLSession per connection, invalidated on close. The upgrade request keeps an idle timeout
+// of 60 s or more (protocol 13.1). `open` resumes the task and waits for
 // `urlSession(_:webSocketTask:didOpenWithProtocol:)`; if the task completes first, an HTTP response on
 // the task means `WebSocketUpgradeRejected(status:)`, anything else a `TransportFailure`.
 // `receive()` returns `.closed(code:reason:)` once when the task reports a close code; a failure without
@@ -1508,11 +1530,17 @@ struct KeychainSecretStore: SecretStoring { init(keychain: KeychainStore = Keych
 
 // Persistence/PairingStoring.swift
 protocol PairingStoring: Sendable {
-    /// File first (refreshing the Keychain copy from it), then the Keychain copy. Text that does not
-    /// pass `PairingPayload.parse` is treated as absent.
+    /// The Keychain item is the authority; the file is a fallback (architecture 4.10). Keychain item
+    /// first: when it parses, that is the pairing, and a file that is missing or holds anything else is
+    /// rewritten from it. The file is read only when the Keychain has no item, cannot be read, or holds
+    /// text that does not parse. The Keychain is never written from the file. Text that does not pass
+    /// `PairingPayload.parse` is treated as absent.
     func load() -> PairingPayload?
-    /// File first, atomically, protected until first user authentication, excluded from backup; it must
-    /// succeed. The Keychain copy is best effort.
+    /// Keychain item first. When that write succeeds, the file is rewritten best effort (atomically,
+    /// protected until first user authentication, excluded from backup). When it fails, the file must
+    /// be written, and an older Keychain item is then deleted so that it cannot win at the next load;
+    /// if such an item can be neither replaced nor deleted, the file is put back to what the Keychain
+    /// holds and the call throws. After a `save` that returned, `load()` returns that pairing.
     func save(_ pairing: PairingPayload) throws
     func removeKeychainCopy()                                    // test seam only
 }
@@ -2070,6 +2098,17 @@ enum Route: Hashable, Sendable {
     /// Canonicalises, calls route 2, and on 200 saves and tells the monitor. Throws `PairingPayloadError`
     /// or `RelayFailure`; a previous pairing is untouched on any failure.
     func verifyAndPair(address: String, token: String) async throws
+    /// Added by the review. Pure: nothing is sent or saved. Non-nil when a pairing is saved and the host
+    /// of `address` (after the manual-entry rules) differs from the saved host; nil when nothing is
+    /// saved, when the hosts are equal, and when `address` does not parse (the verify call reports that).
+    func replacement(forAddress address: String) -> PairingReplacement?
+}
+
+// Connectivity/ConnectivityTypes.swift (added by the review)
+struct PairingReplacement: Equatable, Sendable {
+    let currentHost: String
+    let newHost: String
+    var newHostIsTailscaleName: Bool { get }             // newHost ends in ".ts.net"
 }
 ```
 
@@ -3017,7 +3056,7 @@ otherwise `PCModelStatus.homeLabel(for:)`.
 | Stop | The save is flushed before History reloads |
 | A summary arrives | Save of the stored session, then History reloads |
 | Provider, answer selection, instruction change | Preferences, at once |
-| Pairing verified | File (must succeed), then the Keychain copy |
+| Pairing verified | The Keychain item, then the file (3.2.2: the Keychain item is the authority, the file the fallback) |
 | API key saved or removed | Keychain only |
 
 Launch order: `LaunchConfiguration.current`; `AppEnvironment.make` (in fixture mode,
@@ -3032,8 +3071,8 @@ Launch order: `LaunchConfiguration.current`; `AppEnvironment.make` (in fixture m
 | `FixtureTranscriber.finalize` | Stops the loop; streaming: `usage(.finish(completed: true))`; status "Paused". `transcribePending` returns 0. |
 | `FixtureAnswerService.answer` | `onProgress(partialAnswer)`; sleep 0.4 s; return the fixed answer with detected question = the fixture segment (Codex) or the sentinel (OpenRouter), the details, a memory, and `execution` echoing the request's selection with the fixture timings; OpenRouter adds the fixture usage. With `assistFailsOnce`, the first call for each session id throws `OpenRouterError.unavailable` after the progress call. |
 | `FixtureAnswerService.loadCatalogue` | The Codex or OpenRouter fixture catalogue; Codex waits 8 s first with `pcCatalogSlow`. `verify(key:)` returns at once. `summarize` returns a fixed summary. |
-| `FixtureRelayGateway.health` | Success; with `pcOffline`, a failure with an unknown code and the relay text "PC offline." |
-| `FixtureRelayGateway` PC model | Starts `stopped` (MSG-1). Start: `starting` (MSG-6) for 1 s, or 6 s with `pcModelSlowStart`, then `ready` (MSG-4); with `pcModelStartError`, `error` (MSG-8) instead. Stop: `stopping` (MSG-7) for 1 s, then `stopped` (MSG-3). `elapsedSeconds` counts whole seconds of the running operation. |
+| `FixtureRelayGateway.health` | Success; with `pcOffline`, `RelayFailure.local(.unreachable)`, which is what a PC that is switched off gives (protocol 13.6 row 5) |
+| `FixtureRelayGateway` PC model | Starts `stopped` (MSG-3; MSG-1 is never sent on the wire). Start: `starting` (MSG-6) for 1 s, or 6 s with `pcModelSlowStart`, then `ready` (MSG-4); with `pcModelStartError`, `error` (MSG-8) instead. Stop: `stopping` (MSG-7) for 1 s, then `stopped` (MSG-3). `elapsedSeconds` counts whole seconds of the running operation. |
 | `FixtureEngineLoader` | Reports fraction 0.5, sleeps 2 s, returns a fixture engine. |
 
 ### 4.10 Timers, timeouts and limits
@@ -3440,8 +3479,27 @@ Contracts: `SpeechSettings`. Identifiers: `meta-key`, `save-meta-key`, `meta-key
     func readPayload()                                   // fills the two fields and clears the box, or alerts
     func scannerFinished(_ result: Result<String, QRScanFailure>)   // closes the sheet; success is handled as pasted text
     func verifyAndPair() async                           // on failure: alert with the message; fields keep their text
+    // Added by the review (replacing a saved PC by another host needs a confirmation):
+    var replacementPrompt: PairingReplacement? { get }   // non-nil while the confirmation is shown
+    func confirmReplacement() async                      // clears the prompt, then verifies and pairs
+    func cancelReplacement()                             // clears the prompt; nothing was sent, the saved pairing stays
 }
 ```
+
+**Replacing a saved PC** (architecture 4.9). `verifyAndPair()` first asks
+`pairing.replacement(forAddress: address)`. When it is nil the call goes on as before. When it is not nil,
+nothing is sent: the view model sets `replacementPrompt`, and `PairingScreen` shows a local `.alert` bound
+to it (not the global alert, which has one button):
+
+| Element | Text |
+|---|---|
+| Title | "Replace this PC?" |
+| Message | "Replace `<current host>` with `<new host>`? Only do this with the QR shown by LiveCue Desktop on your own PC." |
+| Extra line, when `newHostIsTailscaleName` is false | "`<new host>` is not a Tailscale address." |
+| Buttons | "Replace" (destructive role) calls `confirmReplacement()`; "Cancel" (cancel role) calls `cancelReplacement()` |
+
+Scanning or pasting a payload still only fills the two fields. No request is made before "Verify and pair",
+and none before "Replace" when the prompt is shown.
 
 `QRScanSheet` presents `QRScannerView` under the viewfinder overlay of DS 4.15, with the title
 "Scan PC QR", the button "Cancel" and the caption "Point at the QR in LiveCue Desktop"; it uses
@@ -3574,15 +3632,15 @@ decisions 5.2; "P2" ids are protocol 15.9.
 | `LiveCueJSONTests` (WP-02) | CORE-A12, IOS-B18: exactly three fractional digits written; zero to nine accepted; a non-UTC or malformed date fails; UUIDs written upper case and read in either case; absent optionals omitted; a stored `isFinal` key is ignored (CORE-C2) | literals |
 | `SessionLifecycleTests` (WP-02) | AC-IOS-076 title rule (48 characters, "Conversation"); IOS-B2 recovery: end time, title and interrupted streams after `closedAfterInterruption(at:)`; a closed session is unchanged | `CoreFixtures.session` |
 | `ContextBuilderTests` (WP-02) | AC-009, 010, S01, S02, S04, S05; P2-208 (request id present, `transcriptTruncated` exactly when cut, nil without segments); retry keeps the text and changes only id and assistant | `CoreFixtures.session` |
-| `WireBudgetTests` (WP-02) | AC-011; P2-207 for the four inputs, assist and summary: encoded size at most C-11, cuts on character boundaries, the end kept; shrink order of step 3; `head` and `tail` on multi-byte text | generated strings |
+| `WireBudgetTests` (WP-02) | AC-011; P2-207 for the four inputs, assist and summary: encoded size at most C-11, cuts on character boundaries, the end kept; shrink order of step 3, including a plain ASCII request whose members are all at their step 1 budgets (136,192 bytes of text before fitting); `head` and `tail` on multi-byte text | generated strings |
 | `WordErrorRateTests` (WP-02) | AC-012, 013, S20 | literals |
 | `TranscriptionUsageTests` (WP-02) | AC-033 to 035, 082, 090 to 103, 107, S17; `apply(_:)` equals the direct calls; `firstText` applied once; `interruptOpenStreams` | none |
 | `PCModelStatusTests` (WP-02) | AC-070 to 080, S18; P2-219 | literals |
 | `SpeechProviderTests` (WP-02) | AC-024, 081, 084; `stored(_:)` default; `PCRequirement.needsPC` for all ten pairs | none |
-| `PairingPayloadTests` (WP-01) | AC-004 to 008 with a 43-character token; P2-202; P2-203 manual entry; `storedText` member order and round trip through `parse` | `CoreFixtures.token` |
-| `RelayEndpointTests` (WP-01) | P2-200 for both endpoints and all ten routes; P2-203 canonical forms; every rejection of the grammar in protocol 4.3 | literals |
+| `PairingPayloadTests` (WP-01) | AC-004 to 008 with a 43-character token; P2-202; P2-203 manual entry; `storedText` member order and round trip through `parse`; ST-13 (test plan 4.6): a token followed by a line feed, by a carriage return and line feed, or by U+2028 is refused by `parse` and by `manual` | `CoreFixtures.token` |
+| `RelayEndpointTests` (WP-01) | P2-200 for both endpoints and all ten routes; P2-203 canonical forms; every rejection of the grammar in protocol 4.3, including an endpoint followed by a line feed; `host` for an endpoint with and without a port and a path | literals |
 | `JSONValueTests` (WP-01) | A boolean is never a number and a number never a boolean; non-finite and fractional numbers have no `intValue`; text that is not JSON parses to nil | literals |
-| `RelayClientRoutesTests` (WP-03) | P2-201 (headers on every route, none named `Origin` or `Cookie`); P2-204; P2-211 (one request per failing call); P2-221; verify sends `{}`; start and stop send the model and accept 200 and 202 | `FakeHTTPTransport`, `CoreFixtures` |
+| `RelayClientRoutesTests` (WP-03) | P2-201 (headers on every route, none named `Origin` or `Cookie`); P2-204; P2-211 (one request per failing call); P2-221; verify sends `{}`; start and stop send the model and accept 200 and 202; a health 200 with `protocol` 2 and `ok` false is `L-UNREADABLE`; every request's `timeout` is its route's phone timeout plus 10 s; the cancel path ends in `requestId.uuidString` | `FakeHTTPTransport`, `CoreFixtures` |
 | `RelayClientClassificationTests` (WP-03) | P2-205, one test per row of protocol 13.6, including row 3 with `ManualTime` | `FakeHTTPTransport`, `ManualTime` |
 | `RelayClientAssistTests` (WP-03) | P2-210; the reply decodes for `throughSegmentId` null, a UUID and "not-a-uuid", and the returned marker is nil (core half of P2-209); P2-212 (one `DELETE` on timeout, one on task cancellation, a 404 answer is not an error); the body sent is the fitted body | `FakeHTTPTransport`, `ManualTime`, `CoreFixtures.assistReplyJSON` |
 | `RelayMessagesTests` (WP-03) | P2-206 for every case of `RelayWireCode` and `RelayLocalCondition`; unknown code with and without usable relay text, for both origins; no text contains the token; the four compositions of protocol 14.3 and the prefix rule (IOS-B10) | none |
@@ -3594,9 +3652,9 @@ decisions 5.2; "P2" ids are protocol 15.9.
 | `MetaConnectionTestTests` (WP-04) | The test sends the handshake, requires the acknowledgement, sends `endStream`, closes, and sends no binary frame (AC-IOS-110); a rejected acknowledgement is `authentication`; expiry of 15 s is `connection` | `FakeWebSocketTransport`, `ManualTime` |
 | `PCMFramerTests` (WP-04) | Full frames of the given size; one final shorter, non-empty, even frame (P2-216 framing) | none |
 | `PendingAudioBufferTests` (WP-04) | 30-minute cap refuses the chunk; only words ending after the cursor are kept; the buffer is trimmed to 2 s and keeps audio appended during transcription | none |
-| `RelaySpeechFrameTests` (WP-04) | Each frame type of protocol 10.3; wrong member types read as absent; unknown types (P2-218) | literals |
-| `RelaySpeechNegotiationTests` (WP-04) | P2-213 (mismatched `ready`), P2-214, P2-215, P2-217, step 7 of protocol 13.7 (close reason is a known code) | none |
-| `SpeechStreamSessionRelayTests` (WP-04) | The speech URL and headers (P2-200, P2-201); no audio before `ready` and `loading` keeps waiting up to C-59 (P2-213, AC-IOS-020); P2-214 end to end; P2-215 (1000 inside C-60 is completed; 1011, a drop and no close are interrupted; AC-IOS-047); P2-216 (2,560-byte frames, remainder, exactly one `endStream`); P2-218; usage events in order (AC-IOS-041) | `FakeWebSocketTransport`, `ManualTime`, `CoreFixtures.pairing` |
+| `RelaySpeechFrameTests` (WP-04) | Each frame type of protocol 10.3; wrong member types read as absent; a `loading` frame with a missing member is still `loading`; unknown types (P2-218) | literals |
+| `RelaySpeechNegotiationTests` (WP-04) | P2-213 (mismatched `ready`), P2-214, P2-215, P2-217, step 7 of protocol 13.7 (close reason is a known code); before `ready` an unknown type is ignored and each of the four lab types is `L-UNEXPECTED-FRAME` | none |
+| `SpeechStreamSessionRelayTests` (WP-04) | The speech URL and headers (P2-200, P2-201); no audio before `ready` and `loading` keeps waiting up to C-59, after which the socket is closed and the start fails with `L-TIMEOUT` (P2-213, AC-IOS-020); P2-214 end to end; P2-215 (1000 inside C-60 is completed; 1011, a drop and no close are interrupted, the last with `L-STREAM-DROPPED`; AC-IOS-047); P2-216 (2,560-byte frames, remainder, exactly one `endStream`); P2-218; usage events in order (AC-IOS-041) | `FakeWebSocketTransport`, `ManualTime`, `CoreFixtures.pairing` |
 | `SpeechStreamSessionMetaTests` (WP-04) | The fixed endpoint; handshake first; acknowledgement required; 3,840-byte frames; an `error` event ends the stream with the provider text; completed only after `endStream` and close 1000 (IOS-A11); 30 s connect limit | `FakeWebSocketTransport`, `ManualTime` |
 | `ContractSmokeTests` (WP-01) | The constants of 3.1.5 have the values of protocol section 2 | none |
 
@@ -3626,6 +3684,11 @@ They build owners with `TestOwners` (3.2.11) and drive time with `ManualClock`. 
 | `StreamingTranscriberEngineTests`, `VozTranscriberTests`, `ParakeetTranscriberTests`, `OnDeviceModelManagerTests`, `FixtureTranscriberTests` (WP-07) | The columns of 4.2 with `FakeAudioCapture` and fake engines: microphone after the handshake, audio session released or kept on Pause (IOS-B6), each failure kind and its text, `failed` last, events emitted before a call returns; the steps of 4.6 including Reload and the per-model progress block (IOS-B13, AC-IOS-145 to 149); fixture usage gains 1 s per second |
 | `HomeViewModelTests`, `LiveSessionViewModelTests`, `AssistantLabViewModelTests`, `TimingViewContentTests` (WP-10) | Home chip and rows for every combination (AC-IOS-004 to 014); live chip, preview and feed states (AC-IOS-027, 029, 038, 050, 072); comparisons limit and order (AC-IOS-126); price and effort labels; timing rows for Codex, OpenRouter, Parakeet, retry and missing PC timings (AC-IOS-069) |
 | `SettingsViewModelTests`, `TranscriptionViewModelTests`, `PCSpeechModelViewModelTests`, `MetaKeyViewModelTests`, `PairingViewModelTests`, `ModelLibraryViewModelTests`, `BenchmarkViewModelTests`, `HistoryViewModelTests`, `SessionDetailContentTests` (WP-11) | Provider rows by provider (AC-IOS-095 to 097); PC model button rules (AC-IOS-099 to 105); pairing fields after a read, alert without prefix on a failed verify; progress block only for its model; "Use latest transcript" source (IOS-D6); usage labels and sections only with content (AC-IOS-081, 084, 086, 088) |
+| `FilePairingStoreTests` (WP-06), as changed by the review | ST-07 (test plan 4.6). This replaces "pairing load order file then Keychain" in the WP-06 row above: with A in the Keychain and B in the file, `load` returns A, the Keychain still holds A and the file now holds A; with a Keychain item and no file, the file is written from it; with no Keychain item, `load` returns the file's pairing and **does not write the Keychain**; a Keychain text that does not parse falls back to the file; `save` writes the Keychain first and then the file; when the Keychain write fails the file is written and an older Keychain item is deleted; when that item can be neither replaced nor deleted, `save` throws and the file again holds the Keychain's pairing; after every `save` that returned, `load` returns the saved pairing. Still holds: restore without the Keychain copy, the file excluded from backup and protected (AC-IOS-133, 141) |
+| `PairingControllerTests` (WP-09), added by the review | ST-18: `replacement(forAddress:)` is nil with nothing saved, nil for the saved host (also with another port or path, and in another letter case), non-nil with both hosts for another host, and nil for an address that does not parse; `newHostIsTailscaleName`; calling it sends and saves nothing |
+| `PairingViewModelTests` (WP-11), added by the review | ST-18: with a saved pairing and another host, `verifyAndPair()` sets `replacementPrompt` and the fake gateway recorded zero requests; `cancelReplacement()` clears it, sends nothing and leaves the saved pairing; `confirmReplacement()` verifies and pairs; with the same host, and with nothing saved, there is no prompt; between `scannerFinished` and `verifyAndPair()` the gateway recorded zero requests |
+| `AnswerPlainTextTests` (WP-10), added by the review | ST-26: `AnswerCard`, `InProgressCard` and `AssistErrorCard`, each hosted in a `UIHostingController` with the text `[label](https://pc.example.test/x) https://pc.example.test/y` as answer, details, streamed text and error message, expose no accessibility element with the link trait, and the text is shown verbatim, brackets included |
+| `RelayTextPlainTextTests` (WP-11), added by the review | ST-26: the same check for the PC status `message` line of the PC speech model screen, the Saved PC message line, and a line that shows an unknown-code relay text |
 
 ### 6.3 UI tests (`LiveCueRemakeUITests`)
 
@@ -3718,7 +3781,9 @@ The workflow starts only when a file under `ios/`, `scripts/ci/` or the workflow
 8. Model folders are excluded from backup after preparation.
 9. Keychain inside LiveContainer: keys save and survive a relaunch; with a failing Keychain the pairing is
    still restored from the file.
-10. A PC speech stream of several minutes through Private mode and through Public mode on a mobile network.
+10. A PC speech stream of several minutes through Private mode and through Public mode on a mobile network,
+    including at least one full minute of silence: the relay's keep-alive is an unsolicited Pong every 15 s,
+    and the stream must stay up through it.
 11. One real pairing in each mode, one real Codex answer and one summary; "Reset pairing" on the PC shows
     "Pairing needs attention" on the phone.
 12. Haptics are felt during a session and are not audible in the transcript.
@@ -3982,7 +4047,7 @@ avoids it.
 | `ForEach` identity | Iterate `Identifiable` values or give `id: \.self` for strings; never iterate indices of a mutable array. |
 | An identifier on a container | `.accessibilityIdentifier` on a stack spreads to every child. Put it on the leaf control, pass it to the component's `identifier` parameter, or make the container an element with `.accessibilityElement(children: .contain)` (used once, for `assistant-provider`). |
 | An identifier inside a `Button` label | It is not exposed. That is why `LCNavigationRow` keeps its subtitle outside the link. |
-| Modal state | One `.alert` at the root for the global alert, one on History for the delete confirmation, one `.sheet` on Pairing. Do not attach a second alert to the same view. |
+| Modal state | One `.alert` at the root for the global alert, one on History for the delete confirmation, one on `PairingScreen` for the "Replace this PC?" confirmation (5.9), one `.sheet` on Pairing. Do not attach a second alert to the same view. |
 | Forced light appearance | Only the root sets `.preferredColorScheme(.light)`. No view reads `colorScheme`. |
 | Fixed sizes that hold text | Use the theme's sizes as minimum heights (`frame(minHeight:)`), never as fixed heights, so Dynamic Type can grow them. |
 
@@ -4010,3 +4075,146 @@ avoids it.
 | A string that differs by one character from the test's expectation | Copy strings from the spec, protocol 14 and 1.3; do not retype them. The ellipsis is the single character "…", the separator is "·" (U+00B7), the arrow in the timing view is "→". |
 | Locale in numbers | Costs, seconds and percentages use `String(format:)` with `Locale(identifier: "en_US_POSIX")`, or the core's own formatters. |
 | Byte budgets counted in characters | Budgets of protocol 13.4 are UTF-8 bytes (`utf8.count`), cut on `Character` boundaries. Only the four limits that the specs give in characters (title 48, instruction 4,000, OpenRouter memory 6,000, Meta transcript 32,000) use `count`. |
+| Text that came from a model or from the relay turning into a link | Answer, details, detected question, summary, key points, streamed answer text, the PC status `message`, and a relay text shown for an unknown code are drawn with `Text(verbatim:)`. Never build such text through a string-literal `Text("\(value)")` (that is a `LocalizedStringKey`, which parses Markdown), `AttributedString(markdown:)`, `Link` or `openURL`. `scripts/ci/lint_swift.sh` fails when `AttributedString(markdown` appears in a Swift file under `ios/App`; two unit-test files prove the rendering (6.2, ST-26). A prompt-injected answer must not be able to put a tappable link on the phone. |
+
+---
+
+## 9. Changes after review
+
+Two reviews changed this document after WP-01 had started from its earlier text: the cross-check of the
+protocol against both designs (items `X-nn` and `A-nn`) and the security review `07-security-review.md`
+(findings `SEC-nn`, tests `ST-nn`). The rulings are in decisions section 8. The sections above already hold
+the new text. This section says, per work package, what its builder must do **differently from the text as
+it stood before**. 9.1 lists every change to a contract declaration, with its file; WP-01 creates those
+files, so WP-01 makes those changes even where another package owns the behaviour.
+
+### 9.1 Contract declarations that change
+
+Core paths are under `ios/LiveCueCore/Sources/LiveCueCore/`, app paths under `ios/App/`. "Comment" means the
+signature is unchanged and only its documentation, and with it the required behaviour, changed.
+
+| # | File | Change | From |
+|---|---|---|---|
+| 1 | `Relay/RelayEndpoint.swift` | New member `public var host: String { get }`: the lower-case host of `canonical` | SEC-13 |
+| 2 | `Domain/PairingPayload.swift` | Comment, and behaviour of a type WP-01 completes: V-4 is a whole-text check by a character loop; `manual` does not trim the token; a token followed by a line break is invalid | SEC-08 |
+| 3 | `Domain/SessionMemory.swift` | Comment of `throughSegmentId`: a relay reply is never decoded directly | X-01 |
+| 4 | `Relay/RelayClient.swift` | Comment of `cancel(requestId:pairing:)`: the path carries `requestId.uuidString`. No signature changes; the new rules of 3.1.5 are behaviour (WP-03) | A-13, A-01, X-01 |
+| 5 | `Relay/RelaySpeechFrame.swift` | Comment of `parse`: a `loading` frame with a missing member is still `loading` | A-14 |
+| 6 | `Relay/RelaySpeechNegotiation.swift` | Comment of `receive(text:)`: `.unknown` is ignored in every state; the four lab types before `ready` are `L-UNEXPECTED-FRAME` | A-03 |
+| 7 | `Transcript/SpeechStreamSession.swift` | Comment of `start()`: when C-59 passes, the socket is closed and the failure is `.relay(.local(.timeout, origin: .stream))` | A-02 |
+| 8 | `Persistence/PairingStoring.swift` | Comments of `load()` and `save(_:)`: the order is reversed. The Keychain item is the authority and the file the fallback; the Keychain is never written from the file | SEC-03 |
+| 9 | `Connectivity/ConnectivityTypes.swift` | New struct `PairingReplacement { let currentHost: String; let newHost: String; var newHostIsTailscaleName: Bool { get } }`, `Equatable`, `Sendable` | SEC-13 |
+| 10 | `Connectivity/PairingController.swift` | New method `func replacement(forAddress address: String) -> PairingReplacement?` | SEC-13 |
+| 11 | `Features/Pairing/PairingViewModel.swift` | New members `var replacementPrompt: PairingReplacement? { get }`, `func confirmReplacement() async`, `func cancelReplacement()` | SEC-13 |
+| 12 | `Platform/URLSessionWebSocketTransport.swift` | Comment: the upgrade request keeps an idle timeout of 60 s or more | A-01 |
+
+No declaration of the transport (3.1.1), of the domain requests and replies, of `RelayFailure` and its two
+code enums, of the store protocols' signatures, of `RelayGateway` or of any state owner other than the two
+above changed. No wire code and no `L-` condition was added: `L-TIMEOUT` and `L-STREAM-DROPPED` gained one
+more use each (protocol 14.2, 13.7).
+
+Files that are not declarations and change too: a new committed file `ios/Package.resolved`;
+`scripts/ci/generate_project.sh` (checks the XcodeGen version, copies the resolution file into the generated
+project, resolves with automatic resolution disabled, fails when the file changed);
+`scripts/ci/lint_swift.sh` (fails on `AttributedString(markdown` under `ios/App`).
+
+### 9.2 What each package does differently
+
+**WP-01 Foundation**
+
+- Makes every change of 9.1, as declarations and stubs: `RelayEndpoint.host` and `PairingReplacement`
+  complete; `PairingController.replacement(forAddress:)` returning nil; the three `PairingViewModel` members
+  doing nothing.
+- `PairingPayload`: the token check is a loop over exactly 43 characters of the alphabet; nothing is trimmed
+  from the token, in `parse` or in `manual`.
+- Tests it owns gain cases (6.1): `PairingPayloadTests` and `RelayEndpointTests` (ST-13, a trailing line
+  feed, carriage return and line feed, U+2028; `host`).
+- Commits `ios/Package.resolved` and changes the two scripts named above.
+
+**WP-02 Core model**
+
+- `WireBudgetTests` gains the plain ASCII case in which every member is at its step 1 budget (X-13). No
+  source change: `fitted` already runs step 3 whenever step 2 does not fit.
+
+**WP-03 Core HTTP clients**
+
+- Every relay request is built with `HTTPRequest.timeout` = the route's phone timeout plus 10 s (A-01).
+- The assist reply is parsed with `JSONValue`, `memory.throughSegmentId` is removed, and `AssistResponse` is
+  decoded from the rest; the synthesised decoder never sees the relay's marker (X-01). The relay sends
+  `null` there, and the client must still accept any string.
+- The cancel path is built from `requestId.uuidString` (A-13).
+- A summary reply's `execution` is not read; only assist replies are checked for the echo (A-06). A
+  `409 REQUEST_CANCELLED` that is read is an ordinary wire code (A-10). A health 200 with `protocol` 2 and
+  `ok` not true is `L-UNREADABLE` (A-05; the declaration already said so).
+- Added cases in `RelayClientRoutesTests` (6.1).
+
+**WP-04 Core streams**
+
+- `RelaySpeechFrame.parse`: `loading` with a missing or wrongly typed member is `.loading` with 0 or ""
+  (A-14).
+- `RelaySpeechNegotiation.receive`: `.unknown` gives `Step.ignore` before and after `ready`; `speechStart`,
+  `transcript`, `speechComplete` and `streamComplete` before `ready`, and text that is not a frame, throw
+  `L-UNEXPECTED-FRAME` (A-03).
+- `SpeechStreamSession`: when C-59 passes during `start()` for the relay dialect, close the socket and throw
+  `.relay(.local(.timeout, origin: .stream))`; when C-60 passes in `finish()` with no close, the ending is
+  interrupted with `L-STREAM-DROPPED` (A-02). The Meta dialect's limits are untouched.
+- Added cases in `RelaySpeechFrameTests`, `RelaySpeechNegotiationTests` and `SpeechStreamSessionRelayTests`
+  (6.1).
+
+**WP-05 Design system**
+
+- Nothing changes.
+
+**WP-06 Platform and persistence**
+
+- `FilePairingStore`: load and save in the new order of 3.2.2. It no longer copies the file's pairing into
+  the Keychain at load; it rewrites the file from the Keychain instead. `FilePairingStoreTests` is rewritten
+  to the row "as changed by the review" of 6.2 (ST-07).
+- `URLSessionWebSocketTransport`: the upgrade request's idle timeout is 60 s or more (A-01).
+  `URLSessionHTTPTransport` keeps using `HTTPRequest.timeout` as the request's idle timeout.
+
+**WP-07 Audio and speech**
+
+- Nothing changes in its files. A relay stream that times out while loading now fails the start with the
+  `L-TIMEOUT` text through the existing failure path.
+
+**WP-08 Session and answers**
+
+- Nothing changes. The marker rule of 4.3 step 10 already ignored the reply's marker; a Codex reply now
+  always arrives with a nil marker.
+
+**WP-09 Connectivity and settings state**
+
+- `PairingController.replacement(forAddress:)` (3.2.8): pure, from the saved pairing's
+  `relayEndpoint.host` and the host of the address after the manual-entry rules.
+- `FixtureRelayGateway`: with `pcOffline`, health throws `RelayFailure.local(.unreachable)` (X-09), so the
+  saved-PC message becomes the "Your pairing is saved. " composition of the `L-UNREACHABLE` text; the PC
+  model fixture starts `stopped` with MSG-3 (X-10).
+- Adds the `PairingControllerTests` row of 6.2 (ST-18).
+
+**WP-10 Screens A**
+
+- Answer, details, detected question, streamed answer text and the Assist error message are drawn with
+  `Text(verbatim:)` (8.6). Adds `AnswerPlainTextTests` (ST-26).
+
+**WP-11 Screens B**
+
+- `PairingViewModel` and `PairingScreen`: the "Replace this PC?" confirmation of 5.9, as a local alert on
+  the Pairing screen. Adds the `PairingViewModelTests` row of 6.2 (ST-18).
+- The PC status `message`, the Saved PC message and every line that can show a relay text for an unknown
+  code are drawn with `Text(verbatim:)` (8.6). Adds `RelayTextPlainTextTests` (ST-26).
+
+**WP-12 UI tests**
+
+- No new UI test. The two tests that launch with `-pc-offline` must not expect the text "PC offline." with a
+  full stop anywhere: that fixture text no longer exists (X-09). The Home label "PC offline", without a full
+  stop, is a different string and is unchanged.
+
+### 9.3 Hand-offs outside `ios/`
+
+| # | Item | For |
+|---|---|---|
+| R-1 | Device check 10 of 6.5 now includes a full minute of silence on a PC speech stream, because the relay's keep-alive frame is an unsolicited Pong (X-04) | The owner |
+| R-2 | The "Replace this PC?" dialog is new and is not in `02-ios-screens.md` yet; its strings are in 5.9 and in decisions 6.1 | The screen designer |
+| R-3 | README: inside LiveContainer, other guest apps can read the fallback pairing file, the stored sessions and the preferences (architecture 6.5) | Whoever writes the README |
+| R-4 | The CI plan carries the XcodeGen version check, the committed `ios/Package.resolved` and the Markdown lint into `ci.yml` (test plan 5.2, 5.5) | CI plan |

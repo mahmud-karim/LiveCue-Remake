@@ -14,6 +14,7 @@ Contents
 5. [Acceptance criteria changed or retired](#5-acceptance-criteria-changed-or-retired)
 6. [User-visible text changes](#6-user-visible-text-changes)
 7. [Open risks and manual checks](#7-open-risks-and-manual-checks)
+8. [Review rulings](#8-review-rulings)
 
 ---
 
@@ -112,7 +113,7 @@ Each follows from D-01 and D-02 unless a reason is given.
 | A-11 | The endpoint has a strict grammar that both sides parse directly: lower-case `https`, DNS host, optional port, at most four path segments; canonical form always ends with `/`. | Two URL libraries would otherwise disagree at the edges. |
 | A-12 | Byte budgets: transcript 80,000; summary transcript 100,000; partial 16,000; memory summary 24,000; instruction 4,000 characters and 8,000 bytes; lists 16 items of 256 bytes; encoded body at most 126,976 bytes, with a fitting step for heavily escaped text. | D-10. The old test of the 80,000 cap still passes unchanged for ASCII text. |
 | A-13 | The phone calls the cancel route only when its own timeout passes, when the request's task is cancelled, and when a session is deleted while its summary is in flight. | D-02 forbids a cancel button; D-24 asks that cancel exists and is truthful. |
-| A-14 | The relay validates Codex output against the schema itself and rebuilds the reply from an allowlist. The two schema files are unchanged. | Fixes relay B10; the phone ignores the model-written marker (D-11). |
+| A-14 | The relay validates Codex output against the schema itself and rebuilds the reply from an allowlist. The two schema files are unchanged. The model-written marker is validated for its type and then dropped: an assist reply always carries `memory.throughSegmentId` as `null` (section 8, X-01). | Fixes relay B10; the phone owns the marker and ignores the reply's (D-11). |
 | A-15 | Windows has four shipped projects (`LiveCue.Relay`, `LiveCue.Hosting`, `LiveCue.Relay.Host`, `LiveCue.Desktop`) and a developer icon tool. Both executables are published self-contained into one folder; no single-file bundle. | A testable host layer without WPF; one copy of the runtime; no self-extraction to the temp folder. |
 | A-16 | The pairing payload text is available only from the console host's `--show-pairing`. The desktop never holds it. | Fixes relay B7 and keeps a source for the phone's paste path. |
 | A-17 | Start-up prerequisites stay blocking, in the order Codex found, Codex signed in, Tailscale installed, Tailscale online with a DNS name. Every check that can run is evaluated so that the window can list all results; the status line shows the first failure in that order. | Old behaviour (AC-WIN-003) without the Node.js checks; the list is the screen design's. |
@@ -396,6 +397,7 @@ carries over unchanged, read with the remake's names (bundle, executable, artefa
 | AC-CI-006 | Holds on two OS versions (iOS 26.2 and iOS 18.6). |
 | AC-CI-009, 010, 011 | Retired: there is no reuse gate. The release requires the whole CI to pass in the same run. |
 | AC-CI-013, 014, 016, 017 | Hold with the names `LiveCueRemake.app`, `LiveCueRemake.ipa` and the bundle identifier of D-03; the release also carries the Windows zip. |
+| AC-CI-016 | Changed by the security review (section 8, SEC-12): a release that exists is never replaced and its tag is never moved. The release job fails when the tag exists; a corrected build is a new version. |
 | AC-CI-019 | Retired: every test run exports its screenshots. |
 | AC-AUD-002 | Changed: the exact-value check takes an optional local list (AUD-8). CI runs without it and says so. |
 | AC-AUD-003, 004 | Hold as AUD-1 and AUD-7; AUD-2 to AUD-6 are new (private host names, addresses, personal paths, e-mail addresses, pairing data). |
@@ -438,6 +440,7 @@ Every string of the specs is kept verbatim except the ones below. A designer may
 | Pairing, address placeholder | `https://<pc-name>.<network>.ts.net` | `https://<pc-name>.<network>.ts.net:11443/` |
 | Microphone and camera denied alerts | as in the spec | The old sentence, then: "If you use LiveContainer, allow it for LiveContainer in Settings." |
 | Live session status panel (new) | none | The transcriber status line (architecture 4.7) |
+| Pairing, replacing a saved PC by another host (new; section 8, SEC-13) | none | Dialog "Replace this PC?": "Replace `<current host>` with `<new host>`? Only do this with the QR shown by LiveCue Desktop on your own PC."; when the new host is not a Tailscale name also "`<new host>` is not a Tailscale address."; buttons "Replace" and "Cancel" |
 
 ### 6.2 Windows
 
@@ -467,6 +470,12 @@ Every string of the specs is kept verbatim except the ones below. A designer may
 | Unreadable pairing file (new) | relay did not start, no guidance | "The saved pairing could not be read. Reset pairing to create a new one." |
 | PC model status texts | two of them ended "No audio was sent to Meta." | That sentence is removed (protocol 9.4) |
 | "Tailscale HTTPS setup failed. Check that Tailscale is connected." | shown at start | Shown when "Set up connection" fails |
+| Port in use while a Tailscale mapping points at the port (new; section 8, SEC-05) | none | "Port `<n>` is in use by another program while a Tailscale mapping points at it. That program may have received your iPhone's requests, including the pairing token. Free the port, start the relay, then reset pairing." |
+| Private mode with a public mapping still pointing at the relay (new; SEC-04) | none | The relay does not start: "A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode." |
+| Exposure warnings for mappings LiveCue does not manage, and "exposure unknown" (new; SEC-04) | none | The texts of `05-windows-architecture.md` 4.15 and 5.5 |
+| Codex version and containment check (new; SEC-01) | none | Settings row "Codex version", button "Mark as checked", and the warning "Codex is version `<v>`; the containment check was last run for `<w>`. Run the containment check, then choose Mark as checked in Settings." (variants in `05-windows-architecture.md` 4.14) |
+| Activity, rejected requests (new; SEC-14) | none | "Rejected since the relay started: `<a>` malformed · `<b>` with an unknown token · `<c>` through Funnel in Private mode" |
+| Settings, screen capture (new; SEC-10) | none | Toggle "Hide this window from screen capture", caption "Screen sharing, recordings and screenshots show an empty area instead of this window." |
 
 ---
 
@@ -492,5 +501,131 @@ For the orchestrator to weigh before building starts.
 Manual checks that no automated job covers: protocol P2-M01 to M03 (real GPU); install and launch of the IPA
 through LiveContainer on a physical iPhone; microphone, background and interruption behaviour; one real
 Private pairing and one real Public pairing; one real Codex answer and summary; "Reset pairing" with a paired
-phone.
+phone. The security review added three: the containment check against the installed Codex (test plan L-4),
+and the two checks from outside the tailnet (test plan ST-27 and ST-28) before Public mode is first used.
+
+---
+
+## 8. Review rulings
+
+Two reviews were made of the documents before building started: a cross-check of protocol 2 against the
+iPhone design and the Windows design (items `X-nn`, mismatches, and `A-nn`, ambiguities; the working file is
+local and is not in the repository), and the security review `07-security-review.md` (findings `SEC-nn`,
+tests `ST-nn`). The orchestrator ruled on every item. This section records the rulings; the text of each
+change is in the sections named. The `A-nn` of this section are the cross-check's ambiguities, not the
+architect's decisions of section 3.
+
+"Where": **P** `02-relay-protocol.md`, **A** `03-system-architecture.md`, **I** `04-ios-architecture.md`,
+**W** `05-windows-architecture.md`, **T** `06-test-and-ci-plan.md`, **D** this file. What each builder must
+do differently is listed per work package at the end of the two designs (I section 9, W section 7).
+
+### 8.1 Cross-check: mismatches
+
+| Id | Subject | Ruling | Where |
+|---|---|---|---|
+| X-01 | Marker in an assist reply | Adopted, in the orchestrator's form: the relay never forwards a model-written marker and always sends `memory.throughSegmentId` as JSON `null` (the phone owns the marker, D-11); the phone's decoder still tolerates and ignores any string there | P 8.3, 12.2, 13.5, P2-065; I 3.1.2, 3.1.5; W 4.9; T 1.4; D A-14 |
+| X-02 | Step M-4 missing from the Windows command table | Adopted | W 4.10 |
+| X-03 | `Date` response header | Adopted | P 5.2, 5.3; W 4.3 (K-1) |
+| X-04 | Keep-alive frame is an unsolicited Pong | Adopted; the device check covers it | P C-57, 10.5; I 6.5 item 10; W 4.3 (K-2) |
+| X-05 | `loading.message` and `provider` | Adopted | P 10.3 |
+| X-06 | `busy` while an operation runs | Adopted | P 9.1 |
+| X-07 | `MODEL_OPERATION_IN_PROGRESS` after admission | Adopted | P 9.3 rule 7, 10.6 |
+| X-08 | Where a stream failure is shown | Adopted | P 14.3 |
+| X-09 | Fixture for an offline PC | Adopted; no ported UI test asserts the old text "PC offline." | I 4.9; A 4.11 |
+| X-10 | Fixture PC model, first status | Adopted | I 4.9 |
+| X-11 | Number of cases of P2-004 | Adopted | T 1.2 |
+| X-12 | Cross-reference for `PAIRING_PAYLOAD_INVALID` | Adopted | P 4.3 |
+| X-13 | When step 3 of the body fitting runs | Adopted | P 13.4; I 6.1 |
+
+### 8.2 Cross-check: ambiguities
+
+| Id | Subject | Ruling | Where |
+|---|---|---|---|
+| A-01 | Transport idle timeout | Adopted: the route's phone timeout plus 10 s; 60 s or more for the speech socket | P 13.1; I 3.1.5, 3.2.1, 6.1 |
+| A-02 | What the phone reports when C-59 or C-60 passes | Adopted: `L-TIMEOUT`; `L-STREAM-DROPPED` | P 13.7, 14.2; I 3.1.9, 6.1 |
+| A-03 | An unknown frame type before `ready` | Adopted: ignored in every state | P 13.7; I 3.1.6, 6.1 |
+| A-04 | Value of `provider`; integer members | Adopted: the model id from the header, never a label | W 4.11 |
+| A-05 | Health 200 with `ok` not true | Adopted: `L-UNREADABLE` | P 13.3; I 6.1 |
+| A-06 | Echo on a summary reply | Adopted: checked on assist only | P 8.3 |
+| A-07 | Routes 3 to 6 not written down in the Windows design | Adopted | W 4.6, 4.10 |
+| A-08 | An offered WebSocket extension | Adopted: ignored, never a reason to refuse | P 10.1; W 4.11; T 1.6 |
+| A-09 | A frame larger than C-21 | Adopted: the transcript is cut further | W 4.11; T 1.6 |
+| A-10 | `409 REQUEST_CANCELLED` read by the phone | Adopted: no special case | P 8.5 |
+| A-11 | A slow body on a route with a short deadline | Adopted | P 5.4 |
+| A-12 | Lab close while waiting for the lab's `ready` | Adopted | W 4.11 |
+| A-13 | Request id text in the body and in the cancel path | Adopted: `uuidString` on the phone, ordinal comparison on the relay | I 3.1.5, 6.1; W 4.9 |
+| A-14 | A `loading` frame with a missing member | Adopted: still `loading` | I 3.1.6, 6.1 |
+
+### 8.3 Security review
+
+| Id | Finding | Ruling | Where |
+|---|---|---|---|
+| SEC-01 | Codex is contained by a deny-list of one tool | **Adopted in this form.** Every Codex process gets an allowlisted environment (the list is in P 12.6). The builder reads the installed CLI's help output, passes every switch that turns off a tool, a feature or a network capability, keeps the read-only sandbox and the empty per-request working folder, and records in W 4.9 what could not be switched off. An opt-in live containment check (a canary file and a prompt-injection transcript) is added. The desktop shows the Codex version in use and warns when it changed since the last containment check. The model id shape gets a length limit, and answers are drawn as plain text on the phone. **Not adopted:** the tool-list check against a loopback stand-in, verification by executable hash, and any refusal that depends on the mode. D-01's "Codex invocation preserved exactly" gives way to this in the environment and the added switches only | P 12, 12.2, 12.4, 12.6, C-06, P2-064; A 3.5, 3.7, 3.10, 6.1, 6.4, 6.5; W 3.2, 3.4, 3.5, 3.9, 4.8, 4.9, 4.13, 4.14, 5.4, 5.5, 5.8; I 6.2, 8.6; T 1.4, 2.2, 3 (L-4), 4.6 |
+| SEC-02 | The QR shows the permanent bearer token | **Not adopted for 1.0: accepted risk** (8.4). The QR keeps carrying the permanent token, as the old app did. It is the first question for the owner (8.5) | A 6.2, 6.5; D 8.4, 8.5 |
+| SEC-03 | On the phone the pairing file is the authority | Adopted, at the review's minimum level: the Keychain item is the authority; the file is a fallback read only when the Keychain has no item or cannot be read; when both exist and differ the Keychain wins and the file is rewritten from it; the Keychain is never written from the file | A 4.10, 6.1, 6.2, 6.5; I 2.4, 3.2.2, 4.8, 6.2; T 4.6 |
+| SEC-04 | A public mapping can outlive the owner's intent without any warning | Adopted. Exposure warnings come from live Tailscale inspection (the exposure report), not only from the ledger, and are shown on the Live page; the relay does not start in Private mode while a Funnel handler targets the relay port; the private listener may not use 443, 8443 or 10000; a settings file that fails validation keeps its valid ledger entries. **Two parts of the review's fix were not taken:** "Record this mapping as LiveCue's" (it would let the application remove a handler it did not create, against D-20 and TS-8; the removal command is shown as text instead), and the reworded self-check text (copy belongs to the screen design; W 7.4) | A 3.5, 3.9, 3.11, 6.3, 6.4; W 3.4, 3.6, 3.7, 3.9, 4.14, 4.15, 4.16, 5.4, 5.5, 5.8; D 6.2; T 2.1, 4.6 |
+| SEC-05 | While LiveCue is closed, a local program can take the relay port | **Root cause accepted for 1.0** (8.4). Adopted mitigations: the port-in-use text says what may have happened when a mapping points at the port; the listen socket is opened for exclusive use | P 5.1; A 3.9, 3.11, 6.5; W 3.7, 4.3, 4.16, 5.4; D 6.2; T 4.6 |
+| SEC-06 | Launcher scripts run from a configurable folder | Adopted: the relay runs only its own embedded copies of the launcher scripts, from its data folder; the lab folder supplies data only and must be a drive-letter path on a fixed local volume; the PowerShell and Tailscale paths come from operating-system APIs, not from environment variables | P 11.5, P2-095; A 3.5, 3.8, 3.11, 5.3, 5.4, 6.1; W 2.2, 3.4, 4.2, 4.10, 4.14; T 4.6 |
+| SEC-07 | "Reset pairing" has a race | Adopted: hash and revocation token are one object; `TryVerify` replaces `Verify` and `CurrentRevocation` | W 3.3, 4.4, 4.7; T 4.6 |
+| SEC-08 | Shape checks written `^…$` accept a trailing line feed | Adopted: every shape is a whole-text match on both sides | P 1, 4.3, P2-202; A 3.5; W 3.1, 3.6, 4.14; I 3.1.2, 6.1; T 4.6 |
+| SEC-09 | The lab's HTTP routes have no `Host` rule; the container has open outbound network | Adopted for the routes. The open network is accepted for 1.0 (8.4); dependencies are pinned by hash | P 11.1, 11.3, P2-162; A 5.1, 5.2, 6.1, 6.4, 6.5; T 4.6, 5.5 |
+| SEC-10 | Conversation text reaches disk in places the guarantees do not cover | Adopted: the Codex working folder moves into the data folder, gets an unguessable name and is emptied at every start; the console host prints conversation text only with `--include-content`; the desktop window is excluded from screen capture by default; the "never written to disk" statements are reworded | P 12.2; A 3.5, 3.10, 3.14, 6.5; W 3.1, 3.3, 3.4, 3.9, 4.2, 4.9, 4.16, 5.8, 5.12; D 6.2; T 2.4, 3 (L-4), 4.5, 4.6 |
+| SEC-11 | `--show-pairing` prints the permanent token | **Accepted with SEC-02** (8.4). Kept as a mitigation: on the default data folder the token is printed only to an interactive console | A 3.14; W 4.16; T 2.4, 4.5, 4.6 |
+| SEC-12 | Release inputs are not pinned and a release can be replaced | Adopted: actions by commit id, locked NuGet restore, committed Swift resolution file, checked XcodeGen version, no cache in a release, no release under an existing tag, build provenance attestation, lab image by digest with hashed requirements | A 3.1, 4.1, 5.1, 7.1, 7.3, 7.6; W 2.1; D 5.4; T 5, 5.2, 5.3, 5.5 |
+| SEC-13 | Pairing to a different host needs no confirmation | Adopted | P 4.4; A 4.9, 6.4; I 3.1.5, 3.2.8, 5.9, 6.2, 8.4; D 6.1 |
+| SEC-14 | The owner cannot see that the public address is being probed | Adopted as three counters, shown on the desktop's Activity page as plain numbers. No alerting, no lockout, no event per request | P 5.2, 5.5, P2-019; A 3.4; W 3.1, 3.9, 4.1, 4.2, 4.4, 5.7; D 6.2; T 4.6 |
+| SEC-15 | One framing test expects behaviour Kestrel may not have | Adopted: the property to protect has its own test; the framing case accepts either outcome | W 4.3 (K-9); T 4.2 (S-13), 4.6 |
+
+Security tests: every `ST-nn` that belongs to an adopted finding is in T 4.6 with the work package that owns
+the code. Not added: ST-01 and ST-04 (the parts of SEC-01 that were not adopted), ST-05 (SEC-02), and ST-22
+to ST-25 and ST-29, which belong to no finding and wait for a ruling.
+
+### 8.4 Accepted risks
+
+These are known and are not fixed in 1.0. Each is also in architecture 6.5.
+
+| Risk | Why it is accepted | What limits it |
+|---|---|---|
+| **The QR carries the permanent pairing token** (SEC-02). Whoever sees the screen for a moment while the QR is shown (a shared screen, a recording, a photo) holds a credential that never expires and, in Public mode, works from anywhere, until "Reset pairing" | The old app did the same; a single-use enrolment code would change the protocol, the pairing flow on both sides and the paste path, late in the design | The QR is hidden until it is asked for: it is drawn only after "Show QR", after a confirmed "Reset pairing", and once on the very first start when the connection is set up (AC-WIN-022); returning to the Pairing page never shows it (WIN-20). It hides by itself after 120 seconds, and the matrix is released from memory when it hides. The payload is never copied or logged: the desktop never holds its text (A-16), and no event, activity line or log carries it. "Reset pairing" is one click (and one confirmation) away on the same page and revokes the token at once, open streams included. Since SEC-10 the window is also excluded from screen capture by default. A camera pointed at the screen remains |
+| `--show-pairing` prints the permanent token (SEC-11) | It is the only source for the phone's paste path (A-16), on an explicit request | On the default data folder the token is printed only to an interactive console, never into a redirected output |
+| A Tailscale mapping keeps forwarding while LiveCue is closed, so another program on the PC can take the relay port and receive the phone's requests, token included (SEC-05) | Closing it means removing mappings on exit, which TS-9 forbids, or replacing the bearer token by a proof of possession | The port-in-use text names the danger and tells the owner to reset pairing; the listen socket is exclusive while the relay runs. On a single-user PC the other program would need the owner's own account |
+| Codex is contained by its own switches, not by the operating system; it runs as the owner (SEC-01, what remains) | A restricted Windows identity would stop Codex from reading its own sign-in | Protocol 12.6; the record of W 4.9; the live containment check; the version warning |
+| The lab container can reach the internet (SEC-09) | Cutting it off needs another way to publish its port | Images built by the owner from dependencies pinned by hash; telemetry switches set |
+| Inside LiveContainer, other guest apps can read the fallback pairing file, the stored sessions and the preferences (SEC-03, SEC-10) | The Keychain can fail there; the review's full level would unpair the phone on a Keychain failure | A replaced file cannot redirect the app while the Keychain holds a pairing; replacing a PC by another host needs a confirmation |
+| The executables and the IPA are unsigned (SEC-12) | A personal tool; the release notes say so | Checksums and a build provenance attestation |
+
+### 8.5 Questions for the owner
+
+Each is a risk decision that the documents cannot make. They are the security review's questions, in the
+order the orchestrator set, with what the rulings above assume until the owner answers.
+
+1. **The QR and the permanent token (SEC-02).** Do you accept that anyone who captures the QR once has
+   access until you reset pairing, with the limits listed in 8.4? The alternative, not built in 1.0, is a
+   QR that carries a single-use code valid for 120 seconds, which the phone exchanges for the token. Until
+   you say otherwise the risk is accepted. One detail to decide with it: on the very first start the QR
+   opens by itself once the connection is set up (AC-WIN-022); that is the one moment at which it appears
+   without being asked for.
+2. **Is Public mode needed for 1.0?** If running Tailscale on the iPhone is acceptable, leaving Public mode
+   out removes the internet edge. If it is needed, the review asks that these hold before it is first
+   switched on: the containment check passed for the installed Codex (L-4); question 1 answered; the
+   exposure report and check 6a built (SEC-04); the tests of test plan section 4 pass on the published
+   build, and ST-27 was run once from outside the tailnet.
+3. **Codex (SEC-01).** Is stronger containment of the Codex process (a restricted Windows identity) wanted
+   later, at the cost of a more fragile Codex integration? For 1.0 nothing is refused when Codex updates
+   itself; the desktop only warns.
+4. **Mappings while LiveCue is closed (SEC-04, SEC-05).** Today a mapping stays until you remove it, and
+   TS-9 forbids any write on exit. Would you rather give one standing consent for "remove my mapping when
+   LiveCue closes and put it back when it starts"? It would close SEC-05.
+5. **LiveContainer (SEC-03, SEC-10).** Which other apps share the container with LiveCue? The minimum level
+   is built (the Keychain wins; the file stays readable). Do you want the full level (no file while the
+   Keychain works; a later Keychain failure means scanning the QR again), or the history encrypted with a
+   key held in the Keychain?
+6. **Screen capture (SEC-10).** The window is excluded from capture by default, as a setting you can switch
+   off. While it is on, your own screenshots of the window are empty too. Is that the default you want?
+7. **Is the PC used under any other Windows account?** If yes, SEC-05 and SEC-06 weigh more and should be
+   looked at again before first use.
+8. **Releases (SEC-12).** A published tag is now immutable: a corrected build always needs a new version
+   number. Confirm.
+9. **Lab container network (SEC-09).** Accept that the container can reach the internet, relying on pinned
+   and hashed dependencies, or do you want it cut off?
 
