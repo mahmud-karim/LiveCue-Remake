@@ -2804,6 +2804,23 @@ extension View {
 }
 ```
 
+What the components do by themselves, so that a screen does not do it again (WP-05):
+
+- `Panel`, `Card` and an open `DisclosureRow` lay out their own children. Adjacent `LCNavigationRow`s and
+  `ChoiceRow`s touch and get a hairline between them; adjacent `DetailRow`s touch; a `DisclosureRow` gets a
+  hairline above it unless it comes first; everything else sits 12 apart. List the children and add no
+  dividers or spacing. Children wrapped in a stack of the screen's own count as one child.
+- `ScreenScaffold` sets `ink.primary` as the default text colour, hides system backgrounds, applies
+  `lcTabBarChrome()` (a bar's background is read from the tab's content, so the call on the tab view in
+  `RootView` is not enough alone) and, on iOS 18, fades its content out above an `lcBottomBar`.
+- `Spinner` and every icon take the colour of the text around them (`foregroundStyle`).
+- A busy `LCButton`, `IconButton` or `SessionStartControl` ignores input and keeps its full appearance;
+  `disabled` is for controls that are unavailable.
+- An `LCTextField` or `LCSecureField` with an empty label draws no label and reads its placeholder to
+  assistive technology. A secure field's accessibility value is "Hidden" or "Shown", never its text.
+- Component sizes that a screen passes in are tokens too: `theme.component.brandMark` (68) and
+  `theme.component.compactBrandMark` (48).
+
 ### 3.4 Concurrency rule of each contract, in one place
 
 | Contract | Kind | Isolation rule |
