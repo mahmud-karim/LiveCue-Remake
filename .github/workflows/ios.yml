@@ -197,8 +197,9 @@ jobs:
         run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
       # The scheme gathers coverage for tests, and xcodebuild then instruments plain builds of the
-      # scheme as well, packages included. The two coverage switches keep that out of the shipped
-      # app; validate_ipa.py fails the job if it comes back.
+      # scheme as well, packages included. The two coverage settings keep that out of the shipped
+      # app (xcodebuild refuses -enableCodeCoverage outside test actions); validate_ipa.py fails
+      # the job if the instrumentation comes back.
       - name: Build the Release app for devices, unsigned
         timeout-minutes: 25
         run: |
@@ -206,7 +207,7 @@ jobs:
             -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
             -sdk iphoneos -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -enableCodeCoverage NO CLANG_ENABLE_CODE_COVERAGE=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO CLANG_COVERAGE_MAPPING=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 
       - name: Package the IPA
