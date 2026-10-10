@@ -26,8 +26,9 @@ import LiveCueCore
         self.models = models
     }
 
+    /// An on-device transcriber takes the recogniser that is loaded now. Without one its start fails
+    /// with "Prepare Voz first." or "Prepare Parakeet first.".
     func makeTranscriber(for provider: SpeechProvider) -> any SpeechTranscriber {
-        // STUB(WP-07)
         switch provider {
         case .meta:
             return MetaTranscriber(audio: audio, transport: transport, secrets: secrets, clock: clock)
