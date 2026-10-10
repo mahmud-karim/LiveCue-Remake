@@ -626,6 +626,10 @@ Info.plist keys (all through `info.properties` in `project.yml`):
 
 `UIDesignRequiresCompatibility` is not set. There are no App Transport Security exceptions.
 
+> **Amended by `04-ios-architecture.md`.** Row "UI tests": the one scheme runs three bundles. The hosted
+> unit-test target `LiveCueRemakeTests` (sources `ios/AppTests`) sits between the core package tests and
+> the UI tests (R-31).
+
 ### 4.2 Core package `LiveCueCore`
 
 Rule: every source file imports `Foundation` and nothing else. No `URLSession`, no `FoundationNetworking`, no
@@ -743,6 +747,19 @@ Rules around it:
   becomes interrupted.
 - Nothing is user-cancellable (no cancel for Start, Assist or a summary), as in the old app.
 
+> **Superseded in part by `04-ios-architecture.md`.** While the live screen is up, a problem is shown as a
+> persistent notice on that screen, not as the global alert (R-03):
+>
+> - Row `listening` to `paused` ("alert with the reason"): a notice titled "Recording paused" (R-03).
+> - Row `pausing` to `paused` ("A finalise error raises the alert"): a notice titled "Paused". On Stop the
+>   same failure is the global alert, shown on Home after the return (R-27).
+> - Row `resuming` ("On failure: alert, stay paused"): a notice titled "Recording paused" with
+>   "Transcription could not start. " and the reason (R-28).
+> - Row `preflight` to `connecting` (the label "Updating…"): the labels are "Connecting…", "Pausing…" and
+>   "Stopping…" (R-04).
+>
+> A check that fails before a session exists, and a start that fails, still raise the global alert.
+
 ### 4.5 Assist pipeline
 
 The steps of spec 01 section 3.4 hold, with these changes:
@@ -771,6 +788,12 @@ One `AudioCapture` component serves all providers. Numbers are those of spec 01 
 | Interruptions and route loss | Observed for **every** provider. Interruption began: failure "Microphone interrupted. Resume when your call or other audio finishes." Previous input device unavailable: failure "Microphone route changed. Resume to use the current microphone." Nothing resumes by itself. |
 | Storage | Audio is never written to disk. |
 | Microphone timing | Streaming providers open the microphone only after the provider handshake (`ready` or the Meta acknowledgement). On-device providers open it at once. |
+
+> **Superseded in part by `04-ios-architecture.md`.** Row "Hand-off queue", the clause "128 for on-device
+> providers; overflow raises the alert … and drops the buffer": an on-device overflow is a failure like any
+> other. The normal finalisation runs first, so recognised text is kept; the session then pauses with the
+> notice "Transcription could not keep up. Recording paused; resume to continue." (R-07, confirmed by the
+> orchestrator). The failures of the row "Interruptions and route loss" are shown as that notice too (R-03).
 
 ### 4.7 Speech providers behind one interface
 
@@ -823,6 +846,13 @@ capture states listed in spec 01 section 8.2.
 
 No provider ever falls back to another.
 
+> **Completed by `04-ios-architecture.md`.** The printed `TranscriberEvent` says in a comment that every
+> event carries its generation but has no member for it: `TranscriberEvent` is a struct of `generation`
+> and `kind`, where `kind` has exactly the seven cases printed above, and `SpeechTranscriber` gains
+> `emittedEventCount` (R-24). In the table, row `voz`, "the alert says so" is the session notice (R-03),
+> with the text of R-06. In the status line, "Loading `<provider name>` on PC" uses the provider's short
+> name (R-15).
+
 ### 4.8 Answer services behind one interface
 
 ```swift
@@ -855,6 +885,9 @@ saved-PC state and message, and the PC model status. It makes no request at all 
 (protocol 4.3): reading a payload only fills the two fields; "Verify and pair" calls route 2 and saves on
 200. "PC connected" in the manual section is shown only when the relay is online and the address field
 equals the saved endpoint.
+
+> **Superseded by `04-ios-architecture.md`.** The last sentence is moot: nothing reads "PC connected"
+> under the manual fields any more. The Saved PC panel carries the connection state (R-10).
 
 ### 4.10 Persistence, preferences, Keychain
 
@@ -896,6 +929,14 @@ fail. API keys are stored in the Keychain only; if the Keychain refuses, the key
 payload of the whole `Session` encoded with `LiveCueJSON`. Rows that fail to decode are skipped. Save
 cadence: the first save at `connecting` to `listening`, then when a segment is committed, after every
 successful assist, on every tick, on Pause, Resume and Stop.
+
+> **Superseded in part by `04-ios-architecture.md`.** Sessions are not kept in SwiftData. The row
+> "Application Support / default SwiftData store" of the Files table and the paragraph "Session rows"
+> give way to a file store: one JSON file per session, `<session id>.json`, in the folder `Sessions`
+> under Application Support, encoded with `LiveCueJSON` together with its last-saved time, written
+> atomically, in a folder protected until first user authentication; a file that does not decode is
+> skipped (R-33, an orchestrator ruling). Sessions stay in memory only in test mode, and the save cadence
+> is unchanged.
 
 ### 4.11 Test seam
 

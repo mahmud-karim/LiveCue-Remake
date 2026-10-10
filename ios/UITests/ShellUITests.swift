@@ -16,6 +16,9 @@ final class ShellUITests: XCTestCase {
             app.buttons["Live"].firstMatch.waitForExistence(timeout: UITestSupport.launchTimeout),
             "The Live tab did not appear."
         )
+        // Taken before anything is asserted about the tabs, so a failure below still leaves a picture.
+        UITestSupport.attachScreenshot(named: "shell-live", to: self)
+
         let live = UITestSupport.tabButton("Live")
         let history = UITestSupport.tabButton("History")
         let settings = UITestSupport.tabButton("Settings")
@@ -23,12 +26,12 @@ final class ShellUITests: XCTestCase {
         XCTAssertTrue(history.exists, "There is no History tab.")
         XCTAssertTrue(settings.exists, "There is no Settings tab.")
         XCTAssertTrue(app.tabBars.firstMatch.exists, "The tabs are not in a tab bar.")
-        XCTAssertEqual(app.tabBars.buttons.count, 3, "The tab bar has exactly Live, History and Settings.")
+        let titles = app.tabBars.buttons.allElementsBoundByIndex.map(\.label)
+        XCTAssertEqual(titles.sorted(), ["History", "Live", "Settings"], "The tab bar has exactly Live, History and Settings.")
 
         XCTAssertTrue(UITestSupport.waitUntilSelected(live), "Live is the selected tab at launch.")
         XCTAssertFalse(history.isSelected)
         XCTAssertFalse(settings.isSelected)
-        UITestSupport.attachScreenshot(named: "shell-live", to: self)
 
         history.tap()
         XCTAssertTrue(UITestSupport.waitUntilSelected(history), "Tapping History selects it.")

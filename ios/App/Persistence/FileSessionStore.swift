@@ -6,8 +6,9 @@ import LiveCueCore
 /// last-saved time, and is written atomically. The folder is protected "complete until first user
 /// authentication". A file that does not decode is skipped silently on load.
 actor FileSessionStore: SessionStoring {
-    /// Opens the store, creating its folder when needed.
-    static func open() throws -> FileSessionStore {
+    /// Opens the store, creating its folder when needed. `directory` nil means `Sessions` under
+    /// Application Support; tests pass a temporary folder.
+    static func open(directory: URL? = nil) throws -> FileSessionStore {
         // STUB(WP-06)
         // Until this store exists the live wiring falls back to `InMemorySessionStore`.
         throw CocoaError(.featureUnsupported)
