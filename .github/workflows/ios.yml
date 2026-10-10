@@ -40,9 +40,6 @@ env:
   APP_VERSION: "1.0.0"
   APP_BUILD: "1"
   MINIMUM_IOS: "18.0"
-  HOMEBREW_NO_AUTO_UPDATE: "1"
-  HOMEBREW_NO_INSTALL_CLEANUP: "1"
-  HOMEBREW_NO_ANALYTICS: "1"
 
 jobs:
   ci-scripts:
@@ -104,25 +101,9 @@ jobs:
       - name: Require the pinned Xcode
         run: bash scripts/ci/require_xcode.sh
 
-      - name: Generate the Xcode project
-        working-directory: ios
-        run: |
-          brew install xcodegen
-          xcodegen --version
-          xcodegen generate
-
-      - name: Resolve Swift packages
+      - name: Generate the Xcode project and resolve packages
         timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            if xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME" \
-              -derivedDataPath "$RUNNER_TEMP/DerivedData"; then
-              exit 0
-            fi
-            echo "Package resolution failed (attempt $attempt of 3)."
-            sleep 15
-          done
-          exit 1
+        run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
       - name: Select a simulator
         id: simulator
@@ -137,7 +118,7 @@ jobs:
         run: |
           bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild.log test \
             -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -destination "platform=iOS Simulator,arch=arm64,id=${{ steps.simulator.outputs.udid }}" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -resultBundlePath artifacts/Tests.xcresult \
             -parallel-testing-enabled NO \
@@ -146,10 +127,13 @@ jobs:
             -maximum-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=-
 
-      - name: Summarise the test results
+      # xcodebuild also succeeds when a scheme stops running one of its bundles; this check does not.
+      - name: Check that both test bundles ran
         if: ${{ !cancelled() }}
-        continue-on-error: true
-        run: xcrun xcresulttool get test-results summary --path artifacts/Tests.xcresult --compact | tee artifacts/test-summary.json
+        run: |
+          python3 scripts/ci/check_test_results.py artifacts/Tests.xcresult \
+            --require-bundle LiveCueCoreTests --require-bundle LiveCueRemakeUITests \
+            --save artifacts/test-results.json
 
       - name: Export screenshots from the result bundle
         if: ${{ !cancelled() }}
@@ -180,25 +164,9 @@ jobs:
       - name: Require the pinned Xcode
         run: bash scripts/ci/require_xcode.sh
 
-      - name: Generate the Xcode project
-        working-directory: ios
-        run: |
-          brew install xcodegen
-          xcodegen --version
-          xcodegen generate
-
-      - name: Resolve Swift packages
+      - name: Generate the Xcode project and resolve packages
         timeout-minutes: 15
-        run: |
-          for attempt in 1 2 3; do
-            if xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME" \
-              -derivedDataPath "$RUNNER_TEMP/DerivedData"; then
-              exit 0
-            fi
-            echo "Package resolution failed (attempt $attempt of 3)."
-            sleep 15
-          done
-          exit 1
+        run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
       - name: Build the Release app for devices, unsigned
         timeout-minutes: 35

@@ -3,6 +3,8 @@
 name: LiveCueRemake
 
 options:
+  # The version CI generates the project with. Older versions are untested.
+  minimumXcodeGenVersion: "2.46.0"
   bundleIdPrefix: com.mahmudkarim
   deploymentTarget:
     iOS: "18.0"
