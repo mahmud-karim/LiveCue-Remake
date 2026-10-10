@@ -23,7 +23,7 @@ from websockets.sync.client import connect
 
 import server
 from engines.fake import FakeEngine
-from support import RELAY_LIMIT_ERROR, free_port
+from support import RELAY_LIMIT_ERROR, CallbackEngine, drain, free_port
 
 ASR_ROOT = Path(server.__file__).resolve().parent
 
@@ -155,6 +155,45 @@ def test_a_client_that_drops_the_tcp_connection_frees_the_model(port):
     assert get_json(port)["busy"] is True
     ws.socket.close()  # no closing handshake at all
     wait_until(lambda: get_json(port)["busy"] is False)
+
+
+# -- a client that stops reading ----------------------------------------------------
+
+
+def test_a_client_that_stops_reading_is_cut_off_and_the_model_is_freed(serve_lab):
+    """Outbound overflow for real: TCP back-pressure stalls the sender, the
+    256-event queue fills, and the session ends by itself within its 2 s
+    allowance (shortened here) instead of holding the model."""
+
+    def chatty(audio, on_partial):
+        audio.read()
+        padding = "x" * 4000
+        number = 0
+        while not audio.cancelled and number < 500_000:
+            number += 1
+            on_partial(f"{number} {padding}")
+        drain(audio)
+        return ""
+
+    port = free_port()
+    with serve_lab(port, port, CallbackEngine(chatty), server.Limits(closing_seconds=0.3)) as lab:
+        stalled = connect(f"ws://127.0.0.1:{port}/relay", max_size=None)
+        assert json.loads(stalled.recv(timeout=5))["type"] == "ready"
+        assert json.loads(stalled.recv(timeout=5))["type"] == "speechStart"
+        stalled.send(bytes(320))
+        # From here the client reads nothing. The service must not wait for it.
+        wait_until(lambda: not lab.busy, timeout=30)
+
+        with connect(f"ws://127.0.0.1:{port}/relay") as fresh:  # the service carries on
+            assert json.loads(fresh.recv(timeout=5))["type"] == "ready"
+
+        # What had already left the service is still readable; then the socket ends.
+        seen = []
+        with pytest.raises(ConnectionClosed):
+            while True:
+                seen.append(json.loads(stalled.recv(timeout=10))["type"])
+        assert set(seen) <= {"transcript", "error"} and "transcript" in seen
+        stalled.close()
 
 
 # -- behind a published port, as in the container ---------------------------------

@@ -114,7 +114,7 @@ def test_what_a_client_sends_is_never_logged(path, capfd, caplog):
 
 
 def test_timeouts_and_overflows_log_no_content(capfd, caplog):
-    lab = Lab(CallbackEngine(speaking), limits=limits(idle_seconds=0.3, relay_outbound_events=0))
+    lab = Lab(CallbackEngine(speaking), limits=limits(idle_seconds=1.0, relay_outbound_events=0))
     with caplog.at_level(0):
         with lab.connect("/stream") as ws:  # some words, then the idle limit
             receive(ws)

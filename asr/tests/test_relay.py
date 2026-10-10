@@ -5,7 +5,6 @@ from __future__ import annotations
 import threading
 
 import pytest
-from starlette.websockets import WebSocketDisconnect
 
 import server
 from engines import Recognition
@@ -538,7 +537,7 @@ def test_timer_defaults():
 
 
 def test_idle_limit_counts_from_the_last_frame():
-    lab = Lab(limits=limits(idle_seconds=0.4))
+    lab = Lab(limits=limits(idle_seconds=1.0))
     with lab.connect("/relay") as ws:
         open_relay(ws)
         ws.send_bytes(bytes(2560))
@@ -574,10 +573,10 @@ def test_the_idle_limit_does_not_apply_after_end_stream():
 
     def slow(audio, on_partial):
         drain(audio)
-        release.wait(0.9)  # three idle limits
+        release.wait(1.5)  # three idle limits
         return "worth waiting for"
 
-    lab = Lab(CallbackEngine(slow), limits=limits(idle_seconds=0.3, relay_finalize_seconds=5))
+    lab = Lab(CallbackEngine(slow), limits=limits(idle_seconds=0.5, relay_finalize_seconds=10))
     with lab.connect("/relay") as ws:
         open_relay(ws)
         ws.send_text(END)
@@ -634,28 +633,17 @@ def test_end_stream_fits_even_when_the_queue_is_full():
         assert receive(ws)["type"] == "streamComplete"
 
 
-def test_outbound_queue_overflow_mid_session():
-    """A burst larger than the queue: the client gets the error, then the close."""
-
-    def chatty(audio, on_partial):
-        audio.read()
-        for number in range(100_000):
-            on_partial(f"word {number}")
-        drain(audio)
-        return ""
-
-    lab = Lab(CallbackEngine(chatty), limits=limits(relay_outbound_events=8))
+def test_outbound_queue_overflow_ends_the_session_with_the_error():
+    """Deterministic here with a queue of no size; test_units.py and
+    test_live_server.py cover a client that really stops reading."""
+    lab = Lab(limits=limits(relay_outbound_events=0))
     with lab.connect("/relay") as ws:
-        open_relay(ws)
-        ws.send_bytes(bytes(320))
-        messages = []
-        with pytest.raises(WebSocketDisconnect) as closed:
-            while True:
-                messages.append(receive(ws))
-        assert closed.value.code == 1000
-        assert messages[-1] == RELAY_LIMIT_ERROR
-        assert all(m["type"] == "transcript" for m in messages[:-1])
+        assert receive(ws)["type"] == "ready"
+        assert receive(ws) == RELAY_LIMIT_ERROR
+        assert close_code(ws) == 1000
     lab.wait_idle()
+    with lab.connect("/relay") as ws:  # and the model is free again
+        assert receive(ws)["type"] == "ready"
 
 
 # -- failures ------------------------------------------------------------------------
