@@ -180,11 +180,28 @@ def test_launchers_take_the_documented_parameters():
     start = text("Start-ASR-Lab.ps1")
     assert "[ValidateSet('nemotron', 'qwen3')][string]$Model = 'nemotron'" in start
     assert "[int]$Port = 47842" in start and "[switch]$NoBrowser" in start and "[switch]$EnsureDocker" in start
+    assert "[string]$LabFolder" in start and "-LabRoot (Resolve-LabFolder $LabFolder)" in start
     stop = text("Stop-ASR-Lab.ps1")
-    assert "[int]$Port = 47842" in stop and "$Model" not in stop
+    assert "[int]$Port = 47842" in stop and "$Model" not in stop and "$LabFolder" not in stop
     for name in ("Build-ASR-Images.ps1", "Get-ASR-Weights.ps1"):
         assert "[switch]$PlanOnly" in text(name)
         assert "asks before doing anything" in text(name)
+
+
+def test_relay_copies_of_the_launchers_load_only_what_lies_beside_them():
+    """The relay runs its own copies of three scripts from its data folder
+    (protocol 11.5): the lab folder is a parameter and supplies data only."""
+    load = ". (Join-Path $PSScriptRoot 'LabCommon.ps1')"
+    for name in ("Start-ASR-Lab.ps1", "Stop-ASR-Lab.ps1"):
+        launcher = text(name)
+        assert launcher.count(load) == 1, name
+        assert len(re.findall(r"(?m)^\s*\. ", launcher)) == 1, name  # nothing else is dot-sourced
+    # The shared script never works out where it is (the lab folder is handed
+    # to it) and loads no other code.
+    common = text("LabCommon.ps1")
+    code = "\n".join(line for line in common.splitlines() if not line.lstrip().startswith("#"))
+    assert "$PSScriptRoot" not in code and "$PSCommandPath" not in code and "$MyInvocation" not in code
+    assert not re.search(r"(?m)^\s*\. ", code) and "Import-Module" not in code and "Invoke-Expression" not in code
 
 
 # -- the weights list ----------------------------------------------------------------

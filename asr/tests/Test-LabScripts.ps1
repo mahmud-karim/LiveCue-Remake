@@ -89,9 +89,10 @@ function Start-TestHttpServer {
     $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
     $listener.Start()
     $log = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
+    $named = [System.Collections.ArrayList]::Synchronized((New-Object System.Collections.ArrayList))
     $shell = [powershell]::Create()
     [void]$shell.AddScript({
-        param($listener, $files, $log)
+        param($listener, $files, $log, $named)
         while ($true) {
             try { $client = $listener.AcceptTcpClient() } catch { break }
             try {
@@ -107,6 +108,7 @@ function Start-TestHttpServer {
                 }
                 $path = ($first -split ' ')[1]
                 [void]$log.Add("$path|$($headers['range'])")
+                [void]$named.Add("$($headers['host'])|$($headers.ContainsKey('origin'))")
                 $entry = $files[$path]
                 $status = '404 Not Found'
                 $body = New-Object byte[] 0
@@ -135,9 +137,10 @@ function Start-TestHttpServer {
                 $client.Close()
             }
         }
-    }).AddArgument($listener).AddArgument($Files).AddArgument($log)
+    }).AddArgument($listener).AddArgument($Files).AddArgument($log).AddArgument($named)
     [void]$shell.BeginInvoke()
-    return @{ Port = $listener.LocalEndpoint.Port; Listener = $listener; Shell = $shell; Log = $log }
+    # Log: 'path|Range header'. Named: 'Host header|whether an Origin header came'.
+    return @{ Port = $listener.LocalEndpoint.Port; Listener = $listener; Shell = $shell; Log = $log; Named = $named }
 }
 
 function Stop-TestHttpServer {
@@ -179,8 +182,12 @@ Test-Case 'the launchers declare the documented parameters and defaults' {
     $start = (Get-Command (Join-Path $labRoot 'Start-ASR-Lab.ps1')).Parameters
     Assert-True ($start.ContainsKey('Model') -and $start.ContainsKey('Port')) 'Start has -Model and -Port'
     Assert-True ($start['NoBrowser'].SwitchParameter -and $start['EnsureDocker'].SwitchParameter) 'Start has both switches'
+    Assert-True ($start.ContainsKey('LabFolder') -and $start['LabFolder'].ParameterType -eq [string]) 'Start has -LabFolder'
+    $mandatory = @($start['LabFolder'].Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory })
+    Assert-Equal 0 $mandatory.Count '-LabFolder is optional'
     $stop = (Get-Command (Join-Path $labRoot 'Stop-ASR-Lab.ps1')).Parameters
     Assert-True ($stop.ContainsKey('Port') -and -not $stop.ContainsKey('Model')) 'Stop has -Port only'
+    Assert-True (-not $stop.ContainsKey('LabFolder')) 'Stop takes no lab folder: the relay passes it -Port alone'
     $weights = (Get-Command (Join-Path $labRoot 'Get-ASR-Weights.ps1')).Parameters
     Assert-True ($weights.ContainsKey('Model') -and $weights.ContainsKey('PlanOnly')) 'Get-ASR-Weights has -Model and -PlanOnly'
     $build = (Get-Command (Join-Path $labRoot 'Build-ASR-Images.ps1')).Parameters
@@ -286,6 +293,30 @@ Test-Case 'docker run arguments: names, hardening, loopback-only port, read-only
     ) $arguments 'docker run arguments'
     Assert-Equal 1 @($arguments | Where-Object { $_ -ceq '-p' }).Count 'exactly one published port'
     Assert-True (-not ($arguments -contains '--privileged')) 'never privileged'
+}
+
+Test-Case 'the lab folder is made one absolute path, whatever the current folder' {
+    Assert-Equal 'D:\Apps\LiveCue Remake\asr' (Resolve-LabFolder 'D:\Apps\LiveCue Remake\asr') 'an absolute path is kept'
+    Assert-Equal 'D:\Apps\asr' (Resolve-LabFolder 'D:\Apps\asr\') 'without a trailing separator'
+    Assert-Equal 'D:\Apps\asr' (Resolve-LabFolder 'D:/Apps/asr/') 'forward slashes'
+    Assert-Equal 'D:\Apps\asr' (Resolve-LabFolder 'D:\Apps\other\..\asr') 'no parent steps left in it'
+    Assert-Equal 'D:\' (Resolve-LabFolder 'D:\') 'a drive root keeps its separator'
+    Assert-Equal 'D:\a[1]\asr' (Resolve-LabFolder 'D:\a[1]\asr') 'brackets are not a pattern'
+    $here = New-TestFolder
+    try {
+        Push-Location -LiteralPath $here
+        try {
+            Assert-Equal (Join-Path $here 'lab') (Resolve-LabFolder 'lab') 'a relative path starts at the current location'
+            Assert-Equal (Join-Path $here 'lab') (Resolve-LabFolder '.\lab\') 'with a leading dot'
+            Assert-Equal $here (Resolve-LabFolder '.') 'the current location itself'
+        } finally {
+            Pop-Location
+        }
+        # It names a folder; it does not look for it.
+        Assert-Equal (Join-Path $here 'not there') (Resolve-LabFolder (Join-Path $here 'not there')) 'a folder that does not exist'
+    } finally {
+        Remove-Item -LiteralPath $here -Recurse -Force
+    }
 }
 
 Test-Case 'a lab folder that would break the mount option is refused' {
@@ -401,6 +432,8 @@ Test-Case 'health is read from the given loopback port, and anything odd is no a
         Assert-True (Test-LabHealthReady $health 'qwen3') 'a real health document is ready'
         Assert-True (-not (Test-LabHealthBusy $health)) 'and not busy'
         Assert-Equal @('/health|') @($server.Log) 'one request to /health'
+        # The lab answers 403 to any other Host, and to a foreign Origin.
+        Assert-Equal @("127.0.0.1:$($server.Port)|False") @($server.Named) 'Host is the loopback port, and no Origin is sent'
     } finally {
         Stop-TestHttpServer $server
     }
@@ -470,6 +503,129 @@ Test-Case 'download: whole file, resume, server without resume, oversized leftov
     } finally {
         Stop-TestHttpServer $server
         Remove-Item -LiteralPath $folder -Recurse -Force
+    }
+}
+
+# ==========================================================================
+# 4a. The two launchers, started the way the relay starts them
+# ==========================================================================
+#
+# The relay keeps its own copies of Start-ASR-Lab.ps1, Stop-ASR-Lab.ps1 and
+# LabCommon.ps1 in its data folder and runs those, never the files in the lab
+# folder (protocol 11.5). Here the two real launchers are copied beside a
+# stand-in LabCommon.ps1 that only reports what it was asked to do, and are
+# run in a child PowerShell with the relay's own command line. The lab folder
+# holds trap copies of all three scripts: loading any of them leaves a mark.
+
+function New-RelayScene {
+    $root = New-TestFolder
+    $copies = Join-Path $root 'data folder\lab'
+    $lab = Join-Path $root 'the lab\asr'
+    New-Item -ItemType Directory -Path $copies -Force | Out-Null
+    New-Item -ItemType Directory -Path $lab -Force | Out-Null
+    foreach ($name in @('Start-ASR-Lab.ps1', 'Stop-ASR-Lab.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $labRoot $name) -Destination (Join-Path $copies $name)
+    }
+    $standIn = @(
+        'function Resolve-LabFolder { param([string]$Path) return "resolved:$Path" }',
+        'function Invoke-LabStart {',
+        '    param([string]$Model, [int]$Port, [switch]$NoBrowser, [switch]$EnsureDocker, [string]$LabRoot)',
+        '    if ($Port -eq 50999) { throw ''Model weights have not been downloaded.'' }',
+        '    "start|$Model|$Port|$([bool]$NoBrowser)|$([bool]$EnsureDocker)|$LabRoot|$PSScriptRoot"',
+        '}',
+        'function Invoke-LabStop {',
+        '    param([int]$Port)',
+        '    if ($Port -eq 50999) { throw ''Could not stop the local model.'' }',
+        '    "stop|$Port|$PSScriptRoot"',
+        '}'
+    )
+    Set-Content -LiteralPath (Join-Path $copies 'LabCommon.ps1') -Value $standIn -Encoding Ascii
+    $trap = 'Set-Content -LiteralPath (Join-Path $PSScriptRoot ''LOADED'') -Value $MyInvocation.MyCommand.Name -Encoding Ascii'
+    foreach ($name in @('Start-ASR-Lab.ps1', 'Stop-ASR-Lab.ps1', 'LabCommon.ps1')) {
+        Set-Content -LiteralPath (Join-Path $lab $name) -Value $trap -Encoding Ascii
+    }
+    return @{ Root = $root; Copies = $copies; Lab = $lab }
+}
+
+function Invoke-AsRelay {
+    # protocol 11.5: <powershell> -NoProfile -ExecutionPolicy Bypass -File <copy> <arguments>.
+    # The child starts in $WorkingFolder, so a script that looked beside the
+    # current folder instead of beside itself would be caught.
+    param([string]$Script, [string[]]$Arguments, [string]$WorkingFolder)
+    $shell = (Get-Process -Id $PID).Path
+    $all = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Script) + $Arguments
+    Push-Location -LiteralPath $WorkingFolder
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& $shell @all 2>$null)
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    return [pscustomobject]@{ ExitCode = $code; Output = @($output | ForEach-Object { "$_" }) }
+}
+
+Test-Case 'as the relay runs it: Start takes the lab folder from -LabFolder and loads nothing from it' {
+    $scene = New-RelayScene
+    try {
+        $start = Join-Path $scene.Copies 'Start-ASR-Lab.ps1'
+        $run = Invoke-AsRelay $start @('-LabFolder', $scene.Lab, '-Model', 'qwen3', '-Port', '50123', '-NoBrowser', '-EnsureDocker') $scene.Lab
+        Assert-Equal 0 $run.ExitCode 'exit code'
+        Assert-Equal @("start|qwen3|50123|True|True|resolved:$($scene.Lab)|$($scene.Copies)") $run.Output `
+            'the lab folder is the one named; the shared script is the one beside the copy'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $scene.Lab 'LOADED'))) 'no script of the lab folder was loaded'
+    } finally {
+        Remove-Item -LiteralPath $scene.Root -Recurse -Force
+    }
+}
+
+Test-Case 'run by hand: without -LabFolder the lab folder is the folder of the script' {
+    $scene = New-RelayScene
+    try {
+        $start = Join-Path $scene.Copies 'Start-ASR-Lab.ps1'
+        $run = Invoke-AsRelay $start @('-Model', 'nemotron') $scene.Lab
+        Assert-Equal 0 $run.ExitCode 'exit code'
+        Assert-Equal @("start|nemotron|47842|False|False|resolved:$($scene.Copies)|$($scene.Copies)") $run.Output `
+            'defaults, and never the current folder'
+        $byPosition = Invoke-AsRelay $start @('qwen3', '50123') $scene.Lab
+        Assert-Equal @("start|qwen3|50123|False|False|resolved:$($scene.Copies)|$($scene.Copies)") $byPosition.Output `
+            'the model and the port keep their positions'
+        # '""' is how Windows PowerShell 5.1 hands a program an empty argument.
+        $empty = Invoke-AsRelay $start @('-LabFolder', '""', '-Model', 'nemotron') $scene.Lab
+        Assert-True ($empty.ExitCode -ne 0) 'an empty -LabFolder is refused'
+        Assert-Equal 0 $empty.Output.Count 'and nothing is started for it'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $scene.Lab 'LOADED'))) 'no script of the current folder was loaded'
+    } finally {
+        Remove-Item -LiteralPath $scene.Root -Recurse -Force
+    }
+}
+
+Test-Case 'as the relay runs it: Stop takes -Port alone and loads nothing from the lab folder' {
+    $scene = New-RelayScene
+    try {
+        $stop = Join-Path $scene.Copies 'Stop-ASR-Lab.ps1'
+        $run = Invoke-AsRelay $stop @('-Port', '50123') $scene.Lab
+        Assert-Equal 0 $run.ExitCode 'exit code'
+        Assert-Equal @("stop|50123|$($scene.Copies)") $run.Output 'the shared script is the one beside the copy'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $scene.Lab 'LOADED'))) 'no script of the lab folder was loaded'
+    } finally {
+        Remove-Item -LiteralPath $scene.Root -Recurse -Force
+    }
+}
+
+Test-Case 'as the relay runs it: a failure is a non-zero exit code, success is 0' {
+    $scene = New-RelayScene
+    try {
+        $start = Join-Path $scene.Copies 'Start-ASR-Lab.ps1'
+        $failed = Invoke-AsRelay $start @('-LabFolder', $scene.Lab, '-Model', 'nemotron', '-Port', '50999', '-NoBrowser', '-EnsureDocker') $scene.Lab
+        Assert-True ($failed.ExitCode -ne 0) 'Start fails with a non-zero exit code'
+        $stopped = Invoke-AsRelay (Join-Path $scene.Copies 'Stop-ASR-Lab.ps1') @('-Port', '50999') $scene.Lab
+        Assert-True ($stopped.ExitCode -ne 0) 'Stop fails with a non-zero exit code'
+        $unknown = Invoke-AsRelay $start @('-LabFolder', $scene.Lab, '-Model', 'whisper', '-Port', '50123') $scene.Lab
+        Assert-True ($unknown.ExitCode -ne 0) 'a model that is not one of the two is refused'
+        Assert-Equal 0 $unknown.Output.Count 'and nothing is started for it'
+    } finally {
+        Remove-Item -LiteralPath $scene.Root -Recurse -Force
     }
 }
 

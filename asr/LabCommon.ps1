@@ -1,5 +1,10 @@
 # Shared by the four ASR lab scripts. Dot-source it; it only defines things.
 #
+# It is loaded from the folder of the script that runs and never asks where
+# that is: every function that needs the lab folder is handed it (-LabRoot).
+# The relay runs its own copies of Start-ASR-Lab.ps1, Stop-ASR-Lab.ps1 and
+# this file from its data folder, away from the lab folder.
+#
 # Runs under Windows PowerShell 5.1, which reads a script without a byte order
 # mark as ANSI: keep this file and its siblings plain ASCII.
 #
@@ -246,6 +251,16 @@ function Test-LabSessionActive {
 }
 
 # --- start --------------------------------------------------------------
+
+function Resolve-LabFolder {
+    # The lab folder as one absolute path with no trailing separator. A folder
+    # typed by hand may be relative to the current location, and Docker takes
+    # only an absolute path for a bind mount. Nothing is read from disk here.
+    param([string]$Path)
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    if ($full.Length -gt [System.IO.Path]::GetPathRoot($full).Length) { $full = $full.TrimEnd('\', '/') }
+    return $full
+}
 
 function Get-LabRunArguments {
     param([string]$Model, [int]$Port, [string]$LabRoot)
