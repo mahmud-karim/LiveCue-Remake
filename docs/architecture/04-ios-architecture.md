@@ -180,6 +180,7 @@ compiler refuses two files of the same name in one module.
 | `Relay/RelayOutcome.swift` | Internal: classification of an HTTP outcome (protocol 13.6) | WP-03 |
 | `Relay/RelayMessages.swift` | Phone texts for codes and conditions (protocol 14) | WP-03 |
 | `Relay/RelayClient.swift` | The nine HTTP routes, timeouts, echo check, cancel | WP-03 |
+| `Relay/RequestDeadline.swift` | Internal: the total time limit of one request, raced against `CoreTiming.sleep`; used by both HTTP clients | WP-03 |
 | `Relay/RelaySpeechFrame.swift` | Parsing of relay speech frames | WP-04 |
 | `Relay/RelaySpeechNegotiation.swift` | Protocol 13.7 as a pure state machine | WP-04 |
 | `OpenRouter/OpenRouterError.swift` | Error cases and their texts | WP-01 |
