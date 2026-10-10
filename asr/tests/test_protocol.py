@@ -1,6 +1,6 @@
 """The lab statements of the conformance checklist, one test per statement.
 
-``docs/architecture/02-relay-protocol.md`` section 15.8 (P2-150 to P2-161),
+``docs/architecture/02-relay-protocol.md`` section 15.8 (P2-150 to P2-162),
 which carries over ``docs/spec/03-relay.md`` section 8.11 (AC-RELAY-100 to
 107). Everything runs against the fake engine: no GPU, no model, no Docker.
 The other test files go further into each area.
@@ -232,3 +232,22 @@ def test_p2_161_inference_failure_logs_the_type_and_never_the_text(path, end, er
     line = next(json.loads(text) for text in out.splitlines() if "inference_failed" in text)
     assert line["errorType"] == "LookupError"
     assert line["route"] == path.strip("/")
+
+
+def test_http_routes_check_host_origin_and_fetch_site(tmp_path):
+    """P2-162, new after the security review (SEC-09, security test ST-14)."""
+    clip = tmp_path / "sample.wav"
+    clip.write_bytes(b"RIFF" + bytes(40))
+    lab = Lab(sample_path=clip)
+    foreign = (
+        {"host": f"evil.example:{HOST_PORT}"},
+        {"origin": "https://evil.example"},
+        {"sec-fetch-site": "cross-site"},
+    )
+    for path in ("/health", "/", "/sample"):
+        for headers in foreign:
+            response = lab.client.get(path, headers=headers)
+            assert response.status_code == 403, (path, headers)
+            assert response.content == b"", (path, headers)
+        # The lab's own Host and no Origin: the relay's probe, the lab page.
+        assert lab.client.get(path).status_code == 200, path

@@ -8,6 +8,7 @@ entry point. These do. Still the fake engine: no GPU, no model.
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import socket
@@ -31,6 +32,20 @@ ASR_ROOT = Path(server.__file__).resolve().parent
 def get_json(port: int, path: str = "/health") -> dict:
     with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
         return json.loads(response.read())
+
+
+def http_get(port: int, path: str, headers: dict) -> tuple:
+    """A plain GET with exactly these headers. Returns ``(status, body)``."""
+    link = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        link.putrequest("GET", path, skip_host=True, skip_accept_encoding=True)
+        for name, value in headers.items():
+            link.putheader(name, value)
+        link.endheaders()
+        response = link.getresponse()
+        return response.status, response.read()
+    finally:
+        link.close()
 
 
 def wait_until(condition, timeout: float = 10.0) -> None:
@@ -134,6 +149,20 @@ def test_refused_handshakes_are_http_403(port):
         connect(f"ws://127.0.0.1:{port}/relay", origin=f"http://127.0.0.1:{port}")
     assert refused.value.response.status_code == 403
     assert get_json(port)["busy"] is False
+
+
+def test_refused_http_requests_are_an_empty_403(port):
+    good_host = {"Host": f"127.0.0.1:{port}"}
+    for path in ("/health", "/", "/sample", "/missing"):
+        assert http_get(port, path, {"Host": f"evil.example:{port}"}) == (403, b"")
+        assert http_get(port, path, {"Host": "127.0.0.1:8765"}) == (403, b"")
+        assert http_get(port, path, {**good_host, "Origin": "https://evil.example"}) == (403, b"")
+        assert http_get(port, path, {**good_host, "Sec-Fetch-Site": "cross-site"}) == (403, b"")
+    status, body = http_get(port, "/health", good_host)
+    assert status == 200 and json.loads(body)["ready"] is True
+    status, body = http_get(port, "/health", {"Host": f"localhost:{port}", "Origin": f"http://localhost:{port}"})
+    assert status == 200 and json.loads(body)["relayProtocol"] == 1
+    assert http_get(port, "/", {**good_host, "Sec-Fetch-Site": "same-origin"})[0] == 200
 
 
 def test_unknown_socket_path_is_refused(port):
@@ -241,6 +270,10 @@ def test_host_is_the_published_port_not_the_port_listened_on(published_lab):
     assert handshake_status(listening, "/stream", {"Host": f"127.0.0.1:{published}", **origin}) == 101
     wrong = {"Origin": f"http://127.0.0.1:{listening}"}
     assert handshake_status(listening, "/stream", {"Host": f"127.0.0.1:{published}", **wrong}) == 403
+    # The same holds for the relay's health probe.
+    assert http_get(listening, "/health", {"Host": f"127.0.0.1:{listening}"}) == (403, b"")
+    status, body = http_get(listening, "/health", {"Host": f"127.0.0.1:{published}"})
+    assert status == 200 and json.loads(body)["relayProtocol"] == 1
 
 
 def test_relay_session_through_a_published_port(published_lab):

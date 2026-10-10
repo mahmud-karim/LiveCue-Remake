@@ -38,7 +38,8 @@ from pathlib import Path
 from typing import Any, Callable, Deque, Dict, Mapping, Optional, Tuple
 
 from fastapi import FastAPI, WebSocket
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from starlette.datastructures import Headers
 
 from engines import MODELS, Engine, EngineUnavailable, create_engine
 
@@ -928,12 +929,31 @@ def stream_decorator(session: Session) -> Decorator:
 #
 # There is no authentication: the service is reachable on the PC's loopback
 # interface only. These checks stop a web page in the user's browser from
-# reaching it anyway, directly (Origin) or through DNS rebinding (Host).
+# reaching it anyway, directly (Origin, Sec-Fetch-Site) or through DNS
+# rebinding (Host). The Host rule covers every route, HTTP and WebSocket:
+# a rebinding page sends a same-origin request that carries no Origin at all.
 
 
 def _host_allowed(headers: Any, settings: Settings) -> bool:
     hosts = headers.getlist("host")
     return len(hosts) == 1 and hosts[0] in settings.allowed_hosts
+
+
+def _origin_allowed(headers: Any, settings: Settings) -> bool:
+    """No ``Origin`` header, or exactly one that is the lab's own."""
+    origins = headers.getlist("origin")
+    return not origins or (len(origins) == 1 and origins[0] in settings.allowed_origins)
+
+
+def http_admitted(headers: Any, settings: Settings) -> bool:
+    """The HTTP routes: the lab's own ``Host``, no foreign ``Origin``, no cross-site fetch.
+
+    The relay's probe and the lab page send the lab's ``Host`` and no
+    ``Origin``, so they pass.
+    """
+    if not _host_allowed(headers, settings) or not _origin_allowed(headers, settings):
+        return False
+    return not any(value.strip().lower() == "cross-site" for value in headers.getlist("sec-fetch-site"))
 
 
 def relay_admitted(headers: Any, settings: Settings) -> bool:
@@ -943,10 +963,33 @@ def relay_admitted(headers: Any, settings: Settings) -> bool:
 
 def stream_admitted(headers: Any, settings: Settings) -> bool:
     """``/stream`` also serves the lab page, so the lab's own origin is allowed."""
-    if not _host_allowed(headers, settings):
-        return False
-    origins = headers.getlist("origin")
-    return not origins or (len(origins) == 1 and origins[0] in settings.allowed_origins)
+    return _host_allowed(headers, settings) and _origin_allowed(headers, settings)
+
+
+class AdmissionGate:
+    """The one check in front of every route: no handler runs for a refused request.
+
+    Whatever the path or the method, a request under another ``Host`` is
+    refused: ``403`` with an empty body over HTTP, close code 1008 on a
+    WebSocket. An HTTP request must also pass the ``Origin`` and
+    ``Sec-Fetch-Site`` rules. The two sockets then apply their own ``Origin``
+    rules (:func:`relay_admitted`, :func:`stream_admitted`).
+    """
+
+    def __init__(self, app: Any, settings: Settings) -> None:
+        self._app = app
+        self._settings = settings
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        kind = scope["type"]
+        if kind == "http" and not http_admitted(Headers(scope=scope), self._settings):
+            await Response(status_code=403, headers=_NO_STORE)(scope, receive, send)
+            return
+        if kind == "websocket" and not _host_allowed(Headers(scope=scope), self._settings):
+            # Closing before accepting refuses the handshake.
+            await send({"type": "websocket.close", "code": POLICY_VIOLATION})
+            return
+        await self._app(scope, receive, send)
 
 
 # --------------------------------------------------------------------------
@@ -979,6 +1022,7 @@ def create_app(
     app.state.engine = engine
     app.state.settings = settings
     app.state.slot = slot
+    app.add_middleware(AdmissionGate, settings=settings)
 
     def not_found() -> JSONResponse:
         return JSONResponse({"detail": "Not Found"}, status_code=404, headers=_NO_STORE)
