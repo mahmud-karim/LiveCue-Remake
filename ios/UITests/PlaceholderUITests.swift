@@ -36,7 +36,7 @@ final class PlaceholderUITests: XCTestCase {
         XCTAssertTrue(button.isHittable, "The glass button cannot be tapped.")
         XCTAssertEqual(text("placeholder.tapCount", in: app).label, "Taps: 0")
 
-        // Simulator builds are signed ad hoc with Support/Simulator.entitlements so that this works.
+        // Fails with "add failed (-34018)" when the test build was not signed; see ios.yml.
         let keychain = text("placeholder.keychain", in: app)
         XCTAssertTrue(keychain.waitForExistence(timeout: 10), "The Keychain check did not report.")
         XCTAssertEqual(keychain.label, "Keychain: available")

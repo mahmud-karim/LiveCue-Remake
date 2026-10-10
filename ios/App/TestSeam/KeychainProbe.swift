@@ -3,9 +3,9 @@ import Security
 
 /// Adds, reads back and deletes one Keychain item, to show whether Keychain calls work in this build.
 ///
-/// It runs only under `-ui-testing`. Simulator test builds get their Keychain entitlements from
-/// `ios/Support/Simulator.entitlements`; this is the check that the arrangement works. The item has
-/// no access group and a service name of its own, as every Keychain item of this app must.
+/// It runs only under `-ui-testing`. The project is unsigned by default, and an unsigned simulator
+/// build fails here with -34018; CI signs test builds ad hoc, and this is the check that it did.
+/// The item has no access group and a service name of its own, as every Keychain item of this app must.
 enum KeychainProbe {
     private static let service = "com.mahmudkarim.LiveCueRemake.ui-testing.keychain-probe"
     private static let account = "probe"

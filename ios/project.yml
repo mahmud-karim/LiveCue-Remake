@@ -24,7 +24,8 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
 
     # The project is unsigned by default, which is what the device build for LiveContainer needs.
-    # Simulator test runs switch ad hoc signing on from the command line (see .github/workflows/ios.yml).
+    # Simulator test runs switch ad hoc signing on from the command line (see .github/workflows/ios.yml):
+    # an unsigned simulator build has no entitlements, and its Keychain calls fail with -34018.
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Manual
     CODE_SIGNING_ALLOWED: "NO"
@@ -75,9 +76,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mahmudkarim.LiveCueRemake
         TARGETED_DEVICE_FAMILY: "1"
-        # Simulator builds only. An unsigned binary carries no entitlements, so Keychain calls fail in
-        # simulator tests; with ad hoc signing on, Xcode embeds these as simulated entitlements.
-        # Device builds stay unsigned and carry none.
+        # Simulator builds only, and only used when a test run switches signing on. Xcode then embeds
+        # this file as simulated entitlements in place of its default, an application identifier of
+        # FAKETEAMID.<bundle id>. CI showed that the Keychain works with either. Device builds stay
+        # unsigned and carry no entitlements.
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Support/Simulator.entitlements
         SUPPORTS_MACCATALYST: "NO"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
