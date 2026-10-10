@@ -82,22 +82,28 @@ at area level by the owning package, and end to end by WP-W13 (1.7).
 | P2-009 | `BodyRuleTests.Get_and_delete_with_a_body_are_400` | H, raw | any |
 | P2-010 | `RequestGaugeTests.One_request_beyond_the_cap_is_429_and_a_finished_one_frees_a_place` (held on route 3 with a gated catalogue) | H, CS | any |
 | P2-011 | `ErrorBodyTests.Every_error_is_an_object_with_error_and_a_listed_code` (edge errors); the sweep is in 1.7 | H | any |
-| P2-012 | `BodyLimitTests.One_byte_over_is_413_with_a_length_and_chunked_and_the_limit_itself_passes` | H, raw | any |
+| P2-012 | `BodyLimitTests.One_byte_over_is_413_with_a_length_and_chunked_and_the_limit_itself_passes` (the limit itself with a declared length; chunked, a body whose bytes and framing stay within the limit: W-design K-10) | H, raw | any |
 | P2-013 | `BodyRuleTests.Non_object_and_empty_bodies_are_400_on_every_body_route` | H | any |
 | P2-014 | `BodyTimeoutTests.A_body_that_stalls_is_408_and_frees_what_it_held` | H, raw, C | any |
 | P2-015 | `ListenerTests.The_only_endpoint_is_loopback` (server addresses; a connection to a non-loopback address of the machine is refused) | H | any |
 | P2-016 | `FunnelHeaderTests.Private_refuses_and_public_serves_a_funnel_marked_request` | H | any |
 | P2-017 | `PresenceTests.One_event_per_authenticated_request_and_none_for_the_current_nonce` | H, SC, EV | any |
-| P2-018 | `DeadlineTests.Work_past_the_route_deadline_is_504` | H, CS, C | any |
+| P2-018 | `DeadlineTests.Work_past_the_route_deadline_is_504` (every HTTP route, with a handler that never ends, through `EdgeHarness`: the real edge with a test's own handler behind a route, so that the test does not depend on how long the catalogue area takes; `ASSISTANT_TIMEOUT` on routes 7 and 8); `…A_stalled_body_on_a_route_with_a_shorter_deadline_is_504` (route 2 through H) | H, raw, C | any |
 | P2-020 | `HealthTests.Exactly_three_members_also_while_paused` | H | any |
 | P2-021 | `PairVerifyTests.Any_object_is_ok_also_while_paused_and_records_nothing` | H, EV | any |
 | I-01 | `RelayLifecycleTests.An_empty_folder_starts_with_a_created_pairing_and_no_qr_event` | H, EV | any |
-| I-02 | `RelayLifecycleTests.Pause_raises_the_event_refuses_assist_and_keeps_health` | H, EV | any |
+| I-02 | `RelayLifecycleTests.Pause_raises_the_event_refuses_assist_and_keeps_health` (the event, health, and `RELAY_PAUSED` on route 5; for assist it asserts "not served: no run, no request event", because the refusal code of routes 7 and 8 is the answer area's and is asserted with it, P2-051) | H, EV | any |
 | I-04 | `RelayLifecycleTests.A_port_in_use_is_a_start_fault_and_leaves_nothing_listening` | H, EV | any |
 | I-05 | `RelayLifecycleTests.A_new_instance_is_accepting` | H | any |
 | I-06 | `RelayLifecycleTests.An_existing_pairing_raises_the_restored_notice_and_no_qr_event` | H, EV | any |
 | W-design 4.2 | `RelayLifecycleTests.Start_refuses_port_47831_without_binding_it`; `…Stop_is_idempotent`; `…The_event_channel_completes_after_stopped` | H, EV | any |
-| W-design W-01 | `EventChannelTests.A_full_channel_drops_the_oldest_and_counts` | none | any |
+| W-design W-01 | `EventChannelTests.A_full_channel_drops_the_oldest_and_counts`; `…Drops_are_reported_as_one_diagnostic_with_a_count_and_not_again`; `…A_running_relay_reports_dropped_events_once_per_interval` | none; C | any |
+| Protocol 5.2, every refusal before E-3 compared byte for byte (`Date` replaced) | `UnauthorizedTests.Every_refusal_before_authentication_is_the_same_bytes` (ten reasons for a refusal on each of six request shapes); `…The_refusal_of_an_upgrade_is_the_same_bytes_as_any_other`; `FunnelHeaderTests.From_outside_private_and_public_mode_answer_a_caller_without_the_token_alike` | H, raw | any |
+| W-design 4.4, P-11 (each row of the outcome table) | `HandlerOutcomeTests` (a coded error; the fixed 500 and its `Diagnostic`; a handler that does not answer; a failure after the response started; a redirect status; a reset, a stop and a caller that goes away during a request) | `EdgeHarness`, raw, EV | any |
+| W-design 4.3, P-0 (C-30) | `ConnectionGateTests.One_connection_beyond_the_cap_is_aborted_and_an_ended_one_frees_a_place`; `…The_cap_counts_plain_and_upgraded_connections_together` | `EdgeHarness`, raw | any |
+| W-design 4.3, the K notes | `KestrelNotesTests` (K-1, K-6, K-7, K-8, K-9, K-10, and what the server core does with an upgrade that declares a body, `Expect: 100-continue` and several requests on one connection); `KestrelTimerTests.cs`, all `Slow`: `KestrelHeaderTimeoutTests` (K-6 with C-40), `KestrelBodyRateTests` (K-5), `KestrelDrainTests` (K-4), `KestrelKeepAliveFrameTests` (K-2). K-4 is also `UnreadBodyTests`; K-3 is proved with the speech socket (1.6); K-11 is why the raw tests start their read before they send; K-12 is `ListenerTests.The_listen_socket_is_exclusive` | H, `EdgeHarness`, raw | any |
+| W-design 4.3, the settings table | `ListenerTests.The_server_core_has_the_limits_of_the_protocol`; `…The_listen_socket_is_made_for_exclusive_use_and_only_on_ipv4_loopback`; `…Plain_http_1_1_only`; `ResponseHeaderTests.The_upgrade_answer_has_no_subprotocol_no_extension_and_nothing_of_a_browser` | H, `EdgeHarness`, raw | any |
+| W-design 4.2 | `RelayLifecycleTests` beyond the rows above: the other start faults, one start per instance, a cancelled start, a stop of a request in flight, the stop bounded by the relay's clock and (`Slow`) in real time, the fault while running, dispose, the files a start writes, the warm-up read; `AccessStateTests` | H, EV, C | any |
 
 ### 1.3 Pairing (WP-W02), folder `Pairing/`
 
