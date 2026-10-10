@@ -484,6 +484,62 @@ final class OpenRouterClientTests: XCTestCase {
         XCTAssertEqual(response.answer, "Read")
     }
 
+    func testAStreamedAnswerLargerThanEightMebibytesIsAnInvalidResponse() async throws {
+        // Comment lines of 128 KiB each, line feed included: 64 of them are exactly 8 MiB.
+        let line = Data((": " + String(repeating: "x", count: 131_069) + "\n").utf8)
+        XCTAssertEqual(line.count, 131_072)
+        let answer = Data("data: {\"choices\":[{\"delta\":{\"content\":\"Late\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n".utf8)
+
+        // The answer comes after the limit: it is not read.
+        let over = FakeHTTPTransport()
+        await over.enqueueChunks(
+            status: 200,
+            headers: Self.eventStreamHeaders,
+            chunks: Array(repeating: line, count: 64) + [answer]
+        )
+        let overClient = OpenRouterClient(transport: over)
+        let error = await Self.caught {
+            _ = try await overClient.assist(Self.request(), option: Self.option(), key: Self.key, throughSegmentId: nil)
+        }
+        XCTAssertEqual(error as? OpenRouterError, .invalidResponse)
+
+        // The same answer inside the limit is read.
+        let under = FakeHTTPTransport()
+        await under.enqueueChunks(
+            status: 200,
+            headers: Self.eventStreamHeaders,
+            chunks: Array(repeating: line, count: 63) + [answer]
+        )
+        let underClient = OpenRouterClient(transport: under)
+        let response = try await underClient.assist(Self.request(), option: Self.option(), key: Self.key, throughSegmentId: nil)
+        XCTAssertEqual(response.answer, "Late")
+    }
+
+    func testAWholeBodyLargerThanEightMebibytesIsAnInvalidResponse() async throws {
+        let transport = FakeHTTPTransport()
+        await transport.enqueueChunks(
+            status: 200,
+            headers: Self.jsonHeaders,
+            chunks: [Data(count: 8_388_608), Data([0x20])]
+        )
+        let client = OpenRouterClient(transport: transport)
+        let progress = Progress()
+
+        let error = await Self.caught {
+            _ = try await client.assist(
+                Self.request(),
+                option: Self.option(),
+                key: Self.key,
+                throughSegmentId: nil,
+                onUpdate: { await progress.append($0) }
+            )
+        }
+
+        XCTAssertEqual(error as? OpenRouterError, .invalidResponse)
+        let values = await progress.values
+        XCTAssertEqual(values, [])
+    }
+
     func testAnErrorEventInTheStreamIsUnavailableAndKeepsThePreview() async throws {
         let stream = "data: {\"choices\":[{\"delta\":{\"content\":\"Partial\"}}]}\n\n"
             + "data: {\"error\":{\"message\":\"synthetic-fixture-key private transcript\"}}\n\n"
