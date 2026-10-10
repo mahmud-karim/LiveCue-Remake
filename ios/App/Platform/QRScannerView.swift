@@ -1,4 +1,6 @@
-import AVFoundation
+// The capture session is not marked for concurrency. It is configured on the main actor and only started
+// and stopped on the scanner's serial queue, which is how the framework asks to be used.
+@preconcurrency import AVFoundation
 import SwiftUI
 import UIKit
 

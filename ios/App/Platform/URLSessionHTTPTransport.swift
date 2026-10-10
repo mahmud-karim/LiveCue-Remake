@@ -100,6 +100,11 @@ struct URLSessionHTTPTransport: HTTPTransport {
 
     // MARK: - Parts
 
+    /// The idle timeout of the session itself, in seconds. Every request brings its own, shorter one;
+    /// this one only makes sure that the system's 60 s default never cuts a request short (protocol
+    /// 13.1: the transport's idle timeout is longer than the route's own timeout).
+    static let sessionIdleTimeoutSeconds: TimeInterval = 300
+
     /// Ephemeral: nothing is written to disk. No response cache, no cookie storage, cookies never sent.
     static func makeConfiguration(resourceTimeout: TimeInterval?) -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
@@ -108,6 +113,7 @@ struct URLSessionHTTPTransport: HTTPTransport {
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.httpCookieAcceptPolicy = .never
+        configuration.timeoutIntervalForRequest = sessionIdleTimeoutSeconds
         if let resourceTimeout {
             configuration.timeoutIntervalForResource = resourceTimeout
         }

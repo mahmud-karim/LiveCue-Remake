@@ -144,6 +144,8 @@ final class URLSessionTransportTests: XCTestCase {
         XCTAssertFalse(configuration.httpShouldSetCookies)
         XCTAssertEqual(configuration.httpCookieAcceptPolicy, .never)
         XCTAssertEqual(configuration.requestCachePolicy, .reloadIgnoringLocalCacheData)
+        // Longer than the idle timeout of any request: assist and summary wait 80 s.
+        XCTAssertGreaterThan(configuration.timeoutIntervalForRequest, 80)
 
         let limited = URLSessionHTTPTransport.makeConfiguration(resourceTimeout: 120)
         XCTAssertEqual(limited.timeoutIntervalForResource, 120)
@@ -241,10 +243,12 @@ final class URLSessionTransportTests: XCTestCase {
 
         // The URL session finds the method by its Objective-C name. A method that only looked like the
         // delegate's would never be asked, and every redirect would be followed.
-        let asked = #selector(
-            URLSessionTaskDelegate.urlSession(_:task:willPerformHTTPRedirection:newRequest:completionHandler:)
-        )
-        XCTAssertTrue(delegate.responds(to: asked))
+        XCTAssertTrue(delegate.responds(to: redirectQuestion()))
+    }
+
+    /// The Objective-C name under which a URL session asks its delegate about a redirect.
+    private func redirectQuestion() -> Selector {
+        #selector(URLSessionTaskDelegate.urlSession(_:task:willPerformHTTPRedirection:newRequest:completionHandler:))
     }
 
     @MainActor
