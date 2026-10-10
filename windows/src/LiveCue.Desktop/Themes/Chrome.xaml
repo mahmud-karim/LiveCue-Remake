@@ -1,0 +1,120 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+                    xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+
+  <!--
+    Custom title bar parts (design system 3.5).
+
+    The title bar is the top 48 px of the window and is part of the ground: it has no fill. On the
+    right a glass capsule holds minimise, maximise or restore, and close. The buttons behave like
+    system caption buttons: hit-testable inside the drag region, not tab stops, with tooltips and
+    automation names.
+  -->
+
+  <!-- The capsule: surface.panel, stroke.edge, shadow.raised. Its 3 px padding is 1 of stroke and 2 of inset. -->
+  <Style x:Key="Chrome.CaptionCapsule" TargetType="ContentControl">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContentControl">
+          <Grid>
+            <Border ui:Pill.IsPill="True"
+                    Background="{DynamicResource SurfacePanelBrush}"
+                    Effect="{DynamicResource ShadowRaised}" />
+            <Border ui:Pill.IsPill="True"
+                    BorderBrush="{DynamicResource StrokeEdgeBrush}"
+                    BorderThickness="1"
+                    Padding="2">
+              <ContentPresenter />
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Minimise, maximise, restore. The glyph comes from ui:ButtonAssist.Icon. -->
+  <Style x:Key="Chrome.CaptionButton" TargetType="Button">
+    <Setter Property="Width" Value="{DynamicResource CaptionButtonWidth}" />
+    <Setter Property="Height" Value="{DynamicResource CaptionButtonHeight}" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid Background="Transparent">
+            <Border x:Name="Hover" ui:Pill.IsPill="True" Background="Transparent" />
+            <ui:Icon x:Name="Glyph"
+                     Glyph="{Binding Path=(ui:ButtonAssist.Icon), RelativeSource={RelativeSource TemplatedParent}}"
+                     Width="10"
+                     Height="10"
+                     StrokeThickness="2.88"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Hover" Property="Background" Value="{DynamicResource StateCaptionHoverBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Glyph" Property="Opacity" Value="0.7" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="ui:ChromeState.IsWindowActive" Value="False">
+        <Setter Property="Foreground" Value="{DynamicResource InkSecondaryBrush}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Close: the hover is the system's red with a white glyph (5.66:1). -->
+  <Style x:Key="Chrome.CaptionButton.Close" TargetType="Button" BasedOn="{StaticResource Chrome.CaptionButton}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Grid Background="Transparent">
+            <Border x:Name="Hover" ui:Pill.IsPill="True" Background="Transparent" />
+            <ui:Icon x:Name="Glyph"
+                     Glyph="{Binding Path=(ui:ButtonAssist.Icon), RelativeSource={RelativeSource TemplatedParent}}"
+                     Width="10"
+                     Height="10"
+                     StrokeThickness="2.88"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Hover" Property="Background" Value="{DynamicResource StateCaptionCloseHoverBrush}" />
+              <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource InkOnAccentBrush}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Glyph" Property="Opacity" Value="0.7" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- The wordmark in the title bar: type.label at 13 px, one colour (8.1: below 20 it is not two-tone). -->
+  <Style x:Key="Chrome.Wordmark" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeCaptionSize}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Style.Triggers>
+      <Trigger Property="ui:ChromeState.IsWindowActive" Value="False">
+        <Setter Property="Foreground" Value="{DynamicResource InkSecondaryBrush}" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+</ResourceDictionary>

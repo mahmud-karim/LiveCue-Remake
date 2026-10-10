@@ -1,0 +1,38 @@
+<Application x:Class="LiveCue.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+  <!--
+    No StartupUri: App.xaml.cs decides between the normal window and the self-test.
+    No ThemeMode: the Fluent theme stays off and the app paints its own Daylight look (design
+    system 3.5), light whatever the Windows app mode is.
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- The theme slot. ThemeManager replaces this one with HighContrast.xaml under a contrast theme. -->
+        <ResourceDictionary Source="Themes/Daylight.xaml" />
+
+        <!-- Tokens that do not change with the theme. -->
+        <ResourceDictionary Source="Themes/Metrics.xaml" />
+        <ResourceDictionary Source="Themes/Typography.xaml" />
+        <ResourceDictionary Source="Themes/Icons.xaml" />
+
+        <!-- Component styles. They reach the tokens above through DynamicResource. -->
+        <ResourceDictionary Source="Themes/Glass.xaml" />
+        <ResourceDictionary Source="Themes/Buttons.xaml" />
+        <ResourceDictionary Source="Themes/Navigation.xaml" />
+        <ResourceDictionary Source="Themes/Status.xaml" />
+        <ResourceDictionary Source="Themes/Rows.xaml" />
+        <ResourceDictionary Source="Themes/Chrome.xaml" />
+        <ResourceDictionary Source="Themes/Supporting.xaml" />
+
+        <!-- Which view shows which page view model. -->
+        <ResourceDictionary Source="Views/Pages.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <ui:ResourceKeyConverter x:Key="ResourceKey" />
+      <ui:BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

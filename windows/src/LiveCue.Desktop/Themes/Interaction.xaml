@@ -1,0 +1,62 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+
+  <ResourceDictionary.MergedDictionaries>
+    <!-- Storyboards cannot use DynamicResource, so the motion tokens are merged for StaticResource. -->
+    <ResourceDictionary Source="Metrics.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!--
+    What every interactive style shares: the hover fade and the keyboard focus rings. The style
+    files that need them merge this dictionary and use StaticResource.
+  -->
+
+  <!--
+    Hover: motion.fast (160 ms) with ease.standard, on the layer every template names HoverFill.
+    Fading a text-free layer keeps the label out of any opacity group, so it stays crisp.
+  -->
+  <Storyboard x:Key="Motion.HoverIn">
+    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity">
+      <SplineDoubleKeyFrame KeyTime="0:0:0.16" KeySpline="{StaticResource EaseStandard}" Value="1" />
+    </DoubleAnimationUsingKeyFrames>
+  </Storyboard>
+  <Storyboard x:Key="Motion.HoverOut">
+    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="HoverFill" Storyboard.TargetProperty="Opacity">
+      <SplineDoubleKeyFrame KeyTime="0:0:0.16" KeySpline="{StaticResource EaseStandard}" Value="0" />
+    </DoubleAnimationUsingKeyFrames>
+  </Storyboard>
+
+  <!--
+    6.6 Focus ring: 2 px in stroke.focus, 2 px outside the control, following its shape. It is a
+    FocusVisualStyle, so it shows for keyboard focus only, never on a mouse click.
+  -->
+  <Style x:Key="Focus.Pill">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border Margin="-4"
+                  ui:Pill.IsPill="True"
+                  BorderBrush="{DynamicResource StrokeFocusBrush}"
+                  BorderThickness="2"
+                  SnapsToDevicePixels="True" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- For rows: the ring sits inside the row bounds (4.8). -->
+  <Style x:Key="Focus.Row">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border CornerRadius="{DynamicResource RadiusCard}"
+                  BorderBrush="{DynamicResource StrokeFocusBrush}"
+                  BorderThickness="2"
+                  SnapsToDevicePixels="True" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+</ResourceDictionary>

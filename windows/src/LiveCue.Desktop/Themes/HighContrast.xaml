@@ -1,0 +1,109 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+  <!--
+    Windows contrast themes (design system 6.5). The same keys as Daylight.xaml, every one mapped to a
+    system colour, so no Daylight colour survives: surfaces are opaque Window, text is WindowText,
+    every stroke is a solid WindowText line, the accent is Highlight, and blooms, sheen, tints and
+    shadows are gone.
+
+    Brushes take their colour through DynamicResource, so they follow the system when the user
+    switches from one contrast theme to another while the app is running.
+
+    Hover and pressed fills are deliberately the same as the resting fill here: a fill that turned to
+    Highlight would need its text to turn to HighlightText in the same breath, and until every
+    control carries that pair the safe behaviour is not to change the fill at all.
+  -->
+
+  <!-- Ground -->
+  <SolidColorBrush x:Key="GroundBaseBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <Color x:Key="GroundBloom1Color">#00FFFFFF</Color>
+  <Color x:Key="GroundBloom2Color">#00FFFFFF</Color>
+  <Color x:Key="GroundBloom3Color">#00FFFFFF</Color>
+  <Color x:Key="GroundBloom4Color">#00FFFFFF</Color>
+
+  <!-- Surfaces -->
+  <SolidColorBrush x:Key="SurfacePanelBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceInsetBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceRaisedHoverBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceRaisedPressedBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceInverseBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="SurfaceScrimBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.8" />
+  <!-- The QR tile stays black on white whatever the theme, or it stops scanning. -->
+  <SolidColorBrush x:Key="SurfaceQrBrush" Color="#FFFFFFFF" />
+
+  <!-- State overlays -->
+  <SolidColorBrush x:Key="StateHoverBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatePressedBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StateHoverOnOverlayBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatePressedOnOverlayBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StateCaptionHoverBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StateCaptionCloseHoverBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+
+  <!-- Strokes and sheen -->
+  <SolidColorBrush x:Key="StrokeEdgeBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeRaisedBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeInsetBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeOnAccentBrush" Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeHairlineBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeControlBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeDangerBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StrokeFocusBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <SolidColorBrush x:Key="GlassSheenBrush" Color="#00FFFFFF" />
+
+  <!-- Ink -->
+  <SolidColorBrush x:Key="InkPrimaryBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="InkSecondaryBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="InkDisabledBrush" Color="{DynamicResource {x:Static SystemColors.GrayTextColorKey}}" />
+  <SolidColorBrush x:Key="InkOnAccentBrush" Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}" />
+  <SolidColorBrush x:Key="InkOnInverseBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+
+  <!-- Accent -->
+  <SolidColorBrush x:Key="AccentFillBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <SolidColorBrush x:Key="AccentStrongBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <SolidColorBrush x:Key="AccentTintBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="AccentTextBrush" Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}" />
+
+  <!-- Status: the mark shape and the label carry the meaning, not the colour. -->
+  <SolidColorBrush x:Key="StatusLiveBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusLiveTintBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatusSuccessBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusSuccessTintBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatusWarningBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusWarningTintBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatusDangerBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusDangerTintBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="StatusDangerHoverBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusDangerPressedBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusOfflineBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="StatusOfflineTintBrush" Color="#00FFFFFF" />
+
+  <!-- Control tracks -->
+  <SolidColorBrush x:Key="TrackProgressBrush" Color="{DynamicResource {x:Static SystemColors.GrayTextColorKey}}" />
+  <SolidColorBrush x:Key="TrackSegmentedBrush" Color="#00FFFFFF" />
+  <SolidColorBrush x:Key="TrackToggleOffBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="ControlKnobBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+  <SolidColorBrush x:Key="ControlScrollThumbBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="ControlScrollThumbHoverBrush" Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+  <Color x:Key="ShadeColor">#00000000</Color>
+
+  <!-- Brand mark -->
+  <SolidColorBrush x:Key="BrandMarkBubbleBrush" Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+  <SolidColorBrush x:Key="BrandMarkBarsBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+
+  <!-- Opacity -->
+  <sys:Double x:Key="OpacityDisabled">0.45</sys:Double>
+
+  <!-- Shadows: none. The keys stay so both themes define the same set. -->
+  <x:Null x:Key="ShadowPanel" />
+  <x:Null x:Key="ShadowRaised" />
+  <x:Null x:Key="ShadowOverlay" />
+  <x:Null x:Key="ShadowAccent" />
+  <x:Null x:Key="ShadowKnob" />
+
+</ResourceDictionary>
