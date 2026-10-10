@@ -1,44 +1,79 @@
+using System.Buffers;
+using System.Text.Unicode;
 using LiveCue.Relay.Protocol;
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Http;
 
 namespace LiveCue.Relay.Edge;
 
 /// <summary>
-/// Protocol 5.4: the body of a route that reads one (W-design 4.5).
-///
-/// First version (foundation): rules 1, 2 and 4. Rule 3 (the body must arrive within C-41, answered
-/// 408 REQUEST_TIMEOUT) needs the route deadlines and is work package WP-W01.
+/// Protocol 5.4: the body of a route that reads one, in the order of its four rules (W-design 4.5).
+/// Nothing here runs before step E-3 has passed: only a route handler calls it.
 /// </summary>
 internal static class BodyReader
 {
+    private const int FirstBufferBytes = 4_096;
+
     public static async Task<BodyResult> ReadAsync(RouteContext context, TimeProvider clock)
     {
-        var request = context.Http.Request;
+        var http = context.Http;
+        var request = http.Request;
+        var state = http.Features.Get<EdgeRequest>();
 
         // Rule 1: a declared length above the limit is refused without reading.
-        if (request.ContentLength is > ProtocolConstants.MaxRequestBodyBytes)
+        var declared = request.ContentLength;
+        if (declared is > ProtocolConstants.MaxRequestBodyBytes)
         {
             return Failed(RelayErrors.PayloadTooLarge);
         }
 
-        // Rule 2: bytes are counted while streaming; the read stops at the first byte beyond the limit.
-        var buffer = new byte[ProtocolConstants.MaxRequestBodyBytes + 1];
-        var count = 0;
+        // Rule 3: the whole body arrives within C-41, counted from the arrival of the headers.
+        var left = ProtocolConstants.BodyTimeout - clock.GetElapsedTime(context.ArrivalTimestamp);
+        using var limit = new CancellationTokenSource(left > TimeSpan.Zero ? left : TimeSpan.Zero, clock);
+        using var reading = CancellationTokenSource.CreateLinkedTokenSource(limit.Token, context.Work);
+
+        var bytes = new ArrayBufferWriter<byte>(declared is > 0 ? (int)declared.Value : FirstBufferBytes);
+        var reader = request.BodyReader;
         try
         {
-            while (count < buffer.Length)
+            // Rule 2: bytes are counted while streaming; the read stops at the first byte beyond the limit.
+            while (true)
             {
-                var read = await request.Body.ReadAsync(buffer.AsMemory(count), context.Work).ConfigureAwait(false);
-                if (read == 0)
+                var result = await reader.ReadAsync(reading.Token).ConfigureAwait(false);
+                var buffer = result.Buffer;
+                if (bytes.WrittenCount + buffer.Length > ProtocolConstants.MaxRequestBodyBytes)
+                {
+                    reader.AdvanceTo(buffer.End);
+                    return Failed(RelayErrors.PayloadTooLarge);
+                }
+
+                foreach (var segment in buffer)
+                {
+                    bytes.Write(segment.Span);
+                }
+
+                reader.AdvanceTo(buffer.End);
+                if (result.IsCompleted)
                 {
                     break;
                 }
 
-                count += read;
+                reading.Token.ThrowIfCancellationRequested();
             }
+        }
+        catch (OperationCanceledException) when (
+            limit.IsCancellationRequested
+            || (context.Cancellation == RouteCancellation.DeadlineExceeded
+                && context.Route.Deadline >= ProtocolConstants.BodyTimeout))
+        {
+            // The C-41 limit is looked at first, so it also wins a tie with a route deadline of the same
+            // length, whichever of the two timers fired first. On a route whose deadline is shorter the
+            // filter is false and the cancellation escapes: the edge answers 504.
+            return Failed(RelayErrors.RequestTimeout);
         }
         catch (BadHttpRequestException exception)
         {
+            // The server core gave up on the body (W-design K-5): too large, too slow, or framed wrongly.
             return Failed(exception.StatusCode switch
             {
                 StatusCodes.Status413PayloadTooLarge => RelayErrors.PayloadTooLarge,
@@ -46,21 +81,27 @@ internal static class BodyReader
                 _ => RelayErrors.InvalidRequest,
             });
         }
-
-        if (count > ProtocolConstants.MaxRequestBodyBytes)
+        catch (ConnectionResetException)
         {
-            return Failed(RelayErrors.PayloadTooLarge);
+            // The caller's connection went away under the read: there is nobody to answer.
+            state?.MarkConnectionLost();
+            throw new OperationCanceledException(context.ClientAborted);
         }
 
-        // Rule 4: valid UTF-8 JSON, depth-limited, whose top level is an object.
-        var utf8 = new ReadOnlyMemory<byte>(buffer, 0, count);
-        if (!WireJson.TryParseObject(utf8, out var root))
+        // From here on the connection holds no unread byte of this request (W-design K-4).
+        state?.MarkBodyRead();
+
+        // Rule 4: valid UTF-8 JSON, depth-limited, whose top level is an object. The JSON reader checks the
+        // structure and leaves the bytes inside a string alone, so the encoding is checked here: no handler
+        // ever meets a text that cannot be decoded.
+        var utf8 = bytes.WrittenMemory;
+        if (!Utf8.IsValid(utf8.Span) || !WireJson.TryParseObject(utf8, out var root))
         {
             return Failed(RelayErrors.InvalidJson);
         }
 
         var readMs = clock.GetElapsedTime(context.ArrivalTimestamp).TotalMilliseconds;
-        return new BodyResult(null, utf8.ToArray(), root, readMs);
+        return new BodyResult(null, utf8, root, readMs);
     }
 
     private static BodyResult Failed(RelayError error) => new(error, default, default, 0);
