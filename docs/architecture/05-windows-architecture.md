@@ -26,6 +26,7 @@ Contents
 4. [Relay internals](#4-relay-internals)
 5. [Desktop internals](#5-desktop-internals)
 6. [Work packages](#6-work-packages)
+7. [Changes after review](#7-changes-after-review)
 
 ---
 
@@ -76,9 +77,9 @@ now agree.
 | R-35 | Opening the Pairing view | Shows the placeholder; the QR appears on "Show QR" | Old AC-WIN-019: a QR is displayed "without a further click"; WIN-20: one decryption and one self-check per explicit "Show QR" | Navigation requests nothing; "Show QR" does. AC-WIN-019 is recorded as changed | W | decisions 5.3 |
 | R-36 | "The desktop command failed. Please retry." | Listed as a relay problem in Activity | RELAY-D7: there is no command channel | Kept as the activity line for an action of the window that threw (pause, show QR, reset, a mapping call) | W | screens 4.1 |
 
-Two protocol sentences could not be met to the letter with Kestrel and the framework's WebSocket. Both are
-invisible to a conforming phone; the protocol was reworded for both after the review (section 4.3, notes K-1
-and K-2; decisions, review rulings X-03 and X-04).
+Two protocol sentences cannot be met to the letter with Kestrel and the framework's WebSocket. Both are
+invisible to a conforming phone. The orchestrator accepted both, and protocol 5.3 and 10.5 now describe what
+Kestrel does (section 4.3, notes K-1 and K-2).
 
 ---
 
@@ -96,6 +97,7 @@ the `spike/windows` branch.
 | `windows/global.json`, `windows/nuget.config`, `windows/.editorconfig` | SDK pin (architecture 3.1), one package source, code style (spike) | WP-W00 |
 | `windows/Directory.Build.props` | Version `1.0.0`, target, nullable, warnings as errors, artefact output, test defaults (spike) | WP-W00 |
 | `windows/Directory.Packages.props` | The six allowed packages, pinned (spike; tests use `xunit` 2.9.3) | WP-W00 |
+| `packages.lock.json` beside every project file | The locked restore of architecture 3.1 (`RestorePackagesWithLockFile` is set in `Directory.Build.props`); committed, and changed only together with a package version | WP-W00 |
 | `windows/THIRD-PARTY-NOTICES.md` | Licences of the runtime and the two shipped packages | WP-W00 |
 | `windows/tests/Shared/DotnetHost.cs` | Finds the `dotnet` host that runs the tests (`DOTNET_HOST_PATH`, else `LIVECUE_DOTNET_EXE`, else `PATH`); linked into every test project | WP-W00, frozen |
 | `windows/tests/Shared/ManualTimeProvider.cs` | A `TimeProvider` the test advances by hand, with timers | WP-W00, frozen |
@@ -107,7 +109,7 @@ the `spike/windows` branch.
 
 | Path | Responsibility | Owner |
 |---|---|---|
-| `LiveCue.Relay.csproj` | Framework reference, two packages, embedded schemas, `InternalsVisibleTo` the test project | WP-W00 |
+| `LiveCue.Relay.csproj` | Framework reference, two packages, embedded schemas, the three lab script files embedded as linked resources from `asr/` (4.10), `InternalsVisibleTo` the test project | WP-W00 |
 | `Contracts/RelayOptions.cs` | `RelayOptions`, `ConnectionMode`, `RelayStatus` | WP-W00, frozen |
 | `Contracts/IRelay.cs` | `IRelay`, `PairingQr`, `IPairingExport` | WP-W00, frozen |
 | `Contracts/RelayEvents.cs` | Every event record and its enums | WP-W00, frozen |
@@ -163,7 +165,7 @@ the `spike/windows` branch.
 | `Answers/SchemaFiles.cs`, `Answers/Schemas/assist.schema.json`, `Answers/Schemas/summary.schema.json` | The embedded schemas and their rewrite into the data folder at start | WP-W03 |
 | `LocalModel/ILabRuntime.cs`, `LocalModel/ILocalModelController.cs` | PC model contracts | WP-W00, frozen |
 | `LocalModel/LocalModelController.cs` | Protocol 9.3 | WP-W04 |
-| `LocalModel/LabRuntime.cs`, `LocalModel/LabHealthParser.cs`, `LocalModel/LabScripts.cs` | Probe, the two script command lines of protocol 11.5 | WP-W04 |
+| `LocalModel/LabRuntime.cs`, `LocalModel/LabHealthParser.cs`, `LocalModel/LabScripts.cs` | Probe, the two script command lines of protocol 11.5, the relay's own script copies under `lab\` | WP-W04 (the foundation adds `LabScripts.WriteCopies` as a working method, because `RelayHost` calls it at start) |
 | `Speech/ISpeechBridge.cs`, `Speech/ILabSocketConnector.cs` | Speech contracts | WP-W00, frozen |
 | `Speech/SpeechBridge.cs`, `Speech/SpeechStream.cs`, `Speech/SpeechAdmission.cs` | Protocol 10.2, 10.4 | WP-W05 |
 | `Speech/PhoneSocket.cs`, `Speech/SpeechFrames.cs` | Receive with the C-20 bound, the relay's own frames, the close handshake | WP-W05 |
@@ -189,7 +191,7 @@ the `spike/windows` branch.
 | `DataFolder.cs`, `HostFileSystem.cs` | The data folder of architecture 3.5; production file system | WP-W06 |
 | `SettingsJson.cs`, `SettingsValidator.cs`, `SettingsStore.cs` | Format, rules and atomic save of `settings.json` | WP-W06 |
 | `LabFolderResolver.cs` | `asrLabFolder`, or `asr\` beside the executable | WP-W06 |
-| `CodexLocator.cs`, `CodexSignInCheck.cs` | Architecture 3.7 | WP-W06 |
+| `CodexLocator.cs`, `CodexSignInCheck.cs` | Architecture 3.7: discovery, the sign-in check and the version read | WP-W06 |
 | `PrerequisiteChecker.cs`, `PrerequisiteTexts.cs` | Architecture 3.11 checks 1 to 6 and their fixed texts | WP-W06 |
 | `EndpointResolver.cs` | Architecture 3.3 | WP-W06 |
 | `RelaySupervisor.cs`, `ProductionRelayFactory.cs` | Start sequence, event forwarding, stop | WP-W06 |
@@ -222,7 +224,7 @@ the `spike/windows` branch.
 | `App.xaml`, `App.xaml.cs` | Resource merge order, start-up, exit (spike) | WP-W08 |
 | `Composition/AppEnvironment.cs`, `Composition/AppServices.cs` | Command line; the composition root | WP-W08 |
 | `Infrastructure/WpfUiDispatcher.cs`, `Infrastructure/WpfClipboard.cs`, `Infrastructure/ShellLauncher.cs`, `Infrastructure/SafeInvoke.cs` | Production services; exception isolation per event | WP-W08 |
-| `Interop/NativeMethods.cs` | DWM attributes, console attach (spike) | WP-W08 |
+| `Interop/NativeMethods.cs` | DWM attributes, console attach (spike); `SetWindowDisplayAffinity` and `GetWindowDisplayAffinity` (5.12) | WP-W08 |
 | `Theming/ThemeManager.cs`, `Theming/ShadowColorExtension.cs` | The theme slot (spike) | WP-W08 |
 | `Theming/TextScale.cs`, `Theming/SystemPreferences.cs` | Windows text scale; transparency and animation settings | WP-W08 |
 | `Themes/Daylight.xaml`, `Themes/HighContrast.xaml` | Colour tokens (spike) | WP-W08 |
@@ -339,7 +341,9 @@ public enum RelayStatus
 /// <param name="AdvertisedEndpoint">Protocol 4.3. Canonicalised at start; a text that fails the grammar is the
 /// fault <see cref="RelayFaultCode.InvalidEndpoint"/>.</param>
 /// <param name="Mode">Protocol E-1.</param>
-/// <param name="DataDirectory">Existing folder. Holds <c>pairing.json</c> and <c>schemas\</c>.</param>
+/// <param name="DataDirectory">Existing folder. Holds <c>pairing.json</c>, <c>schemas\</c>, the relay's own
+/// launcher-script copies in <c>lab\</c> and the per-request Codex folders in <c>work\</c>
+/// (architecture 3.5).</param>
 /// <param name="CodexExecutablePath">Absolute path of <c>codex.exe</c>, or null when none was found. With null,
 /// the catalogue is unavailable and every answer run fails; the relay still starts.</param>
 /// <param name="LabFolder">Folder with the two launcher scripts, or null: PC speech is "not configured".</param>
@@ -594,6 +598,20 @@ public sealed record SpeechStreamChanged(
 /// <summary>The text of one speechComplete frame, cut like the frame (C-22).</summary>
 public sealed record SpeechText(DateTimeOffset At, string Text) : RelayEvent(At);
 
+/// <summary>
+/// The rejected-request counters of protocol 5.5: totals since this instance started. Published at most
+/// once per W-13 and only when a total changed, and once more before RelayStopped when a total changed
+/// since the last one. Never published per request.
+/// </summary>
+/// <param name="Malformed">Refused at E-1 for Origin or Sec-Fetch-Site, or at E-2.</param>
+/// <param name="TokenNotAccepted">Refused at E-3: a well-formed token that is not the accepted one.</param>
+/// <param name="FunnelInPrivateMode">Refused at E-1 in Private mode for Tailscale-Funnel-Request.</param>
+public sealed record EdgeStatistics(
+    DateTimeOffset At,
+    long Malformed,
+    long TokenNotAccepted,
+    long FunnelInPrivateMode) : RelayEvent(At);
+
 /// <summary>An internal problem: an exception type name and a fixed description, never exception text.</summary>
 public sealed record Diagnostic(DateTimeOffset At, string Source, string Message) : RelayEvent(At);
 ```
@@ -621,7 +639,8 @@ public sealed class RelayDependencies
     /// <summary>Runs Codex and the lab scripts.</summary>
     public IProcessRunner? Processes { get; init; }
 
-    /// <summary>Parent of the per-request Codex folders. Null means the OS temp folder.</summary>
+    /// <summary>Parent of the per-request Codex folders. Null means DataDirectory\work (protocol 12.2),
+    /// which the relay empties at each start. A folder given here is never emptied by the relay.</summary>
     public string? TempRoot { get; init; }
 
     internal IPairingProtector? PairingProtector { get; init; }
@@ -689,6 +708,7 @@ names:
 | `MaxPhoneFrameBytes` | C-20 | `MaxRelayFrameBytes` | C-21 |
 | `MaxTranscriptUnits` | C-22 | `MaxLabMessageBytes` | C-23 |
 | `MaxCodexOutputBytes` | C-24 | `MaxSpeechTextBytes` | C-25 |
+| `ModelIdMaxLength` | C-06 | `EdgeStatisticsInterval` | W-13 |
 | `MaxConnections` | C-30 | `MaxRequestsInFlight` | C-31 |
 | `MaxSpeechSockets` | C-32 | `HeadersTimeout`, `BodyTimeout`, `KeepAliveTimeout` | C-40, C-41, C-42 |
 | `AnswerDeadline` | C-43 | `CatalogAttemptTimeout`, `CatalogAttempts`, `CatalogRetryGap`, `CatalogCacheLife` | C-44 |
@@ -709,6 +729,12 @@ The two patterns C-03 and C-06 are checked by hand-written functions in `Edge/Ro
 protocol 14.1, named in Pascal case (`Unauthorized = "UNAUTHORIZED"`), plus
 `ClientDisconnected = "CLIENT_DISCONNECTED"`, which is never sent on the wire.
 
+**Whole-text shapes** (protocol section 1). Every shape of the protocol and of the settings file is matched
+against the whole text: a hand-written loop over exactly the characters given, or a `Regex` anchored with
+`\A` and `\z`. `^` and `$` are never used for a shape, because `$` also matches before a final line feed.
+This holds for C-02 (the bearer check of P-3), C-03, C-06, the prefix, the token hash, the ledger path and
+the Codex version text.
+
 ### 3.2 Relay: process runner (public seam)
 
 ```csharp
@@ -721,9 +747,11 @@ public enum EnvironmentPolicy
     /// <summary>The parent's environment unchanged. Used for the Tailscale CLI.</summary>
     Inherit,
 
-    /// <summary>The parent's environment minus every variable whose name starts with LIVECUE_, compared
-    /// without regard to case (protocol section 12). Used for every Codex process.</summary>
-    WithoutLiveCueVariables,
+    /// <summary>Only the names of protocol 12.6, compared without regard to case: the thirteen names of
+    /// protocol 11.5, plus HOMEDRIVE, HOMEPATH and CODEX_HOME, plus HTTPS_PROXY, HTTP_PROXY, ALL_PROXY and
+    /// NO_PROXY when the parent has them. Used for every Codex process: catalogue, sign-in check, version
+    /// read and answer run. (Before the review this member was WithoutLiveCueVariables.)</summary>
+    CodexAllowlist,
 
     /// <summary>Only the thirteen names of protocol 11.5, compared without regard to case. Used for the
     /// lab launcher scripts.</summary>
@@ -974,8 +1002,8 @@ internal sealed class RelayContext
     /// <summary>Options.AdvertisedEndpoint in canonical form.</summary>
     public string AdvertisedEndpoint { get; }
 
-    /// <summary>Dependencies.TempRoot, or the OS temp folder.</summary>
-    public string TempRoot => Dependencies.TempRoot ?? Path.GetTempPath();
+    /// <summary>Dependencies.TempRoot, or DataDirectory\work. Never the OS temp folder.</summary>
+    public string TempRoot => Dependencies.TempRoot ?? Path.Combine(Options.DataDirectory, "work");
 }
 ```
 
@@ -1132,13 +1160,15 @@ internal interface IPairingService
     /// </summary>
     Task<bool> LoadOrCreateAsync(CancellationToken ct);
 
-    /// <summary>Step E-3: SHA-256 of the 43 characters against the accepted hash, constant time. Reads the
-    /// accepted hash at the moment of the call. Allocation-free.</summary>
-    bool Verify(ReadOnlySpan<char> token);
-
-    /// <summary>A token that is cancelled when the pairing accepted right now is revoked by a reset.
-    /// The edge captures it immediately after Verify returned true.</summary>
-    CancellationToken CurrentRevocation { get; }
+    /// <summary>
+    /// Step E-3: SHA-256 of the 43 characters against the accepted hash, constant time. Allocation-free.
+    /// The accepted hash and its revocation token are one immutable object, read once, at the moment of the
+    /// call: on true, <paramref name="revoked"/> is the token of exactly the pairing that was verified, and
+    /// it is cancelled when that pairing is revoked by a reset, even a reset that completes between this
+    /// call and its return. On false it is CancellationToken.None. There is no separate "current
+    /// revocation" member: reading the two apart would let one request survive a reset.
+    /// </summary>
+    bool TryVerify(ReadOnlySpan<char> token, out CancellationToken revoked);
 
     /// <summary>Protocol 5.5: true when <paramref name="headerValue"/> equals the nonce of the self-check
     /// in progress (constant time). False when no check is in progress.</summary>
@@ -1520,9 +1550,16 @@ public sealed record RelaySettings
 
     public string? CodexExecutablePath { get; init; }
 
+    /// <summary>The Codex version text (architecture 3.7) for which the owner last confirmed the live
+    /// containment check, or null. Written only by "Mark as checked" in the Assistant settings.</summary>
+    public string? CodexContainmentCheckedVersion { get; init; }
+
     public string? AsrLabFolder { get; init; }
 
     public int AsrLabPort { get; init; } = 47842;
+
+    /// <summary>True: the desktop window is excluded from screen capture (architecture 3.5).</summary>
+    public bool HideFromScreenCapture { get; init; } = true;
 
     public IReadOnlyList<OwnedMapping> OwnedMappings { get; init; } = [];
 
@@ -1547,8 +1584,10 @@ public enum SettingsField
     PublicHttpsPort,
     PublicPathPrefix,
     CodexExecutablePath,
+    CodexContainmentCheckedVersion,
     AsrLabFolder,
     AsrLabPort,
+    HideFromScreenCapture,
     OwnedMappings,
 }
 
@@ -1566,10 +1605,12 @@ public enum SettingsProblemCode
     /// <summary>Equal to the other port it must differ from.</summary>
     Duplicate,
 
-    /// <summary>Not one of the allowed values (mode, public port).</summary>
+    /// <summary>Not one of the allowed values (mode, public port); a private port of 443, 8443 or 10000;
+    /// a lab folder that is not a drive-letter path on a fixed local volume (UNC, device namespace,
+    /// relative, drive-relative, network or removable drive).</summary>
     NotAllowed,
 
-    /// <summary>Does not match its pattern (prefix, ledger entry).</summary>
+    /// <summary>Does not match its pattern as a whole text (prefix, ledger entry, Codex version text).</summary>
     BadFormat,
 
     /// <summary>Not an absolute path, or the file or folder does not exist.</summary>
@@ -1591,9 +1632,14 @@ public interface ISettingsValidator
     /// <summary>Every rule. Used before a save. Empty when valid. Order follows <see cref="SettingsField"/>.</summary>
     IReadOnlyList<SettingsProblem> Validate(RelaySettings settings);
 
-    /// <summary>The rules that need no file system (everything except NotFound and MissingScripts). Used
-    /// when the file is loaded, so that a folder deleted later does not invalidate the whole file.</summary>
+    /// <summary>The rules that need no file system (everything except NotFound, MissingScripts and the
+    /// fixed-local-volume half of the lab folder rule; the path-form half is checked here). Used when the
+    /// file is loaded, so that a folder deleted later does not invalidate the whole file.</summary>
     IReadOnlyList<SettingsProblem> ValidateStructure(RelaySettings settings);
+
+    /// <summary>True when one ledger entry passes the ownedMappings rule by itself. Used to keep the
+    /// valid entries of a file that failed validation as a whole (architecture 3.5).</summary>
+    bool IsValidLedgerEntry(OwnedMapping entry);
 }
 ```
 
@@ -1607,14 +1653,16 @@ public enum SettingsFileState
     Missing,
     Loaded,
 
-    /// <summary>The file parsed but failed validation. It is left untouched; defaults apply.</summary>
+    /// <summary>The file parsed but failed validation. It is left untouched; defaults apply, except
+    /// that every ledger entry of the file that is valid by itself is kept.</summary>
     Invalid,
 
     /// <summary>The file could not be read or is not the expected JSON. Left untouched; defaults apply.</summary>
     Unreadable,
 }
 
-/// <param name="Settings">What to run on: the file's values when Loaded, otherwise the defaults.</param>
+/// <param name="Settings">What to run on: the file's values when Loaded; otherwise the defaults, and for
+/// Invalid the defaults with OwnedMappings set to the file's entries that are valid by themselves.</param>
 public sealed record SettingsLoadResult(
     RelaySettings Settings,
     SettingsFileState State,
@@ -1642,7 +1690,8 @@ public interface ISettingsStore
     /// <summary>
     /// Validates, then writes atomically (write settings.json.pending, then replace). Throws
     /// <see cref="SettingsValidationException"/> or <see cref="IOException"/>. A failed save leaves the
-    /// previous file intact.
+    /// previous file intact. When the file on disk is Invalid or Unreadable, its bytes are first copied to
+    /// settings.json.invalid (replacing an older copy); if that copy fails, nothing is written.
     /// </summary>
     void Save(RelaySettings settings);
 }
@@ -1659,6 +1708,14 @@ public interface IHostFileSystem
 {
     /// <summary>The folder of the running executable (AppContext.BaseDirectory).</summary>
     string BaseDirectory { get; }
+
+    /// <summary>The Program Files folder from the known-folder API
+    /// (Environment.GetFolderPath(SpecialFolder.ProgramFiles)), never from an environment variable.</summary>
+    string ProgramFilesDirectory { get; }
+
+    /// <summary>True when <paramref name="path"/> starts with a drive letter, a colon and a backslash and
+    /// that drive is a fixed local volume (DriveType.Fixed). False for every other form and on any error.</summary>
+    bool IsOnFixedLocalDrive(string path);
 
     string? GetEnvironmentVariable(string name);
 
@@ -1705,11 +1762,21 @@ public interface ICodexLocator
     CodexLocation Locate(string? configuredPath);
 }
 
-/// <summary>Runs "&lt;codex&gt; login status" (limit in architecture 3.7). Output is discarded.</summary>
+/// <summary>The two questions asked of the Codex executable itself (architecture 3.7). Both run it with
+/// the CodexAllowlist environment.</summary>
 public interface ICodexSignInCheck
 {
-    /// <summary>True for exit code 0. False for anything else, including a time-out.</summary>
+    /// <summary>Runs "&lt;codex&gt; login status" (limit in architecture 3.7); its output is discarded.
+    /// True for exit code 0. False for anything else, including a time-out.</summary>
     Task<bool> IsSignedInAsync(string codexPath, CancellationToken ct);
+
+    /// <summary>
+    /// Runs "&lt;codex&gt; --version" (limit 15 s, at most 256 bytes of output kept). Returns the first
+    /// line, trimmed, when the exit code is 0 and the line is 1 to 64 characters of letters, digits,
+    /// space, '.', '_', '+' and '-'. Null for anything else. This is the only Codex output that is ever
+    /// kept or shown. Never throws except for cancellation.
+    /// </summary>
+    Task<string?> ReadVersionAsync(string codexPath, CancellationToken ct);
 }
 ```
 
@@ -1749,16 +1816,29 @@ public sealed record PrerequisiteOptions(
     bool SkipTailscale = false);
 
 /// <summary>All six results, always in id order.</summary>
+/// <param name="CodexVersion">The version text of the Codex that was found (ICodexSignInCheck.ReadVersionAsync),
+/// or null when no Codex was found or its version could not be read.</param>
 public sealed record PrerequisiteReport(
     IReadOnlyList<PrerequisiteResult> Results,
     SettingsLoadResult SettingsLoad,
     string? CodexExecutablePath,
-    string? DnsName)
+    string? DnsName,
+    string? CodexVersion = null)
 {
     /// <summary>The first failed check in id order, or null.</summary>
     public PrerequisiteResult? FirstFailure => Results.FirstOrDefault(r => r.State == PrerequisiteState.Failed);
 
     public bool Passed => FirstFailure is null;
+
+    /// <summary>
+    /// True when a Codex was found and its version is unknown or is not the version of the last
+    /// containment check (settings, CodexContainmentCheckedVersion; ordinal comparison). A warning only:
+    /// it never makes a check fail and nothing is refused because of it (architecture 3.7).
+    /// </summary>
+    public bool ContainmentCheckIsStale =>
+        CodexExecutablePath is not null
+        && (CodexVersion is null
+            || !string.Equals(CodexVersion, SettingsLoad.Settings.CodexContainmentCheckedVersion, StringComparison.Ordinal));
 }
 
 /// <summary>
@@ -1851,7 +1931,7 @@ public sealed partial class MappingCommand
 
     public static MappingCommand ApplyPrivate(int privateHttpsPort, int relayPort)
     {
-        RequirePort(privateHttpsPort, 1);
+        RequirePrivatePort(privateHttpsPort);
         RequireRelayPort(relayPort);
         return new(MappingCommandKind.ApplyPrivate, privateHttpsPort, "/", relayPort,
             ["serve", "--bg", "--https=" + Text(privateHttpsPort), TargetFor(relayPort)]);
@@ -1881,7 +1961,9 @@ public sealed partial class MappingCommand
             ["funnel", "--https=" + Text(publicHttpsPort), "--set-path=" + prefix, "off"]);
     }
 
-    [GeneratedRegex("^/[a-z0-9][a-z0-9-]{0,31}$", RegexOptions.CultureInvariant)]
+    // \A and \z, not ^ and $: "$" also matches before a final line feed, which would let a prefix that ends
+    // in a line break reach the command line and the confirmation dialog (protocol section 1, shapes).
+    [GeneratedRegex(@"\A/[a-z0-9][a-z0-9-]{0,31}\z", RegexOptions.CultureInvariant)]
     private static partial Regex PrefixPattern();
 
     private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);
@@ -1890,6 +1972,17 @@ public sealed partial class MappingCommand
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(port, minimum);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
+    }
+
+    // A tailnet-only listener is never created on a port on which Funnel can be switched on
+    // (architecture 3.5 and TS-4). RemovePrivate keeps RequirePort: removing is always allowed.
+    private static void RequirePrivatePort(int port)
+    {
+        RequirePort(port, 1);
+        if (port is 443 or 8443 or 10000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(port));
+        }
     }
 
     private static void RequireRelayPort(int relayPort)
@@ -2022,19 +2115,45 @@ public sealed record MappingInspection(
     int HttpsPort,
     string Path);
 
+/// <summary>
+/// One row of the exposure report (architecture 3.9): a live handler, on any port and mount and in any
+/// structure of the serve status, whose kind is Proxy and whose target is exactly
+/// MappingCommand.TargetFor(relay port). It is what Tailscale forwards to the relay, whoever created it.
+/// </summary>
+/// <param name="FunnelOn">Funnel is on for that port: the handler is reachable from the internet.</param>
+/// <param name="Foreground">It belongs to a foreground session or a service.</param>
+/// <param name="LedgerEntry">The ledger entry with the same mode, port, path and target, or null.</param>
+public sealed record ExposedHandler(
+    int HttpsPort,
+    string Mount,
+    bool FunnelOn,
+    bool Foreground,
+    OwnedMapping? LedgerEntry);
+
 /// <summary>Result of one read-only inspection.</summary>
 /// <param name="StaleOwned">Ledger entries that still match a live handler exactly and are not the selected
 /// mode's mapping at its current port and path: the other mode's mapping, or one left at an old port.
 /// Each is a standing warning with "Remove".</param>
 /// <param name="StatusFailure">None when the serve status was read.</param>
+/// <param name="Exposure">The exposure report, sorted by port and then mount (ordinal). Empty when the
+/// serve status could not be read: StatusFailure then says that exposure is unknown, not absent.</param>
 public sealed record ConnectionInspection(
     MappingInspection Private,
     MappingInspection Public,
     IReadOnlyList<OwnedMapping> StaleOwned,
     TailscaleReadFailure StatusFailure,
-    DateTimeOffset At)
+    DateTimeOffset At,
+    IReadOnlyList<ExposedHandler> Exposure)
 {
     public MappingInspection For(ConnectionMode mode) => mode == ConnectionMode.Private ? Private : Public;
+
+    /// <summary>True when some handler that forwards to the relay port is published through Funnel. In
+    /// Private mode the supervisor does not start the relay while this is true (architecture 3.11, 6a).</summary>
+    public bool HasFunnelExposure => Exposure.Any(handler => handler.FunnelOn);
+
+    /// <summary>The rows that are not in the ledger: shown with the removal command as text, never removed
+    /// by the application (TS-8).</summary>
+    public IEnumerable<ExposedHandler> UnownedExposure => Exposure.Where(handler => handler.LedgerEntry is null);
 }
 
 /// <summary>What a confirmation dialog shows and what will run if it is confirmed.</summary>
@@ -2169,7 +2288,17 @@ public sealed record RelayEventForwarded(DateTimeOffset At, RelayEvent Event) : 
 /// <summary>A read-only mapping inspection finished (step 8 of architecture 3.11, or on demand).</summary>
 public sealed record ConnectionInspected(DateTimeOffset At, ConnectionInspection Inspection) : HostEvent(At);
 
-public enum StartOutcome { Started, PrerequisiteFailed, RelayFault, AlreadyRunning }
+public enum StartOutcome
+{
+    Started,
+    PrerequisiteFailed,
+    RelayFault,
+    AlreadyRunning,
+
+    /// <summary>Check 6a of architecture 3.11: Private mode, and a handler with Funnel on forwards to the
+    /// relay port. No relay instance was created. FailureText carries the status line.</summary>
+    ExposedInPrivateMode,
+}
 
 /// <param name="FailureText">The status-line text of architecture 3.11 for the failure, or null.</param>
 public sealed record StartResult(
@@ -2199,8 +2328,10 @@ public interface IRelaySupervisor : IAsyncDisposable
     ChannelReader<HostEvent> Events { get; }
 
     /// <summary>
-    /// Steps 1 to 8 of architecture 3.11. Never throws for an expected failure: the result and the events
-    /// carry it. With State other than Stopped it returns AlreadyRunning and does nothing.
+    /// Steps 1 to 8 of architecture 3.11, check 6a included. Never throws for an expected failure: the
+    /// result and the events carry it. With State other than Stopped it returns AlreadyRunning and does
+    /// nothing. For ExposedInPrivateMode it publishes ConnectionInspected with the inspection that showed
+    /// the exposure, creates no relay and returns with State Stopped.
     /// </summary>
     Task<StartResult> StartAsync(CancellationToken ct);
 
@@ -2276,6 +2407,16 @@ WP-W07): `HostFileSystem()`; `SettingsValidator(IHostFileSystem files)`;
 `MappingManager(ITailscaleCli tailscale, ISettingsStore settings, ISettingsValidator validator, TimeProvider clock)`;
 `ProductionRelayFactory(TimeProvider clock, IProcessRunner processes)`;
 `RelaySupervisor(SupervisorOptions options, ISettingsStore settings, IPrerequisiteChecker prerequisites, IMappingManager mappings, IEndpointResolver endpoints, IRelayFactory relays, IHostFileSystem files, TimeProvider clock)`.
+
+Text helpers the review added, with fixed signatures and the same owners as the ones listed next:
+`PrerequisiteTexts.StartFault(RelayFaultCode code, int port, bool mappingPointsAtPort)`, an overload beside
+the two-parameter form, returns the second port-in-use text of architecture 3.11 when the flag is true and
+otherwise what the two-parameter form returns;
+`PrerequisiteTexts.ExposedInPrivateMode` (a constant) is the text of check 6a;
+`PrerequisiteTexts.ContainmentWarning(string? version, string? checkedVersion)` returns the warning of
+architecture 3.7;
+`MappingTexts.Exposure(ExposedHandler handler)` and `MappingTexts.ManualRemoval(ExposedHandler handler)`
+return the sentence and the removal command text of an exposure warning (4.15).
 
 Static text helpers with fixed signatures (WP-W06 and WP-W07 own the files):
 `PrerequisiteTexts.Failure(PrerequisiteId id)` returns the status-line text of architecture 3.11;
@@ -2597,6 +2738,11 @@ public interface ILiveViewModel : INotifyPropertyChanged
     /// <summary>The "connection not set up" banner (R-14), or null.</summary>
     BannerModel? ConnectionBanner { get; }
 
+    /// <summary>The exposure warning (architecture 3.9, section 5.5), or null: a mapping that LiveCue does
+    /// not manage, or a public one in Private mode, forwards to the relay port; or the serve status could
+    /// not be read. Its one action opens Settings.</summary>
+    BannerModel? ExposureBanner { get; }
+
     /// <summary>True in Stopped, Checking, PrerequisiteFailed, Starting and Faulted.</summary>
     bool IsStartVisible { get; }
 
@@ -2778,6 +2924,15 @@ public interface IActivityViewModel : INotifyPropertyChanged
     /// <summary>The whole log as text, as it would be copied: for tests and the self-test.</summary>
     string Text { get; }
 
+    /// <summary>The three totals of the latest EdgeStatistics event (protocol 5.5), shown as plain numbers
+    /// with fixed captions. 0 until the first event and again from each relay start. They are not log
+    /// entries, are not cleared by "Clear activity" and raise no alert.</summary>
+    long RejectedMalformed { get; }
+
+    long RejectedTokenNotAccepted { get; }
+
+    long RejectedFunnelInPrivateMode { get; }
+
     ICommand ClearActivityCommand { get; }
 }
 ```
@@ -2793,6 +2948,11 @@ namespace LiveCue.Desktop;
 
 /// <summary>One stale mapping of ours and the sentence that describes it.</summary>
 public sealed record StaleMappingRow(OwnedMapping Entry, string Text);
+
+/// <summary>One row of the exposure report that is not in the ledger: the sentence that describes it and
+/// the removal command as text for the owner to run. LiveCue never runs it. CommandText is empty when no
+/// command can be shown safely (4.15).</summary>
+public sealed record UnownedExposureRow(ExposedHandler Handler, string Text, string CommandText);
 
 /// <summary>The Settings page (screens section 5). Field properties are two-way and hold the text as
 /// typed; nothing is saved until SaveCommand.</summary>
@@ -2836,6 +2996,14 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     /// each with a "Remove…" button.</summary>
     IReadOnlyList<StaleMappingRow> StaleMappings { get; }
 
+    /// <summary>One standing warning per handler that forwards to the relay port and is not in the ledger,
+    /// each with its removal command as selectable text and no button but "Check again".</summary>
+    IReadOnlyList<UnownedExposureRow> UnownedExposures { get; }
+
+    /// <summary>"Tailscale's configuration could not be read, so LiveCue cannot tell what is exposed.", or
+    /// null when the last inspection read the serve status.</summary>
+    string? ExposureUnknownText { get; }
+
     /// <summary>"The relay is still using the previous connection settings…", or null.</summary>
     BannerModel? RestartNotice { get; }
 
@@ -2853,6 +3021,17 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     /// <summary>CodexLoginStatus.</summary>
     StatusIndicator CodexLoginStatus { get; }
 
+    /// <summary>CodexVersionStatus: the version text of the Codex in use, or "Unknown" (architecture 3.7).
+    /// Success tone when the containment check was run for this version, warning tone otherwise.</summary>
+    StatusIndicator CodexVersionStatus { get; }
+
+    /// <summary>The containment warning of architecture 3.7, or "Containment check run for this
+    /// version."; null when no Codex was found.</summary>
+    string? CodexVersionDetail { get; }
+
+    /// <summary>True when a version was read and it is not the recorded one.</summary>
+    bool CanMarkContainmentChecked { get; }
+
     bool IsCheckingAssistant { get; }
 
     /// <summary>Blank means automatic.</summary>
@@ -2867,6 +3046,10 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     StatusIndicator LoadedModelStatus { get; }
 
     string SpeechCaption { get; }
+
+    /// <summary>HideFromCaptureToggle: two-way, part of the form like every field; takes effect on the
+    /// window when the settings are saved.</summary>
+    bool HideFromScreenCapture { get; set; }
 
     string Version { get; }
 
@@ -2887,6 +3070,10 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     ICommand CheckMappingCommand { get; }
 
     ICommand CheckAssistantCommand { get; }
+
+    /// <summary>"Mark as checked": saves the settings with CodexContainmentCheckedVersion set to the
+    /// version in use. It changes nothing else, and unsaved form changes are not saved with it.</summary>
+    ICommand MarkContainmentCheckedCommand { get; }
 
     ICommand CopyAddressCommand { get; }
 
@@ -2942,7 +3129,10 @@ public interface IMappingDialogViewModel : IDialogViewModel
 
 `Contracts/AutomationIds.cs` is a `public static class AutomationIds` with one `const string` per id of
 screens section 9, named exactly like its value. Views set `AutomationProperties.AutomationId` from it with
-`x:Static`; the self-test finds elements by it.
+`x:Static`; the self-test finds elements by it. The review added six elements that screens section 9 does
+not list yet; their ids are constants of the same class: `ExposureBanner`, `ActivityRejectedCounts`,
+`UnownedExposureList`, `CodexVersionStatus`, `MarkContainmentCheckedButton`, `HideFromCaptureToggle`
+(section 7.4, hand-off 1).
 
 Constructor signatures the composition root relies on (stubs in the foundation, kept by the owning package):
 `DesktopSession(IRelaySupervisor supervisor, IMappingManager mappings, IEndpointResolver endpoints, IUiDispatcher ui, TimeProvider clock)`;
@@ -2979,6 +3169,7 @@ Every other number is a protocol constant (cited by id) or an architecture value
 | W-10 | 1 s | Interval of the desktop's presence and countdown tick |
 | W-11 | W-02 plus 1 s | What closing the window waits for the relay before the process exits anyway |
 | W-12 | 120 s | Watchdog of the self-test: no result means exit code 3 |
+| W-13 | 60 s | Shortest time between two `EdgeStatistics` events (protocol 5.5) |
 
 ### 4.2 Start, stop, pause, faults (`Core/RelayHost.cs`)
 
@@ -2991,7 +3182,7 @@ Every other number is a protocol constant (cited by id) or an architecture value
 | 2 | Canonicalise `AdvertisedEndpoint` (protocol 4.3). The canonical text is what is advertised (P2-148) | `InvalidEndpoint` |
 | 3 | `Port` is 0 or in 1024 to 65535, and is not 47831. `DataDirectory` exists | `StartFailed` |
 | 4 | `Pairing.LoadOrCreateAsync` | `PairingStoreUnreadable` |
-| 5 | Rewrite `schemas\assist.schema.json` and `schemas\summary.schema.json` from the embedded copies | `StartFailed` |
+| 5 | Rewrite `schemas\assist.schema.json` and `schemas\summary.schema.json` from the embedded copies. Rewrite `lab\Start-ASR-Lab.ps1`, `lab\Stop-ASR-Lab.ps1` and `lab\LabCommon.ps1` from the embedded copies (`LabScripts.WriteCopies`, protocol 11.5). When `Dependencies.TempRoot` is null: create `work\` and delete everything in it (protocol 12.2); a folder that cannot be deleted is left and reported as a `Diagnostic`, not a fault | `StartFailed` |
 | 6 | Build and start the Kestrel application (4.3). An address-in-use error from the listener is recognised by its exception type, not its text | `PortInUse`, otherwise `StartFailed` |
 | 7 | Read `BoundPort`; Status `Running`; publish `RelayStarted`; for an existing pairing publish `Notice(PairingRestored)` | |
 | 8 | When `WarmCatalogOnStart` and a Codex path exists: start one catalogue read and ignore its outcome | |
@@ -3006,7 +3197,8 @@ process and end, and every speech stream send `RELAY_STOPPING` and close with 10
 not answered: their connections are aborted with the listener (the phone sees a transport failure, or the
 edge proxy's 502, which it shows as `L-NO-RELAY`). Then wait until no request and no speech socket remains or
 until C-58 has passed, call the application's `StopAsync` with a token that fires when W-02 has passed since
-step one, dispose it, set Status `Stopped`, publish `RelayStopped(Requested)` and complete the event channel.
+step one, dispose it, set Status `Stopped`, publish a last `EdgeStatistics` when a counter changed since the
+previous one, publish `RelayStopped(Requested)` and complete the event channel.
 The lab container and any running lab script are left alone (architecture 3.8).
 
 Pause: `SetAcceptingAsync(false)` flips `Access.Accepting`, cancels `Access.WhileAccepting`, then publishes
@@ -3027,6 +3219,7 @@ no developer exception page. The pipeline is `UseWebSockets` followed by one ter
 | Kestrel setting | Value |
 |---|---|
 | `Listen` | `IPAddress.Loopback` and `Options.Port` only; `ListenOptions.Protocols = Http1` |
+| Listen socket | Created through `SocketTransportOptions.CreateBoundListenSocket` with `ExclusiveAddressUse` true, so no second socket can share the port while the relay runs (protocol 5.1). To confirm on .NET 10 whether Kestrel already sets it; the explicit setting stays either way |
 | Connection middleware | `ConnectionGate` (below) |
 | `AddServerHeader` | false |
 | `Limits.MaxRequestLineSize`, `MaxRequestHeadersTotalSize`, `MaxRequestHeaderCount` | C-19 |
@@ -3045,14 +3238,15 @@ Notes on what Kestrel does and cannot do:
 
 | Id | Fact | Consequence |
 |---|---|---|
-| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. Protocol 5.2 and 5.3 say the same since the review (X-03) |
-| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Protocol C-57 and 10.5 say "keep-alive frame" since the review (X-04), and the device check covers it (iPhone design 6.5 item 10). Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
+| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. Accepted by the orchestrator: protocol 5.3 now reads "besides `Content-Length`, `Date` and the connection headers" |
+| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Accepted by the orchestrator: protocol 10.5 now says "keep-alive frame" and names the unsolicited Pong. Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
 | K-3 | The framework WebSocket has no maximum message size | `PhoneSocket` receives into a buffer of C-20 plus one byte and stops at the first byte beyond C-20 |
 | K-4 | After a response to a request whose body the application did not read, Kestrel reads and discards the rest of the body unless the connection is closing | Every response written before the body was completely read carries `Connection: close`. No relay code and no Kestrel code reads a body before E-3 passes |
 | K-5 | A body below the minimum data rate makes the body read throw `BadHttpRequestException` | `BodyReader` turns it into `408 REQUEST_TIMEOUT` when the response has not started; otherwise Kestrel's bare 408 stands. Both are allowed by protocol 5.1 |
 | K-6 | A request line or header block that breaks C-19 or C-40 never reaches the pipeline | Bare 400, 408, 414 or 431 from the server core, as protocol 5.1 says |
 | K-7 | `IHttpRequestFeature.RawTarget` is the request target exactly as sent | E-4 compares that text and never a decoded path |
 | K-8 | A header that is present with an empty value is still a key of the header dictionary | E-1 uses `ContainsKey`; a test sends `Origin:` with no value |
+| K-9 | For a request with both `Content-Length` and `Transfer-Encoding`, Kestrel is expected to let `Transfer-Encoding` win and drop `Content-Length` instead of rejecting (to confirm on .NET 10) | Either outcome is accepted: a bare 400, or chunked framing with the connection closed after the response (test plan ST-21). What must hold is that the request is never framed by `Content-Length`. **No relay code parses framing by hand to "fix" this.** The defence against request smuggling through the proxy's reused loopback connection is K-4, and it has its own test (ST-20) |
 
 ### 4.4 The request pipeline (`Edge/EdgePipeline.cs`)
 
@@ -3064,7 +3258,7 @@ One method, steps in this order. "Stops" means the step writes its answer and th
 | P-1 | `Arrive` | Takes the arrival timestamp from the clock. Notes whether the request declares a body (`Content-Length` above 0, or `Transfer-Encoding`) | |
 | P-2 | `RefuseBrowserAndFunnel` (E-1) | `Origin` or `Sec-Fetch-Site` present; in Private mode also `Tailscale-Funnel-Request` present | `401 UNAUTHORIZED` |
 | P-3 | `CheckBearerShape` (E-2) | `Authorization` has exactly one value; its length is 7 plus C-02; it starts with `Bearer ` (ordinal); the rest is in the token alphabet | `401 UNAUTHORIZED` |
-| P-4 | `CheckToken` (E-3) | `Pairing.Verify`; on success captures `Pairing.CurrentRevocation` | `401 UNAUTHORIZED` |
+| P-4 | `CheckToken` (E-3) | `Pairing.TryVerify(token, out revoked)`: one call gives the result and the revocation token of exactly the pairing that was verified. That token is the request's `PairingRevoked` | `401 UNAUTHORIZED` |
 | P-5 | `Presence` | When `X-LiveCue-Self-Check` has exactly one value and `Pairing.IsSelfCheckNonce` is true: `NoteSelfCheckArrival(funnel header present)` and no event. Otherwise publish `PhoneSeen` | |
 | P-6 | `MatchRoute` (E-4) | `RouteTable.Match(method, RawTarget)`. Route 10 also needs `WebSockets.IsWebSocketRequest` | `404 NOT_FOUND` |
 | P-7 | `Speech branch` | Route 10 only: call `SpeechRoute` now and skip P-8 to P-11. The route does E-7 for sockets itself, before the upgrade | see 4.11 |
@@ -3076,6 +3270,15 @@ One method, steps in this order. "Stops" means the step writes its answer and th
 
 The three 401 answers come from one pre-built byte array through one code path. A 401, 404, 400 or 429 on a
 request that declared a body carries `Connection: close` (K-4).
+
+**Rejected-request counters** (protocol 5.5). Three `long` fields of the pipeline, each changed only with
+`Interlocked.Increment`, on the 401 path and nowhere else: P-2 refusing for `Tailscale-Funnel-Request` in
+Private mode increments `FunnelInPrivateMode` (checked first, so such a request is counted there even when it
+also carries a browser header); P-2 refusing for `Origin` or `Sec-Fetch-Site`, and P-3, increment
+`Malformed`; P-4 increments `TokenNotAccepted`. Nothing else happens on that path: no allocation, no event,
+no clock read. A clock timer of W-13, created at start, publishes one `EdgeStatistics` with the three totals
+when at least one changed since the last publication, and `StopAsync` publishes a last one (4.2). The
+counters belong to the relay instance and start at zero with it.
 
 What P-11 does when the handler does not write a response itself:
 
@@ -3120,9 +3323,12 @@ written as UTF-8.
 ### 4.7 Pairing (`Pairing/`)
 
 **Token.** 32 bytes from `RandomNumberGenerator`, encoded with `Base64Url` (C-02). Hash: SHA-256 of the 43
-ASCII bytes. `Verify` encodes the characters into a stack buffer, hashes into a stack buffer and compares with
-`CryptographicOperations.FixedTimeEquals` against the accepted hash, which is one immutable 32-byte array read
-through `Volatile.Read` (protocol E-3: "read at this moment").
+ASCII bytes. `TryVerify` encodes the characters into a stack buffer, hashes into a stack buffer and compares
+with `CryptographicOperations.FixedTimeEquals` against the accepted hash. The accepted hash and the
+revocation source of that pairing are the two fields of **one immutable object** (`AcceptedPairing`, private
+to `PairingService`), held in one field and read once per call through `Volatile.Read` (protocol E-3: "read
+at this moment"). `TryVerify` returns the token of that same object. A request can therefore never be
+verified against one pairing and linked to the revocation token of the next.
 
 **File.** `pairing.json` exactly as architecture 3.5: UTF-8 without a byte-order mark, two-space indent, line
 feeds, the four members in the order `schemaVersion`, `tokenHash`, `protectedToken`, `createdAt`; `createdAt`
@@ -3153,9 +3359,12 @@ row-major, with no quiet zone.
 **Show** (`PairingService.ShowAsync`, one at a time): read and verify the file as in Load; build the matrix;
 publish `PairingShown`; start the self-check; return. One decryption per call (WIN-20).
 
-**Reset** (`ResetAsync`): create a token; protect it; write the file atomically; only then swap the accepted
-hash, cancel the revocation source and replace it with a new one; publish `Notice(PairingReset)`; continue as
+**Reset** (`ResetAsync`): create a token; protect it; write the file atomically; only then build a new
+`AcceptedPairing` (the new hash and a new revocation source), swap it in with one `Interlocked.Exchange`, and
+cancel the revocation source of the object that was swapped out; publish `Notice(PairingReset)`; continue as
 Show with the token in hand. If the write throws, nothing changed and the call throws `IOException`.
+Because hash and source travel together, every request that passed E-3 with the old token, whenever it read
+the object, holds a token that this reset cancels (test plan ST-12).
 
 **Self-check** (`SelfCheck.RunAsync`, background): create a nonce (16 random bytes, `Base64Url`); register it
 (at most W-07 at once); call `ISelfCheckClient.GetHealthAsync(endpoint + "v1/health", token, nonce)` under a
@@ -3173,10 +3382,10 @@ Three layers, composed as `CatalogReader` over `CachedCatalogSource` over the so
 
 | Layer | Algorithm |
 |---|---|
-| `CodexCatalogSource` (one attempt, protocol 12.1) | No Codex path: fail. `StartSessionAsync` with arguments `app-server`, `--listen`, `stdio://`; environment `WithoutLiveCueVariables`; output limit C-24; time limit C-44 (per attempt). Write line 1; read lines until an object with `id` 1 (skip lines that are not JSON objects or carry another id); `error` present: fail. Write lines 3 and 4. Read until `id` 2; fail on `error` or when `result.data` is not an array. Map each element that has a string `model` to `RawCatalogEntry`; `hidden` is truthy unless it is absent, `false` or `null`; efforts are the string values of `supportedReasoningEfforts[].reasoningEffort`. `nextCursor` is ignored. Dispose the session in every case (closes standard input, kills the tree). Any `ProcessFailedException`, end of output or malformed step is `CatalogReadException` |
+| `CodexCatalogSource` (one attempt, protocol 12.1) | No Codex path: fail. `StartSessionAsync` with arguments `app-server`, `--listen`, `stdio://`; environment `CodexAllowlist`; output limit C-24; time limit C-44 (per attempt). Write line 1; read lines until an object with `id` 1 (skip lines that are not JSON objects or carry another id); `error` present: fail. Write lines 3 and 4. Read until `id` 2; fail on `error` or when `result.data` is not an array. Map each element that has a string `model` to `RawCatalogEntry`; `hidden` is truthy unless it is absent, `false` or `null`; efforts are the string values of `supportedReasoningEfforts[].reasoningEffort`. `nextCursor` is ignored. Dispose the session in every case (closes standard input, kills the tree). Any `ProcessFailedException`, end of output or malformed step is `CatalogReadException` |
 | `CachedCatalogSource` | Holds the last successful list and its time. Fresh for the cache life of C-44: return it. Otherwise join the read in progress or start one; that read runs under `Access.Stopping`, not under a caller's token, and callers wait with `WaitAsync(ct)`. Success replaces the cache; failure caches nothing |
 | `CatalogReader` | Up to the attempts of C-44, with the gap of C-44 between them: read the source, apply `OfferFilter`, store the result as last good (also when it is empty), return a deep copy. After the last failed attempt: a deep copy of last good when one exists, otherwise `RelayException(ASSISTANT_CATALOG_UNAVAILABLE)` |
-| `OfferFilter` (protocol 7.1) | Drop hidden entries and ids that fail C-06 (`gpt-` followed by one or more of lower-case letters, digits, `.`, `-`). Keep efforts that are in C-05, in order, without duplicates; for ids in C-07 remove `none` and put it first. Drop an entry left with no effort. `Name` is the display name when it is a non-empty string, otherwise the id |
+| `OfferFilter` (protocol 7.1) | Drop hidden entries and ids that fail C-06 (`gpt-` followed by one or more of lower-case letters, digits, `.`, `-`, and nothing else; at most `ModelIdMaxLength` characters in all). Keep efforts that are in C-05, in order, without duplicates; for ids in C-07 remove `none` and put it first. Drop an entry left with no effort. `Name` is the display name when it is a non-empty string, otherwise the id |
 | `AssistantSelection.Validate` (protocol 7.3) | `assistant` absent, not an object, or `model` or `reasoningEffort` absent or not a string: `INVALID_ASSISTANT`. An offer with that id (ordinal) whose list contains that effort (ordinal): accepted. Otherwise `ASSISTANT_SELECTION_UNAVAILABLE` |
 
 ### 4.9 Answers and the Codex run (`Answers/`)
@@ -3219,20 +3428,46 @@ exactly.
 **`CodexAnswerBackend.RunAsync`** (protocol 12.2):
 
 1. No Codex path: return null.
-2. Create `<TempRoot>\livecue-remake-` plus six random characters of `[A-Za-z0-9]`.
+2. Create `<TempRoot>\` plus 32 lower-case hex characters taken from `RandomNumberGenerator` (16 bytes).
+   `TempRoot` is `<DataDirectory>\work` unless a test set another (3.3). The folder is created so that an
+   existing folder of that name is an error (check `Directory.Exists` first and treat it as a failed run;
+   `Directory.CreateDirectory` alone succeeds silently on an existing folder). A failure here returns null.
 3. Arguments, one list element each, in this order: `exec`, `--ephemeral`, `--ignore-user-config`,
-   `--ignore-rules`, `--skip-git-repo-check`, `--sandbox`, `read-only`, `--disable`, `shell_tool`, `-m`,
+   `--ignore-rules`, `--skip-git-repo-check`, `--sandbox`, `read-only`, `--disable`, `shell_tool`, then the
+   containment arguments of the table below, then `-m`,
    the model, `-c`, `model_reasoning_effort="<effort>"`, `-c`, `service_tier="default"`, `--output-schema`,
    `<DataDirectory>\schemas\assist.schema.json` or `summary.schema.json`, `-o`, `<folder>\output.json`, `-C`,
    the folder, `-`. The two `-c` values contain their double quotes as characters of the argument.
 4. Standard input: the instruction paragraph of protocol 12.3, two line feeds, `UNTRUSTED_INPUT_JSON`, a line
    feed, the request body re-written compactly from the parsed root (member order and duplicates kept), a
    line feed, `END_UNTRUSTED_INPUT_JSON`. No trailing line feed.
-5. `IProcessRunner.RunAsync` with working directory the folder, environment `WithoutLiveCueVariables`,
+5. `IProcessRunner.RunAsync` with working directory the folder, environment `CodexAllowlist`,
    standard output discarded, time limit C-43, `KillWithApplication` true, under the run's token.
 6. `Cancelled`: throw `OperationCanceledException`. `Exited` with code 0 and an `output.json` of at most C-24
    bytes: return its bytes. Anything else: null.
-7. `finally`: delete the folder recursively (W-09).
+7. `finally`: delete the folder recursively (W-09). A folder that survives (a crash, a kill, three failed
+   deletes) is removed by the next relay start (4.2 step 5).
+
+**Containment of the answer run** (protocol 12.6). `Answers/CodexArguments.cs` holds the containment
+arguments as one fixed list. The builder of WP-W03 fills that list and this table in the same pull request
+(the one place where a wave 1 package edits this document): read `codex --help`, `codex exec --help` and
+the feature list they name on the build PC, add an argument for every switch that turns off a tool, a
+feature or a network capability, and write down what has no switch. Reading help output runs no model call.
+Nothing below was verified by the reviewers or by this document: every row marked "to fill" is the
+builder's to establish.
+
+| Item | Value |
+|---|---|
+| Codex version the list was read from | to fill (the text `codex --version` prints) |
+| Always passed | `--sandbox read-only`, `--disable shell_tool`, `--ephemeral`, `--ignore-user-config`, `--ignore-rules`, `--skip-git-repo-check` |
+| Containment arguments, in order | to fill: one row per switch, with the capability it turns off (at least: patch application, image viewing by local path, web search, configured tool servers, project instruction files, wherever that version has a switch) |
+| Capabilities with **no** switch in that version | to fill; each one is a residual risk named in architecture 6.5 |
+| Is an unknown `--disable` name an error or only a warning? | to fill. If it is only a warning, a renamed feature would silently come back; say so here |
+| Does `--ignore-user-config` also drop the owner's retention or analytics choices? | to fill |
+| Result of the live containment check (test plan L-4) for that version | to fill: date and PASS or FAIL, never the canary value |
+
+The environment of the run is the `CodexAllowlist` policy (4.13). The read-only sandbox and the empty
+working folder stay, and neither is counted as protecting the owner's files (protocol 12.6).
 
 **`AnswerValidator`** (decision A-14): parses the bytes and checks the fixed shape by hand, no schema library.
 Assist: an object whose `detectedQuestion`, `answer` and `details` are strings and whose `memory` is an object
@@ -3306,9 +3541,21 @@ When the relay stops, the controller stops waiting for a running script and does
 `LabRuntime`: the probe is `GET http://127.0.0.1:<LabPort>/health` with a client that uses no proxy and no
 redirects, limited by C-45 and W-06; it returns a `LabHealth` only for a JSON object whose `ready` and `busy`
 are booleans and whose `relayProtocol` is a number. The two scripts run through `IProcessRunner` with exactly
-the commands of protocol 11.5: `FileName` is `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`,
-the arguments are separate list elements, environment `LabScriptAllowlist`, output discarded, limits C-46,
-`KillWithApplication` false.
+the commands of protocol 11.5: `FileName` is `WindowsPowerShell\v1.0\powershell.exe` under
+`Environment.SystemDirectory` (the system-directory API; never `%SystemRoot%` or any other environment
+variable), the arguments are separate list elements, environment `LabScriptAllowlist`, output discarded,
+limits C-46, `KillWithApplication` false.
+
+**Script copies** (`LabScripts`). Three files are embedded resources of `LiveCue.Relay`, linked from `asr/`
+so that there is one source: `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1`, and `LabCommon.ps1`, which the two
+launchers dot-source from their own folder. `LabScripts.WriteCopies`
+writes all three to `<DataDirectory>\lab\` at relay start (4.2 step 5). Immediately before each run
+`LabRuntime` compares the launcher it is about to start **and** `LabCommon.ps1` with the embedded bytes and
+rewrites a file that differs; when they cannot be made equal the run is a failure and nothing is started. The `-File` argument is always
+`<DataDirectory>\lab\Start-ASR-Lab.ps1` or `…\Stop-ASR-Lab.ps1`, never a path inside `LabFolder`; the start
+command carries `-LabFolder <LabFolder>`. Before each run `LabRuntime` also checks that `LabFolder` is a
+drive-letter path (`X:\…`) and not a UNC or device-namespace path; a folder that fails is treated as "no lab
+folder" (`IsConfigured` false, MSG-2), the same answer the hosting library gives at save time (4.14).
 
 ### 4.11 Speech bridge (`Speech/`)
 
@@ -3430,39 +3677,71 @@ of the runner; ending a process is `Kill(entireProcessTree: true)` and a wait of
 is not in the job and ending it is `Kill()` of that process only. Exceptions from `Process.Start` become
 `StartFailed`; their messages are dropped.
 
+`ChildEnvironment` fills the cleared environment by policy, comparing names without regard to case and
+copying a value only when the parent has that variable: `Inherit` copies everything; `LabScriptAllowlist`
+copies the thirteen names of protocol 11.5; `CodexAllowlist` copies those thirteen, `HOMEDRIVE`, `HOMEPATH`,
+`CODEX_HOME`, `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` and `NO_PROXY` (protocol 12.6). The lists are two
+`static readonly` arrays in that file and are written nowhere else.
+
 ### 4.14 Hosting: settings, discovery, prerequisites
 
-**`settings.json`** (architecture 3.5): UTF-8, two-space indent, the ten members in the order of the
+**`settings.json`** (architecture 3.5): UTF-8, two-space indent, the twelve members in the order of the
 architecture's example, `connectionMode` and each `ownedMappings[].mode` as `"private"` or `"public"`,
 `createdAt` as UTC to the second. Unknown members are ignored at load and not written back. A member with the
-wrong JSON type makes the file `Unreadable`.
+wrong JSON type makes the file `Unreadable`. The two members the review added
+(`codexContainmentCheckedVersion`, `hideFromScreenCapture`) may be absent from a file: absent means `null`
+and `true`.
+
+**A file that fails validation** (`SettingsStore`, architecture 3.5). `Load` returns `Invalid`, the problems,
+and as `Settings` the defaults with `OwnedMappings` set to those entries of the file for which
+`ISettingsValidator.IsValidLedgerEntry` is true, in file order. The file itself is not touched by `Load`.
+`Save`, when the file on disk is `Invalid` or `Unreadable`, first writes that file's bytes to
+`settings.json.invalid` (atomically, replacing an older copy) and only then replaces `settings.json`; when
+the copy cannot be written the save throws `IOException` and nothing changed.
 
 | Field | Rule | Problem code |
 |---|---|---|
 | `schemaVersion` | equals 1 | `UnsupportedVersion` |
 | `relayPort` | 1024 to 65535; not 47831; not equal to `asrLabPort` | `OutOfRange`; `Forbidden`; `Duplicate` |
 | `connectionMode` | `private` or `public` | `NotAllowed` |
-| `privateHttpsPort` | 1 to 65535; not equal to `publicHttpsPort` | `OutOfRange`; `Duplicate` |
+| `privateHttpsPort` | 1 to 65535; not 443, 8443 or 10000 (the ports Funnel can use); not equal to `publicHttpsPort` | `OutOfRange`; `NotAllowed`; `Duplicate` |
 | `publicHttpsPort` | 443, 8443 or 10000 | `NotAllowed` |
-| `publicPathPrefix` | matches `^/[a-z0-9][a-z0-9-]{0,31}$` | `BadFormat` |
+| `publicPathPrefix` | matches `^/[a-z0-9][a-z0-9-]{0,31}$` as a whole text | `BadFormat` |
 | `codexExecutablePath` | null, or: an absolute path; file name is `codex.exe` without regard to case; the file exists | `NotFound`; `WrongFileName`; `NotFound` |
-| `asrLabFolder` | null, or: an absolute path of an existing folder; it holds `Start-ASR-Lab.ps1` and `Stop-ASR-Lab.ps1` | `NotFound`; `MissingScripts` |
+| `codexContainmentCheckedVersion` | null, or 1 to 64 characters of letters, digits, space, `.`, `_`, `+`, `-` | `BadFormat` |
+| `asrLabFolder` | null, or: a drive-letter path (`X:\…`), so not a UNC path, not a device-namespace path (`\\?\`, `\\.\`), not relative and not drive-relative (`X:folder`); on a fixed local volume (`IHostFileSystem.IsOnFixedLocalDrive`); an existing folder; it holds `Start-ASR-Lab.ps1` and `Stop-ASR-Lab.ps1` | `NotAllowed`; `NotAllowed`; `NotFound`; `MissingScripts` |
 | `asrLabPort` | 1024 to 65535; not 47831 and not 8765 (a duplicate of `relayPort` is reported on `relayPort`) | `OutOfRange`; `Forbidden` |
+| `hideFromScreenCapture` | a JSON boolean (any other type makes the file `Unreadable`) | none |
 | `ownedMappings[]` | `httpsPort` 1 to 65535; `path` is `/` for private, the prefix pattern for public; `target` is `http://127.0.0.1:` plus a port from 1024 to 65535 | `BadFormat` |
 
-`ValidateStructure` is every rule except the two that ask the file system (the file exists; the folder exists
-and holds the scripts).
+Every pattern is a whole-text match (protocol section 1): the prefix, the version text and the ledger `path`
+are checked with a character loop or with `\A…\z`, so a value that ends in a line feed is `BadFormat`.
+
+`ValidateStructure` is every rule except the three that ask the file system (the file exists; the folder is
+on a fixed local volume; the folder exists and holds the scripts). The path-form half of the lab folder rule
+needs no file system and is part of `ValidateStructure`.
 
 **Lab folder** (`LabFolderResolver`): `asrLabFolder` when it is set and still holds both scripts; when it is
-null, `<BaseDirectory>\asr` if that holds both scripts; otherwise null ("not configured").
+null, `<BaseDirectory>\asr` if that holds both scripts; otherwise null ("not configured"). Each time it
+resolves (every relay start), the folder it would return must again be a drive-letter path on a fixed local
+volume; one that is not gives null. So a `settings.json` edited by hand to a network share is "not
+configured", not a path that reaches a process.
 
 **Codex** (`CodexLocator`, architecture 3.7): (1) the configured path: exists gives `Setting`, missing gives
 `ConfiguredFileMissing`; (2) each `PATH` entry in order: a file named exactly `codex.exe` gives `SearchPath`
 (`.cmd` and `.ps1` shims are never considered); (3) the most recently written `codex.exe` under
 `%LOCALAPPDATA%\OpenAI\Codex\bin\`, at most three levels deep, gives `UserInstall`; else `NotFound`.
 
-**Tailscale** (`TailscaleLocator`): `%ProgramFiles%\Tailscale\tailscale.exe`, else the first `tailscale.exe`
-on `PATH`.
+**Tailscale** (`TailscaleLocator`): `Tailscale\tailscale.exe` under `IHostFileSystem.ProgramFilesDirectory`
+(the known-folder API, not the `ProgramFiles` environment variable), else the first `tailscale.exe` on
+`PATH`.
+
+**Codex version** (`CodexSignInCheck.ReadVersionAsync`, architecture 3.7): arguments `--version`; environment
+`CodexAllowlist`; 256 bytes of standard output kept; limit 15 s. The first line, trimmed, is returned when
+the exit code is 0 and the line is 1 to 64 characters of letters, digits, space, `.`, `_`, `+`, `-`;
+otherwise null. `PrerequisiteChecker` calls it once per check run when check 2 passed, whatever check 3
+says, and puts the result in `PrerequisiteReport.CodexVersion`. `IsSignedInAsync` also runs with
+`CodexAllowlist`.
 
 **Checks** (`PrerequisiteChecker`), with the status-line texts of architecture 3.11:
 
@@ -3474,6 +3753,14 @@ on `PATH`.
 | 4 `TailscaleInstalled` | `ITailscaleCli.ExecutablePath` is not null | |
 | 5 `TailscaleOnline` | `ReadStatusAsync` succeeded and `Online` is true | |
 | 6 `TailscaleDnsName` | `DnsName` is not null | the name |
+
+Check 6a of architecture 3.11 is not a `PrerequisiteId`: it is a step of the supervisor (4.16), because it
+needs the mapping manager and applies to one mode only. The containment warning is not a check either: check
+2 passes, and `PrerequisiteReport.ContainmentCheckIsStale` carries the warning, whose text is
+`PrerequisiteTexts.ContainmentWarning(version, checkedVersion)`: "Codex is version `<v>`; the containment
+check was last run for `<w>`." (with "Codex's version could not be read" in place of the first clause when
+the version is null, and "the containment check has not been run yet" when nothing was recorded), then
+"Run the containment check, then choose Mark as checked in Settings."
 
 ### 4.15 Hosting: the mapping manager (`Tailscale/`)
 
@@ -3508,6 +3795,21 @@ ours counts as unoccupied.
 
 `StaleOwned`: every ledger entry whose handler is still ours by the entry's own port, path and target, and
 which is not the selected mode's entry for the current port and path.
+
+**Exposure report** (`MappingRules.Exposure`, architecture 3.9). From the same snapshot: every
+`ServeHandler` whose `Kind` is `Proxy` and whose `Target` is exactly
+`MappingCommand.TargetFor(settings.RelayPort)`, on any port, at any mount, foreground or not. For each:
+`FunnelOn` is "its port is in `FunnelPorts`"; `LedgerEntry` is the ledger entry with the same port, the same
+path (the mount), the same target, and mode Public when `FunnelOn`, else Private; or null. Sorted by port,
+then mount. It is computed from what Tailscale reports, never from the ledger, so it also shows a handler
+made by hand after a timed-out set-up (TS-10), one left by a process that died between steps 5 and 8 below,
+one whose ledger was lost, and one that other software pointed at the relay port. When the status could not
+be read, `Exposure` is empty and `StatusFailure` says so: the desktop then shows "unknown", never "nothing".
+
+What the desktop does with a row (5.5, 5.8): the selected mode's own mapping at its configured port and path
+is not a warning; a row with a ledger entry is the `StaleOwned` warning with "Remove…"; a row without one is
+an `UnownedExposureRow` with its removal command as text. No removal plan can exist for a row without a
+ledger entry (TS-8).
 
 **`ExecuteAsync(plan)`**:
 
@@ -3566,6 +3868,14 @@ address" when the name is unknown.
 | `NotVerified` | "Tailscale reported success, but the mapping is not in its configuration. Choose Check again." |
 | `LedgerNotSaved` | "The mapping changed, but LiveCue could not save its settings. LiveCue will treat the mapping as not its own." |
 | `OthersChanged` (TS-7) | "Warning: other entries of Tailscale's serve configuration changed during this command. LiveCue repaired nothing. Review them with: tailscale serve status" |
+| `Exposure(handler)`, Funnel on | "A Tailscale Funnel mapping on port `<n>`, path `<mount>`, publishes this relay on the internet. LiveCue did not create it and will not remove it." |
+| `Exposure(handler)`, Funnel off | "A Tailscale mapping on port `<n>`, path `<mount>`, forwards to this relay inside your tailnet. LiveCue did not create it and will not remove it." |
+| `Exposure(handler)`, foreground or service | The sentence above, then: "It belongs to a running Tailscale session or service; end that to remove it." |
+| `ManualRemoval(handler)` | Funnel on: `tailscale funnel --https=<n> --set-path=<mount> off`. Funnel off: `tailscale serve --https=<n> --set-path=<mount> off`. Empty for a foreground or service handler, and empty when `<mount>` is not `/` or `/` followed by 1 to 128 characters of letters, digits, `.`, `_`, `~`, `-` and `/` (whole text): a mount with any other character is never put into a command the owner is asked to paste. The Settings row then reads "Remove it with Tailscale's own tools: tailscale serve status" |
+| Exposure unknown | "Tailscale's configuration could not be read, so LiveCue cannot tell what is exposed. Choose Check again." |
+
+`ManualRemoval` returns text only. It never builds a `MappingCommand`, so nothing it returns can be run by
+the application (TS-2, TS-3 and TS-8 are untouched).
 
 ### 4.16 Hosting: endpoint, supervisor, console host
 
@@ -3580,8 +3890,9 @@ address" when the name is unknown.
 | 2 | `IPrerequisiteChecker.CheckAsync`; adopt the loaded settings | `PrerequisitesChecked` |
 | 3 | A failure: State `Stopped`; return `PrerequisiteFailed` with `PrerequisiteTexts.Failure(first id)` | |
 | 4 | Build `RelayOptions`: port, mode, endpoint (the override, else `Resolve`; null is treated as fault `InvalidEndpoint`), data folder, the Codex path of the report, `LabFolderResolver`, lab port, version | |
+| 4a | Check 6a of architecture 3.11. Only when the mode is Private and no endpoint override is in force: `IMappingManager.InspectAsync`. When `HasFunnelExposure`: State `Stopped`; return `ExposedInPrivateMode` with `PrerequisiteTexts.ExposedInPrivateMode`; no relay is created. A status that could not be read does not stop the start | `ConnectionInspected`, only when it refuses |
 | 5 | State `Starting`; create the relay through `IRelayFactory`; start the pump that forwards its events | `RelayStarting`, then `RelayEventForwarded` for each |
-| 6 | `relay.StartAsync`. `RelayStartException`: dispose the relay; State `Stopped`; return `RelayFault` with `PrerequisiteTexts.StartFault(code, port)` | |
+| 6 | `relay.StartAsync`. `RelayStartException`: dispose the relay; State `Stopped`; return `RelayFault` with `PrerequisiteTexts.StartFault(code, port, mappingPointsAtPort)`. For `PortInUse`, and unless an endpoint override is in force, the supervisor first runs one read-only `InspectAsync` (publishing `ConnectionInspected`); `mappingPointsAtPort` is true when its `Exposure` is not empty, which selects the second port-in-use text of architecture 3.11. The `RelayFaulted` event of the relay still carries the relay's own fixed message; hosts show the supervisor's text | |
 | 7 | State `Running` | |
 | 8 | Unless an endpoint override is in force: `IMappingManager.InspectAsync` | `ConnectionInspected` |
 
@@ -3598,6 +3909,18 @@ record's members, enums as their names). With `--show-pairing`, after `RelayStar
 `IPairingExport`, print the payload text on one line and the terminal QR (two modules per character row using
 half-block characters, four-module quiet zone) once. Ctrl+C: `StopAsync`, exit 0. The host never prints the
 payload without that flag and has no reset argument.
+
+What the review added to the console host (architecture 3.14). First, `--show-pairing` on the default data
+folder needs an interactive console: when standard output is redirected the host prints one fixed line that
+contains nothing of the payload and exits 2, before it reads the pairing. A run with an explicit
+`--data-dir` may be redirected, which is what `scripts/verify-pc-asr.ps1` relies on. "Redirected" is
+`Console.IsOutputRedirected`, read once in `Program.Main` and handed to `HostProgram.RunAsync` with the
+output writer, so the tests set it. Second, `ConsoleEventPrinter` never prints conversation text in text
+mode, and in JSON mode it leaves out the members `Transcript`, `PartialTranscript`, `Instruction` and
+`PayloadJson` of the request events and `Text` of `SpeechText`, unless the new argument `--include-content`
+is given. Third, a start that returns `ExposedInPrivateMode` prints its text and exits 2, like a
+prerequisite failure. Fourth, a stale containment check (`ContainmentCheckIsStale`) prints its warning line
+once after the checks and changes no exit code.
 
 ---
 
@@ -3689,7 +4012,9 @@ event is processed normally.
 | Event | Session state |
 |---|---|
 | `CheckingStarted` | `Checking` |
-| `PrerequisitesChecked` | Stores the report. Failed: `PrerequisiteFailed`, `StateText` = `PrerequisiteTexts.Failure(first id)` |
+| `PrerequisitesChecked` | Stores the report. Failed: `PrerequisiteFailed`, `StateText` = `PrerequisiteTexts.Failure(first id)`. When `Report.ContainmentCheckIsStale` and the pair (version, recorded version) differs from the pair last warned about in this run of the app: raises `SessionMessage(Warning, PrerequisiteTexts.ContainmentWarning(…))` once |
+| `StartAsync` returned `ExposedInPrivateMode` (a result, not an event) | `Faulted`; `FaultCode` null; `StateText` = the result's `FailureText` ("A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode."). The inspection that `ConnectionInspected` delivered just before stays stored, so the Live page and Settings show the handler |
+| `StartAsync` returned `RelayFault` | `StateText` = the result's `FailureText`, replacing what the `RelayFaulted` row below set: this is how the second port-in-use text (architecture 3.11) reaches the window |
 | `RelayStarting` | `Starting`; raises `Signal(RelayStarting)` |
 | `RelayStarted` | `Ready`; stores the endpoint; presence `NotConnected`; when `PairingWasCreated`, sets "show the QR when the connection is ready" |
 | `ConnectionInspected` | Stores it; recomputes `IsConnectionReady`; when that just became true and the flag above is set: clears the flag and calls `ShowPairingAsync` |
@@ -3742,6 +4067,7 @@ Bindings: one element per automation id of screens section 9.
 | `RelayStatusText`, `PhoneStatusText` | `StatusIndicatorView` | `RelayStatus` (+ `RelayStatusCaption`), `PhoneStatus` |
 | `PcAddressText` | Selectable `Type.Mono` text; copy icon button | `PcAddress`, `HasPcAddress`, `CopyPcAddressCommand` |
 | `ConnectionBanner`, `LiveSetUpConnectionButton` | `Banner` (warning) with its button | `ConnectionBanner`, `SetUpConnectionCommand` |
+| `ExposureBanner` | `Banner` (danger when a row has Funnel on in Private mode, otherwise warning) with the action "Open Settings"; shown in every state, also while the relay is stopped | `ExposureBanner`, `OpenSettingsCommand` |
 | `PrerequisiteList` | Panel "Before the relay can start" with `Row.Check` rows, "Check again", "Open Settings" | `ArePrerequisitesVisible`, `Prerequisites`, `CheckAgainCommand`, `OpenSettingsCommand` |
 | `TranscriptHint`, `TranscriptText` | Hint line; read-only selectable text in a `Glass.Card` that scrolls to the end on append | `TranscriptHint`, `TranscriptText`, `TranscriptSecondaryText`, `IsTranscriptPlaceholder` |
 | `ReplyHint`, `ReplyText`, `ReplyTiming` | Hint line; `Type.Cue` text, then the two headed lists; spinner; danger `Banner`; caption | `ReplyHint`, `ReplyText`, `ReplyKeyPoints`, `ReplyActionItems`, `IsReplyThinking`, `ReplyFailure`, `ReplyTiming` |
@@ -3762,7 +4088,17 @@ Bindings: one element per automation id of screens section 9.
 `Unknown`: body "Connection not set up. Choose Set up connection to let your iPhone reach this PC." (for
 `Blocked` and `Unknown`, followed by the reason text of 4.15); action "Set up connection…", enabled only for
 `Absent`. Prerequisite rows use the titles and fixes of screens 2.6; a `NotChecked` row shows its pass title
-in `ink.secondary` with the subtitle "Not checked".
+in `ink.secondary` with the subtitle "Not checked". The row of check 2, when it passed and
+`ContainmentCheckIsStale`, shows the containment warning (4.14) as its subtitle instead of the path.
+
+`ExposureBanner`, from `session.Connection` (first match; null when there is no inspection yet):
+
+| Condition | Banner |
+|---|---|
+| The selected mode is Private and `HasFunnelExposure` | Danger. Title "This relay is reachable from the internet". Body "A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode." |
+| `UnownedExposure` is not empty | Warning. Body "`<N>` Tailscale mapping(s) that LiveCue does not manage point at this relay. Open Settings to see them and how to remove them." |
+| `StatusFailure` is not `None` and Tailscale is installed | Warning. Body: the "Exposure unknown" text of 4.15 |
+| otherwise | null (stale mappings of ours keep their own warning in Settings, as before) |
 
 Numbers are formatted with the invariant culture.
 
@@ -3829,6 +4165,13 @@ Lines (`ActivityViewModel`; texts in `Text/ActivityText.cs`):
 | `RelayFaulted` | The session's `StateText` |
 | `Diagnostic` | "Relay diagnostic: " + its message (AC-WIN-034) |
 | `MessageRaised` | Its text |
+| `EdgeStatistics` | **No entry.** The three counter properties take the event's totals |
+| `Signal(RelayStarting)` | Also: the three counters return to 0 (a new relay instance counts from zero) |
+
+**Rejected-request counters** (`ActivityRejectedCounts`; architecture 3.4): one caption line above the log,
+always visible, in `Type.Caption`: "Rejected since the relay started: `<a>` malformed · `<b>` with an
+unknown token · `<c>` through Funnel in Private mode". Plain numbers in the invariant culture. No colour
+change, no banner, no toast and no log entry at any value; "Clear activity" does not reset them.
 
 The page: `ClearActivityButton` (`ClearActivityCommand`, calls `session.ClearActivity()`, disabled while
 empty); `ActivityLog` is a virtualised `ItemsControl` of entries in `Log.Text` style inside a `Glass.Card`,
@@ -3854,8 +4197,11 @@ texts of `Text/SettingsText.cs`. `SaveCommand` calls `session.SaveSettings`; not
 | `MappingCommandText` | Read-only `Type.Mono` field and the effect sentence | `MappingCommandText`, `MappingEffectText` |
 | `SetUpMappingButton`, `CheckMappingButton`, `RemoveMappingButton` | `Button.Primary` "Set up connection…"; `Button.Secondary` "Check again"; `Button.Destructive` "Remove…" | `SetUpMappingCommand`, `CanSetUpMapping`, `CheckMappingCommand`, `RemoveMappingCommand` with `CurrentOwnedMapping` |
 | `StaleMappingList` | One warning `Banner` per row, each with "Remove…" | `StaleMappings`, `RemoveMappingCommand` |
+| `UnownedExposureList` | One warning `Banner` per row: the sentence, the removal command in a read-only selectable `Type.Mono` field (hidden when empty), and no button of its own; the section's "Check again" refreshes it. A caption line shows `ExposureUnknownText` when it is not null | `UnownedExposures`, `ExposureUnknownText`, `CheckMappingCommand` |
 | `CodexPathField`, `CodexPathStatus`, `CodexLoginStatus`, `CheckAssistantButton` | `Field.Text` (placeholder "Automatic"); two `Row.List` rows with indicators; `Button.Secondary` | `CodexPathText`, `CodexPathStatus`, `CodexPathDetail`, `CodexLoginStatus`, `CheckAssistantCommand`, `IsCheckingAssistant` |
+| `CodexVersionStatus`, `MarkContainmentCheckedButton` | A third `Row.List` row "Codex version" with an indicator and a detail line; `Button.Quiet` "Mark as checked" | `CodexVersionStatus`, `CodexVersionDetail`, `MarkContainmentCheckedCommand`, `CanMarkContainmentChecked` |
 | `SpeechLabFolderField`, `SpeechLabStatus`, `LoadedModelStatus` | `Field.Text` (placeholder "Automatic"); two rows | `LabFolderText`, `LabFolderStatus`, `LabFolderDetail`, `LoadedModelStatus`, `SpeechCaption` |
+| `HideFromCaptureToggle` | A check-box row "Hide this window from screen capture", caption "Screen sharing, recordings and screenshots show an empty area instead of this window." | `HideFromScreenCapture` |
 | `SourceCodeButton`, `ThirdPartyNoticesButton` | `Button.Quiet` | `OpenSourceCommand`, `OpenNoticesCommand`; `Version` |
 
 Mapping status for the selected mode, from `session.Connection`: `Present` "Active" (dot, success);
@@ -3868,8 +4214,28 @@ the settings first." `CanSetUpMapping` is true only for `Absent` with no unsaved
 `StaleMappings` row reads "LiveCue's `<Private tailnet or Public Funnel>` mapping at `<address>` still
 exists." `RestartNotice` is shown when `session.SettingsDifferFromRunning`.
 
+`UnownedExposures` has one row per `session.Connection.UnownedExposure` entry that is not the selected
+mode's own mapping (a `PresentNotOwned` mapping keeps its "Active, not created by LiveCue" status and is
+also listed here, because it is the row whose removal command the owner needs): `Text` is
+`MappingTexts.Exposure(handler)`, `CommandText` is `MappingTexts.ManualRemoval(handler)`. The page has no
+control that runs that command. A private port of 443, 8443 or 10000 is a field error on
+`PrivateHttpsPortField`: "Ports 443, 8443 and 10000 can be published by Tailscale Funnel. Choose another port
+for the private listener." A lab folder that is not on a fixed local drive is a field error on
+`SpeechLabFolderField`: "Choose a folder on a local drive of this PC. Network shares are not used."
+
 Codex rows show `session.Prerequisites` results 2 and 3 (R-32); `CheckAssistantCommand` calls
-`session.CheckAgainAsync()`. `LoadedModelStatus`: "Not reported yet" until an event arrives; then from the
+`session.CheckAgainAsync()`. The "Codex version" row shows `session.Prerequisites.CodexVersion`: the version
+text with the detail "Containment check run for this version." (check, success) when it equals
+`Settings.CodexContainmentCheckedVersion`; otherwise the version text, or "Unknown", with the containment
+warning of 4.14 as its detail (alert, warning). `MarkContainmentCheckedCommand` is enabled when a version was
+read and it is not the recorded one; it calls
+`session.SaveSettings(session.Settings with { CodexContainmentCheckedVersion = version })`, built from the
+**saved** settings, so unsaved edits in the form are neither saved nor lost, and then `CheckAgainAsync()`.
+The button only records the owner's statement that the containment check (test plan L-4) passed for that
+version; the application cannot run the check itself.
+
+`HideFromScreenCapture` is a form field like the others: it is saved by `SaveCommand`, and the window
+follows the saved value (5.12). `LoadedModelStatus`: "Not reported yet" until an event arrives; then from the
 latest `LocalModelChanged` status ("`<label>` · loading", "`<label>` · ready", the error message, or "None"
 for `stopped`) and from `SpeechStreamChanged` (`Ready` gives "`<label>` · in use"; `Stopped` or `Failed`
 gives "`<label>` · ready"). `OpenSourceCommand` opens the repository page; `OpenNoticesCommand` opens
@@ -3927,6 +4293,14 @@ shows "LiveCue could not finish startup." and the exception's type name, and the
 
 An exception that reaches the dispatcher is handled, reported as a "Relay diagnostic: " line, and the app
 continues.
+
+Screen capture (architecture 3.5, `hideFromScreenCapture`): when the window's handle exists, and again
+whenever `session.Settings` changes, `MainWindow` calls `SetWindowDisplayAffinity` (declared in
+`Interop/NativeMethods.cs`) with "exclude from capture" when the saved setting is true and with "none" when
+it is false. A call that fails (an older Windows build) is reported once as a `SessionMessage(Warning, "This
+version of Windows cannot hide the window from screen capture.")` and is not retried. The self-test's
+off-screen rendering does not go through screen capture and is unaffected; in self-test mode the call is not
+made at all.
 
 Closing (caption button, Alt+F4, the system menu): the first `Closing` is cancelled, the window is disabled,
 `OnWindowClosingAsync` awaits `session.StopAsync()` for at most W-11, then the window closes for real. No
@@ -4094,3 +4468,228 @@ touches no Windows source and can run beside any of them.
 
 A change to a frozen file is a separate, orchestrator-approved commit on `main`, merged before the packages
 that need it and announced to every running builder.
+
+---
+
+## 7. Changes after review
+
+Two reviews changed this document after WP-W00 had started from its earlier text: the cross-check of the
+protocol against both designs (items `X-nn` and `A-nn`) and the security review `07-security-review.md`
+(findings `SEC-nn`, tests `ST-nn`). The rulings are in decisions section 8. The sections above already hold
+the new text. This section says, per work package, what its builder must do **differently from the text as
+it stood before**, so that the difference reaches the code. 7.1 lists every change to a frozen contract file;
+they are the foundation's to make, each as the orchestrator-approved commit that 6.5 describes.
+
+### 7.1 Frozen contract files that change
+
+Paths are under `windows/src/`. "Comment" means the declaration is unchanged and only its documentation
+changed.
+
+| # | File | Change | From |
+|---|---|---|---|
+| 1 | `LiveCue.Relay/Contracts/RelayOptions.cs` | Comment of `DataDirectory`: it also holds `lab\` and `work\` | SEC-06, SEC-10 |
+| 2 | `LiveCue.Relay/Contracts/RelayEvents.cs` | New record `EdgeStatistics(DateTimeOffset At, long Malformed, long TokenNotAccepted, long FunnelInPrivateMode) : RelayEvent(At)` | SEC-14 |
+| 3 | `LiveCue.Relay/Contracts/RelayDependencies.cs` | Comment of `TempRoot`: null means `DataDirectory\work`, which the relay empties at start; a folder given here is never emptied | SEC-10 |
+| 4 | `LiveCue.Relay/Core/RelayContext.cs` | Body of `TempRoot`: `Dependencies.TempRoot ?? Path.Combine(Options.DataDirectory, "work")`. It no longer uses `Path.GetTempPath()` | SEC-10 |
+| 5 | `LiveCue.Relay/Protocol/ProtocolConstants.cs` | New members `ModelIdMaxLength` (64; C-06) and `EdgeStatisticsInterval` (60 s; W-13) | SEC-01, SEC-14 |
+| 6 | `LiveCue.Relay/Processes/IProcessRunner.cs` | In `EnvironmentPolicy`, the member `WithoutLiveCueVariables` is **replaced** by `CodexAllowlist`; every use is renamed with it | SEC-01 |
+| 7 | `LiveCue.Relay/Pairing/IPairingService.cs` | `bool Verify(ReadOnlySpan<char> token)` and the property `CancellationToken CurrentRevocation` are **replaced** by `bool TryVerify(ReadOnlySpan<char> token, out CancellationToken revoked)` | SEC-07 |
+| 8 | `LiveCue.Hosting/Contracts/RelaySettings.cs` | New properties `string? CodexContainmentCheckedVersion` (null) and `bool HideFromScreenCapture` (true) | SEC-01, SEC-10 |
+| 9 | `LiveCue.Hosting/Contracts/SettingsValidation.cs` | `SettingsField` gains `CodexContainmentCheckedVersion` (after `CodexExecutablePath`) and `HideFromScreenCapture` (after `AsrLabPort`); `ISettingsValidator` gains `bool IsValidLedgerEntry(OwnedMapping entry)`; comments of `NotAllowed`, `BadFormat` and `ValidateStructure` | SEC-01, SEC-04, SEC-06, SEC-08, SEC-10 |
+| 10 | `LiveCue.Hosting/Contracts/ISettingsStore.cs` | Comments: `Invalid` keeps the file's valid ledger entries in `Settings`; `Save` first copies a failed file to `settings.json.invalid` | SEC-04 |
+| 11 | `LiveCue.Hosting/Contracts/IHostFileSystem.cs` | New members `string ProgramFilesDirectory { get; }` and `bool IsOnFixedLocalDrive(string path)` | SEC-06 |
+| 12 | `LiveCue.Hosting/Contracts/Codex.cs` | `ICodexSignInCheck` gains `Task<string?> ReadVersionAsync(string codexPath, CancellationToken ct)`; its summary comment | SEC-01 |
+| 13 | `LiveCue.Hosting/Contracts/Prerequisites.cs` | `PrerequisiteReport` gains the last positional parameter `string? CodexVersion = null` and the computed `bool ContainmentCheckIsStale` | SEC-01 |
+| 14 | `LiveCue.Hosting/Contracts/Tailscale.cs` | `PrefixPattern` is `@"\A/[a-z0-9][a-z0-9-]{0,31}\z"` (it was `^…$`); `ApplyPrivate` calls the new private method `RequirePrivatePort`, which refuses 443, 8443 and 10000; `RemovePrivate` is unchanged | SEC-08, SEC-04 |
+| 15 | `LiveCue.Hosting/Contracts/Mapping.cs` | New record `ExposedHandler(int HttpsPort, string Mount, bool FunnelOn, bool Foreground, OwnedMapping? LedgerEntry)`; `ConnectionInspection` gains the last positional parameter `IReadOnlyList<ExposedHandler> Exposure` and the computed `HasFunnelExposure` and `UnownedExposure` | SEC-04 |
+| 16 | `LiveCue.Hosting/Contracts/IRelaySupervisor.cs` | `StartOutcome` gains `ExposedInPrivateMode`; comment of `StartAsync` | SEC-04 |
+| 17 | `LiveCue.Desktop/Contracts/LiveViewModel.cs` | `ILiveViewModel` gains `BannerModel? ExposureBanner { get; }` | SEC-04 |
+| 18 | `LiveCue.Desktop/Contracts/ActivityViewModel.cs` | `IActivityViewModel` gains `long RejectedMalformed`, `long RejectedTokenNotAccepted`, `long RejectedFunnelInPrivateMode` (get only) | SEC-14 |
+| 19 | `LiveCue.Desktop/Contracts/SettingsViewModel.cs` | New record `UnownedExposureRow(ExposedHandler Handler, string Text, string CommandText)`; `ISettingsViewModel` gains `UnownedExposures`, `ExposureUnknownText`, `CodexVersionStatus`, `CodexVersionDetail`, `CanMarkContainmentChecked`, `MarkContainmentCheckedCommand` and the two-way `HideFromScreenCapture` | SEC-04, SEC-01, SEC-10 |
+| 20 | `LiveCue.Desktop/Contracts/AutomationIds.cs` | Six new constants: `ExposureBanner`, `ActivityRejectedCounts`, `UnownedExposureList`, `CodexVersionStatus`, `MarkContainmentCheckedButton`, `HideFromCaptureToggle` | SEC-04, SEC-14, SEC-01, SEC-10 |
+| 21 | `windows/tests/LiveCue.Hosting.Tests/Support/FakeHostFileSystem.cs` | Implements the two new members of `IHostFileSystem`, both settable by a test | SEC-06 |
+
+Not changed, although a ruling touches their area: `Contracts/IRelay.cs`, `RelayFaults.cs`, `RelayFactory.cs`,
+`Protocol/RelayCodes.cs` and `RelayErrors.cs` (no new wire code and no new fault code: the refusal by Codex
+version that the review proposed was not adopted), `Edge/RouteTable.cs` and `RouteContext.cs`,
+`Contracts/IDesktopSession.cs` (the session shows the new start outcome through its existing members, 5.4),
+`Contracts/HostingFactory.cs` and every constructor signature of 3.3 and 3.7.
+
+Foundation-owned files that are not contracts and change too: `LiveCue.Relay.csproj` (embeds
+`asr/Start-ASR-Lab.ps1`, `asr/Stop-ASR-Lab.ps1` and `asr/LabCommon.ps1` as linked resources);
+`Directory.Build.props` (`RestorePackagesWithLockFile`) and one committed `packages.lock.json` per project;
+the workflow's restore step (`--locked-mode`).
+
+### 7.2 What each package does differently
+
+**WP-W00 Foundation**
+
+- Makes every change of 7.1 and the three file changes listed under it.
+- Pairing stub: implements `TryVerify`. The stub holds its hash and its revocation source as one object,
+  swaps that object on reset and then cancels the old source, exactly as 4.7 says for the real service, so
+  that the answer and speech packages still test a reset on their own branches.
+- Edge minimum: P-4 calls `TryVerify` and uses the token it returns as the request's `PairingRevoked`. No
+  code reads a "current revocation".
+- Relay start: step 5 of 4.2 writes the three script copies through `LabScripts.WriteCopies` (a working
+  method in the foundation, final in WP-W04) and creates `work\`.
+- Every Codex stub and the process-runner stub use `EnvironmentPolicy.CodexAllowlist`.
+- Hosting stubs: `CodexSignInCheck.ReadVersionAsync` returns null; `SettingsValidator.IsValidLedgerEntry`
+  exists; `HostFileSystem` has the two new members; the in-memory settings store carries the two new
+  settings; the supervisor has step 4a of 4.16 (with the stub mapping manager it never refuses); every
+  `ConnectionInspection` it builds has an empty `Exposure`.
+- Desktop stubs: the view models implement the new members with fixed values (no banner, three zeros, empty
+  lists, the toggle true, "Unknown" as the version).
+- Foundation tests (test plan 4.6): `MappingCommandTests.Apply_private_refuses_a_funnel_port` and
+  `…Factories_throw_for_a_prefix_that_ends_in_a_line_feed`;
+  `RouteTableTests.A_request_id_shape_is_a_whole_text_match`; `ProtocolConstantsTests` covers the two new
+  constants; `AutomationIdTests` covers the six new ids.
+
+**WP-W01 Edge and host**
+
+- P-4 is `TryVerify` (4.4); nothing reads the revocation token separately from the verification.
+- The three rejected-request counters, the W-13 timer, the `EdgeStatistics` event and its last publication at
+  stop (4.2, 4.4). No allocation and no event on the 401 path.
+- The listen socket is created with exclusive address use (4.3).
+- Start step 5 in its final form: the script copies, and the purge of `work\` when `TempRoot` is null (4.2).
+- K-9 (4.3): a request with both length headers is left to Kestrel; no framing is parsed by hand.
+- `Date` is in the response-header allowlist (K-1, unchanged in substance).
+- Adds: ST-13 (`BearerCheckTests`), ST-19, ST-20 (five of its seven cases), ST-10
+  (`ListenerTests.The_listen_socket_is_exclusive`), ST-15 (`WorkFolderTests.A_start_empties_the_work_folder`).
+
+**WP-W02 Pairing**
+
+- `PairingService` holds one immutable `AcceptedPairing` (hash and revocation source); `TryVerify` reads it
+  once; reset swaps the object and then cancels the old source (4.7). `Verify` and `CurrentRevocation` do
+  not exist.
+- The `tokenHash` check and the endpoint grammar are whole-text checks.
+- Adds: ST-12 (two tests, one `Slow`), ST-13 (two tests).
+
+**WP-W03 Processes, catalogue, answers**
+
+- `ChildEnvironment`: the `CodexAllowlist` list of 4.13 replaces "everything except `LIVECUE_`".
+  `CodexCatalogSource` and `CodexAnswerBackend` pass `CodexAllowlist`.
+- `CodexAnswerBackend`: the working folder is `<TempRoot>\<32 hex characters>` with `TempRoot` under the data
+  folder, an existing folder fails the run, and the argument list carries the containment arguments (4.9).
+- **Fills the containment table of 4.9** from the help output of the Codex on the build PC, runs L-4 once and
+  records its result there.
+- `AnswerValidator` writes `memory.throughSegmentId` as `null` in every assist reply (X-01, P2-065).
+- `OfferFilter`: an id longer than `ModelIdMaxLength` is not offered; the shape is a whole-text check.
+- `RunRegistry` compares ids ordinally (A-13); `ModelsRoute` writes the shape of 4.6 (A-07).
+- Changed test names in test plan 1.4 (P2-064); adds P2-065, ST-03 (two tests), ST-13 (two tests), ST-15
+  (`WorkFolderTests`, except the start-time case).
+
+**WP-W04 PC model control**
+
+- The commands table has the M-4 row first (X-02); routes 4, 5 and 6 follow the order and the hand-written
+  status JSON of 4.10 (A-07).
+- `LabRuntime` starts `powershell.exe` from `Environment.SystemDirectory`, never from `%SystemRoot%`; the
+  `-File` argument is the relay's own copy under `<DataDirectory>\lab\`; the start command carries
+  `-LabFolder`; the launcher and `LabCommon.ps1` are compared with the embedded bytes before each run; a
+  lab folder that is not a drive-letter path is "not configured" (4.10).
+- `LabScripts.WriteCopies` in its final form (three files).
+- Adds: ST-11 (the four relay-side tests).
+
+**WP-W05 Speech bridge**
+
+- `provider` in `loading` and `ready` is the model id from the header, and the two integers are written as
+  integers (A-04); an offered extension or subprotocol is ignored (A-08, with its test in test plan 1.6); a
+  frame that would pass C-21 has its transcript cut further (A-09, with its test); in `AwaitingLabReady`
+  only a lab text message or an `Invalid` message is `MODEL_NOT_READY`, a close is `LAB_DISCONNECTED`
+  (A-12).
+- No change for SEC-07: `SpeechConnection.PairingRevoked` is still handed over by the edge, which now gets it
+  from `TryVerify`.
+
+**WP-W06 Hosting core and the console host**
+
+- Settings (4.14): twelve members, the two new ones optional in a file; the private port may not be 443,
+  8443 or 10000; the lab folder must be a drive-letter path on a fixed local volume; the version text has a
+  shape; every pattern is a whole-text match; `IsValidLedgerEntry`; `Load` of an invalid file returns the
+  defaults with the file's valid ledger entries; `Save` copies a failed file to `settings.json.invalid`
+  first.
+- `HostFileSystem`: `ProgramFilesDirectory` and `IsOnFixedLocalDrive`. `LabFolderResolver` checks the rule
+  again at every resolve.
+- `CodexSignInCheck`: both calls use `CodexAllowlist`; `ReadVersionAsync` (4.14). `PrerequisiteChecker` puts
+  the version into the report.
+- `PrerequisiteTexts`: the three additions of 3.7.
+- `RelaySupervisor`: step 4a, and the inspection after a `PortInUse` fault (4.16).
+- Console host (4.16): the interactive-console rule of `--show-pairing`, `--include-content`, exit code 2
+  for `ExposedInPrivateMode`, the containment warning line.
+- Owns the new file `LiveSmoke/CodexContainmentLiveTests.cs` (L-4).
+- Changed rows in test plan 2.1, 2.2 and 2.4; adds ST-03 (hosting side), ST-08 (supervisor), ST-09, ST-10
+  (supervisor), ST-11 (hosting side), ST-15 (console host), ST-16.
+
+**WP-W07 Tailscale and the mapping manager**
+
+- `TailscaleLocator` uses `IHostFileSystem.ProgramFilesDirectory`.
+- `MappingRules.Exposure`, and `InspectAsync` fills `ConnectionInspection.Exposure` (4.15).
+- `MappingTexts.Exposure`, `MappingTexts.ManualRemoval` and the "exposure unknown" text (4.15).
+  `ManualRemoval` returns text only and never a `MappingCommand`.
+- Nothing changes in the four command forms or in TS-1 to TS-10, except that `ApplyPrivate` now throws for a
+  Funnel-capable port, which `PlanApply` reports as `InvalidSettings`.
+- Adds: ST-08 (four tests; its serve-status documents live in the package's own test folder, not in the
+  frozen `ServeStatusFixtures.cs`), ST-11 (`TailscaleLocatorTests`).
+
+**WP-W08 Desktop core**
+
+- `DesktopSession` (5.4): a start that returns `ExposedInPrivateMode` is the `Faulted` layout with the
+  result's text and no fault code; the text of a `RelayFault` result replaces the text set from the
+  `RelayFaulted` event; one containment warning message per changed version.
+- `MainWindow` and `Interop/NativeMethods.cs`: the display affinity follows the saved setting (5.12).
+- `HideFromCaptureToggle` is a `CheckBox` drawn with row styles that 5.3 already lists; no new style key.
+- Adds: ST-06 (`CaptureExclusionTests`), ST-08 and ST-10 (the two `DesktopSessionTests`).
+
+**WP-W09 Live and Activity**
+
+- `ExposureBanner` and its three cases; the containment warning as the subtitle of the check 2 row (5.5).
+- The three counters, their caption line, and no log entry for `EdgeStatistics` (5.7).
+- Adds: ST-08 (`LiveViewModelTests.Exposure_banner_cases`), ST-19 (two `ActivityViewModelTests`).
+
+**WP-W10 Pairing and Settings**
+
+- Settings (5.8): the unowned exposure rows with their command text and no button that runs it; the
+  "exposure unknown" caption; the field error for a Funnel-capable private port and for a lab folder off a
+  local drive; the "Codex version" row with "Mark as checked"; the capture toggle as a form field.
+- Nothing changes on the Pairing page: the QR keeps carrying the token (decisions 8.4).
+- Adds: ST-06 (`SettingsViewModelTests.Hide_from_capture_is_a_form_field`), ST-08
+  (`SettingsViewModelTests.Unowned_exposure_rows`).
+
+**WP-W11 Self-test**
+
+- The scripted hosting returns inspections with an empty `Exposure` and a report with a fixed version that
+  equals the scripted `CodexContainmentCheckedVersion`, so that no warning appears in a scene. In self-test
+  mode `SetWindowDisplayAffinity` is not called. Scenes and assertions are unchanged.
+
+**WP-W12 Tools**
+
+- `scripts/verify-pc-asr.ps1` always passes its own `--data-dir`, which is what allows it to read the
+  payload of `--show-pairing` from a redirected output.
+
+**WP-W13 Conformance and security sweep**
+
+- S-13 loses its third case, which becomes ST-21; S-43, S-44 and S-45 as reworded in test plan 4.5.
+- Adds: ST-20 (the `RELAY_PAUSED` and `ASSISTANT_BUSY` cases), ST-21. `TokenSweepTests` and
+  `PrivateTextSweepTests` include `EdgeStatistics` events and the Codex version text.
+
+**WP-W14 CI, audit, release**
+
+- Test plan 5.5: every action by commit id, `--locked-mode`, the `use_cache` input and `release.yml` passing
+  false, the release job failing when the tag exists, the provenance attestation and its two permissions,
+  the notes template. Adds `scripts/ci/check_workflow_pins.py` and its tests (ST-17).
+
+### 7.3 Changes outside `windows/` that these depend on
+
+| # | Item | For |
+|---|---|---|
+| 1 | `asr/Start-ASR-Lab.ps1` gains `-LabFolder <folder>` (default: the script's own folder) and passes it on where it now passes its own folder as the lab root. `LabCommon.ps1` keeps being loaded from the folder of the script that runs. Without this the relay's copies cannot find the weights | The lab builder |
+| 2 | `asr/server.py`: the `Host` rule on every route and the `Origin` and `Sec-Fetch-Site` rules on the three HTTP routes (protocol 11.1); test `test_http_routes_check_host_origin_and_fetch_site` (P2-162, ST-14) | The lab builder |
+| 3 | `asr/Dockerfile` names its base image by digest; the requirement files carry hashes and are installed with `--require-hashes`; a text check in `asr/tests` (test plan 5.5) | The lab builder |
+| 4 | `ios/Package.resolved` is committed and `scripts/ci/generate_project.sh` uses it and checks the XcodeGen version (test plan 5.2) | The iPhone side (iPhone design section 9) |
+
+### 7.4 Hand-offs outside this document
+
+| # | Item | For |
+|---|---|---|
+| 1 | Screens section 9 and the mockup do not have the six new elements yet (`ExposureBanner`, `ActivityRejectedCounts`, `UnownedExposureList`, `CodexVersionStatus`, `MarkContainmentCheckedButton`, `HideFromCaptureToggle`). Until they do, section 3.9 and sections 5.5, 5.7 and 5.8 of this file are their definition, and `AutomationIdTests` takes the six ids from `AutomationIds` | The screen designer |
+| 2 | The security review proposed to reword the self-check success text ("Secure PC connection verified.") to say what was tested ("This PC reached its own address."). Copy belongs to the screen design; the text is unchanged here | The orchestrator and the screen designer |
+| 3 | README: an "Uninstall" section (remove both mappings in Settings before deleting the folder, with the two removal commands); "unpack the zip under your own user profile"; how to run the containment check and what "Mark as checked" means; how to verify the release attestation | Whoever writes the README |
+| 4 | The review's "Record this mapping as LiveCue's" was not adopted: it would let the application remove a handler it did not create (decision D-20, rule TS-8). A hand-made mapping is shown with its removal command instead | The orchestrator, in case the owner wants it |
