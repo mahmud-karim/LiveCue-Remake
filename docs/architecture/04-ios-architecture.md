@@ -48,7 +48,7 @@ accessibility identifier; the decisions and the protocol govern behaviour and wh
 | R-04 | Live state label: spec AC-IOS-020 and 029 and architecture 4.4 say "Updating…"; screens 4.2 says "Connecting…", "Pausing…", "Stopping…". | Screens (copy). | D: 5.1, 6.1 |
 | R-05 | Screens 14 invents four texts for refused PC speech connections, shows "the relay's own text" for speech errors, and adds a fallback text for Codex transit failures. Protocol 14 gives the phone's text for every code and every `L-` condition, and P2-206 tests it. | Protocol. The code-to-text table is behaviour with a conformance test; the screens' rows described an upgrade-refusal model that protocol 2 no longer has. | S: 14 |
 | R-06 | Voz 30-minute text: screens 14 says "…Tap Assist to transcribe it, then resume."; decisions 6.1 says "…and was transcribed. Resume to keep recording." | Decisions. Under IOS-B4 the pending audio is transcribed as part of the pause, so the screens' text would tell the user to do something already done. | S: 14 |
-| R-07 | On-device hand-off queue overflow: architecture 4.6 raises an alert and drops the buffer without pausing; screens 4.3 and 14 pause the session with a notice. Decisions IOS-B4 and A-18 say a failure of any provider leads to Paused. | Pause, with the notice and the screens' text. It follows IOS-B4 and A-18, keeps one failure path for every provider, loses no recognised text (the on-device finalisation runs first) and needs no extra event. The on-device overflow clause of architecture 4.6 is superseded (7.4, H-4). | D: IOS-B4, 6.1 |
+| R-07 | On-device hand-off queue overflow: architecture 4.6 raises an alert and drops the buffer without pausing; screens 4.3 and 14 pause the session with a notice. Decisions IOS-B4 and A-18 say a failure of any provider leads to Paused. | Pause, with the notice and the screens' text. It follows IOS-B4 and A-18, keeps one failure path for every provider, loses no recognised text (the on-device finalisation runs first) and needs no extra event. The on-device overflow clause of architecture 4.6 is superseded (7.4, H-4). Confirmed by the orchestrator. | D: IOS-B4, 6.1 |
 | R-08 | On-device live processing failure: spec 8.1 shows the library's error text; screens 14 shows "Transcription stopped on this iPhone. Resume to continue." | Screens (copy). No raw library text appears during a session. Model preparation failures keep the library's text in the alert (screens 11). | D: 6.1 |
 | R-09 | OpenRouter catalogue empty and its fetch fails during Assist: screens 14 adds a new text; decisions IOS-B9 and architecture 4.5 say "that failure's text". | Decisions. The card shows the `OpenRouterError` text of the failed fetch. | S: 14 |
 | R-10 | "PC connected" under the manual pairing fields: decisions IOS-B17 keeps it with a condition; screens 10 removes it. | Screens (layout). The Saved PC panel carries the state. The last sentence of architecture 4.9 is moot. | D: IOS-B17 |
@@ -74,6 +74,8 @@ accessibility identifier; the decisions and the protocol govern behaviour and wh
 | R-30 | Project definition and CI: research 6.2 to 6.5 give a sample `project.yml`, sample commands and an explanation of simulator signing; the CI spike has a `project.yml`, a workflow, a lint script (`scripts/ci/lint_swift.sh`) and an entitlements file that ran green. | The spike wherever they differ. WP-01 starts from that branch and changes `project.yml` only as 7.2 says. The lint is a text search, so a glass symbol in a comment fails it too (8.1). | none |
 | R-31 | Architecture 4.1 lists two test bundles; session controller and view-model tests need a third. | Target `LiveCueRemakeTests` (hosted unit tests, sources `ios/AppTests`) is added to the one scheme. | none |
 | R-32 | DS 3.2 requires a UI test that samples the prominent glass control's fill. | Adopted as one UI test on the iOS 26 leg (6.3). | none |
+| R-33 | Architecture 4.10 keeps sessions in the default SwiftData store, one row per session. | Orchestrator: the session store is file based. `FileSessionStore` keeps one JSON file per session in a folder `Sessions` under Application Support (3.2.2). The `SessionStoring` protocol is unchanged, and nothing in the app imports SwiftData. | none |
+| R-34 | Architecture 4.11 lets the test seam test the Meta key (old test T3, AC-IOS-110) and forbids any socket in fixture mode, but names no fixture for the key test. | `FixtureMetaKeyTester` (3.2.10): it succeeds at once and opens nothing. It is the fixture wiring's `metaKeyTester`. | none |
 
 ### 1.2 Where each error appears
 
@@ -272,7 +274,7 @@ compiler refuses two files of the same name in one module.
 | `Persistence/SecretStoring.swift` | Secret store protocol, `SecretKind`, `SecretStoreFailure` | WP-01 |
 | `Persistence/PairingStoring.swift` | Pairing store protocol | WP-01 |
 | `Persistence/StorageNames.swift` | Keys, accounts and file names, live and test | WP-01 |
-| `Persistence/SwiftDataSessionStore.swift` | SwiftData rows; the only file that imports `SwiftData` | WP-06 |
+| `Persistence/FileSessionStore.swift` | Sessions on disk: one JSON file per session under Application Support (R-33) | WP-06 |
 | `Persistence/UserDefaultsPreferencesStore.swift` | Preferences in `UserDefaults.standard` | WP-06 |
 | `Persistence/KeychainSecretStore.swift` | API keys in the Keychain | WP-06 |
 | `Persistence/FilePairingStore.swift` | Pairing file plus Keychain copy | WP-06 |
@@ -321,7 +323,7 @@ compiler refuses two files of the same name in one module.
 | `TestSeam/LaunchConfiguration.swift` | Launch-argument parsing; unit-test host detection | WP-01 |
 | `TestSeam/TestMode.swift` | The thirteen modifiers | WP-01 |
 | `TestSeam/FixtureValues.swift` | Fixture texts, catalogues, synthetic pairing | WP-01 |
-| `TestSeam/FixturePairingStore.swift`, `FixturePermissions.swift` | "Always paired"; permissions always granted | WP-01 |
+| `TestSeam/FixturePairingStore.swift`, `FixturePermissions.swift` | "Always paired"; permissions always granted, and the Meta key test that opens no socket (R-34) | WP-01 |
 | `TestSeam/TestSeamLaunchActions.swift` | Key resets, pairing fixture, dropped Keychain copy | WP-06 |
 | `TestSeam/FixtureTranscriber.swift`, `FixtureTranscriberFactory.swift`, `FixtureEngineLoader.swift` | Speech fixtures | WP-07 |
 | `TestSeam/FixtureAnswerServices.swift` | Answer fixtures | WP-08 |
@@ -332,9 +334,9 @@ compiler refuses two files of the same name in one module.
 
 | Path | Responsibility | Owner |
 |---|---|---|
-| `Support/ManualClock.swift`, `FakeTranscriber.swift`, `FakeAnswerService.swift`, `FakeRelayGateway.swift`, `FakeStores.swift`, `FakeAudioCapture.swift`, `FakeEngines.swift`, `TestOwners.swift` | Fakes and a builder that wires state owners to them | WP-01 |
+| `Support/ManualClock.swift`, `FakeTranscriber.swift`, `FakeAnswerService.swift`, `FakeRelayGateway.swift`, `FakeStores.swift`, `FakeAudioCapture.swift`, `FakeEngines.swift`, `TestOwners.swift` | Fakes and a builder that wires state owners to them (3.2.11) | WP-01 |
 | `LaunchConfigurationTests.swift`, `AppEnvironmentSmokeTests.swift`, `KeychainStoreTests.swift` | Section 6.2 | WP-01 |
-| `KeychainSecretStoreTests.swift`, `FilePairingStoreTests.swift`, `UserDefaultsPreferencesStoreTests.swift`, `SwiftDataSessionStoreTests.swift`, `URLErrorMappingTests.swift`, `TestSeamLaunchActionsTests.swift` | Section 6.2 | WP-06 |
+| `KeychainSecretStoreTests.swift`, `FilePairingStoreTests.swift`, `UserDefaultsPreferencesStoreTests.swift`, `FileSessionStoreTests.swift`, `URLErrorMappingTests.swift`, `TestSeamLaunchActionsTests.swift` | Section 6.2 | WP-06 |
 | `StreamingTranscriberEngineTests.swift`, `VozTranscriberTests.swift`, `ParakeetTranscriberTests.swift`, `OnDeviceModelManagerTests.swift`, `FixtureTranscriberTests.swift` | Section 6.2 | WP-07 |
 | `SessionControllerStateTests.swift`, `SessionControllerAssistTests.swift`, `SessionControllerSummaryTests.swift`, `SessionPersistenceTests.swift`, `AnswerServicesTests.swift` | Section 6.2 | WP-08 |
 | `RelayMonitorTests.swift`, `PairingControllerTests.swift`, `AssistantSettingsTests.swift`, `SpeechSettingsTests.swift`, `HistoryModelTests.swift`, `SystemReadinessTests.swift` | Section 6.2 | WP-09 |
@@ -698,7 +700,7 @@ public struct PairingPayload: Equatable, Sendable {
     public static func manual(address: String, token: String) throws -> PairingPayload
     /// `{"endpoint":"…","token":"…"}`: members in this order, no whitespace. The stored and QR form.
     public var storedText: String { get }
-    public var relayEndpoint: RelayEndpoint { get }
+    public let relayEndpoint: RelayEndpoint              // parsed once; its `canonical` equals `endpoint`
 }
 
 public enum PairingPayloadError: LocalizedError, Equatable, Sendable {
@@ -777,7 +779,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
     case string(String)
     case array([JSONValue])
     case object([String: JSONValue])
-    public static func parse(_ data: Data) -> JSONValue?     // nil when the bytes are not JSON
+    public static func parse(_ data: Data) -> JSONValue?     // nil when the bytes are not JSON (see below)
     public static func parse(_ text: String) -> JSONValue?
     public subscript(key: String) -> JSONValue? { get }      // nil unless this is an object with that key
     public var stringValue: String? { get }
@@ -788,6 +790,9 @@ public enum JSONValue: Codable, Equatable, Sendable {
     public var objectValue: [String: JSONValue]? { get }
 }
 ```
+
+`JSONValue.parse` uses Foundation's parser, which is lenient in one way that was seen on CI: it accepts a
+comma after the last member of an object or an array. Nothing relies on such text being rejected.
 
 `ISO8601Milliseconds.swift` holds the two pure functions behind `string(from:)` and `date(from:)`. They use
 integer arithmetic on the days-since-epoch count (the civil-date algorithm), not a formatter, so they behave
@@ -982,7 +987,8 @@ Rules inside `RelayClient` that callers rely on:
   not wait for it. Nothing else in the app sends route 9. Deleting a session whose summary is in flight
   cancels the summary's task, which produces that one `DELETE` (P2-212).
 - `RelayOutcome.swift` (internal) implements protocol 13.6 as one function from
-  `(route, Result<(HTTPResponseHead, Data), TransportFailure>)` to success bytes or a `RelayFailure`.
+  `(route, Result<(HTTPResponseHead, Data), TransportFailure>)` to success bytes or a `RelayFailure`:
+  `RelayOutcome.classify(route:result:) -> Result<Data, RelayFailure>`.
 
 #### 3.1.6 Relay speech frames and negotiation (protocol 10.3, 13.7)
 
@@ -1270,32 +1276,50 @@ actor FakeHTTPTransport: HTTPTransport {
         case failure(TransportFailure)
         case never                                       // suspends until the task is cancelled, then throws .cancelled
     }
+    enum StreamEnding: Sendable {
+        case finish                                      // the body ends normally
+        case fail(TransportFailure)                      // the body breaks off with this failure after the last chunk
+        case stall                                       // the body never ends: the reader waits until its task is cancelled
+    }
     init(replies: [Reply] = [])
     func enqueue(_ reply: Reply)
-    func setDefault(_ reply: Reply)                      // used when the queue is empty
+    func setDefault(_ reply: Reply)                      // used when the queue is empty; without one a request fails with .other
     var requests: [HTTPRequest] { get }
     func waitForRequests(count: Int) async               // returns when at least `count` were received
-    // HTTPTransport: `stream` delivers the same body as one chunk, or as the chunks given to `enqueueChunks`.
-    func enqueueChunks(status: Int, headers: [String: String], chunks: [Data])
+    // HTTPTransport: `stream` delivers a plain reply's body as one chunk, or the chunks given to
+    // `enqueueChunks`; `send` returns those chunks joined.
+    func enqueueChunks(status: Int, headers: [String: String], chunks: [Data], ending: StreamEnding = .finish)
 }
 
+/// One transport stands for one connection. After a `.closed` message was received, and after the client
+/// called `close`, `receive()` throws TransportFailure.other, and so do sends. A `receive()` whose task is
+/// cancelled throws `.cancelled`.
 actor FakeWebSocketTransport: WebSocketTransport {
     enum OpenResult: Sendable { case connection, rejected(status: Int), failure(TransportFailure), never }
     init(open: OpenResult = .connection)
     var openedURL: URL? { get }
     var openedHeaders: [String: String] { get }
+    var openedMaximumMessageSize: Int? { get }
     var sentTexts: [String] { get }
     var sentFrames: [Data] { get }
-    var closeCalls: [Int] { get }
-    func deliver(_ message: WebSocketMessage)            // the next `receive()` returns it
+    var closeCalls: [Int] { get }                        // the code of every `close`, in order
+    func deliver(_ message: WebSocketMessage)            // queued; the next `receive()` returns it
     func drop()                                          // the next `receive()` throws TransportFailure.other
     func failSends()                                     // later sends throw TransportFailure.other
+    func waitForOpen() async
+    func waitForSentTexts(count: Int) async
+    func waitForSentFrames(count: Int) async
+    func waitForCloseCalls(count: Int = 1) async
+    func waitForReceive() async                          // a `receive()` is waiting with nothing left in the queue
 }
 
 struct ManualTime: Sendable {                            // Support/ManualTime.swift
     init()
-    var timing: CoreTiming { get }
+    var timing: CoreTiming { get }                       // a sleep of zero or less returns at once; a cancelled sleep throws CancellationError
+    var now: TimeInterval { get }                        // seconds advanced so far
+    var sleeperCount: Int { get }
     func advance(by seconds: TimeInterval) async         // wakes sleepers whose time has come, in order
+    func waitForSleepers(count: Int = 1) async           // call it before `advance` when the sleep starts on another task
 }
 
 enum CoreFixtures {
@@ -1307,6 +1331,10 @@ enum CoreFixtures {
     static let catalogueJSON: String                     // {"models":[{"id":"gpt-test","name":"GPT Test","reasoningEfforts":["low"]}]}
 }
 ```
+
+A core test never waits by sleeping or by yielding in a loop. It waits with one of the `waitFor…` helpers,
+which is what keeps the tests steady on the Linux thread pool. `ContractSmokeTests` exercises every helper
+above.
 
 ### 3.2 App target
 
@@ -1428,26 +1456,29 @@ enum StorageNames {
 
 // Persistence/SessionStoring.swift
 protocol SessionStoring: Sendable {
-    /// Newest `startedAt` first. Rows that fail to decode are skipped.
+    /// Newest `startedAt` first. Sessions that fail to decode are skipped.
     func loadAll() async -> [Session]
-    /// Inserts or replaces the row with this id and records `savedAt` as its last-saved time.
+    /// Inserts or replaces the session with this id and records `savedAt` as its last-saved time.
     func save(_ session: Session, savedAt: Date) async throws
     func delete(id: UUID) async throws
     func contains(id: UUID) async -> Bool
     /// Launch recovery: every stored session without an end time is replaced by
-    /// `closedAfterInterruption(at:)` with its row's last-saved time. Returns how many were closed.
+    /// `closedAfterInterruption(at:)` with its last-saved time. Returns how many were closed.
     @discardableResult func closeInterruptedSessions() async -> Int
 }
 
 // Persistence/InMemorySessionStore.swift
 actor InMemorySessionStore: SessionStoring { init() }
 
-// Persistence/SwiftDataSessionStore.swift
-// Declared with `@ModelActor`. One model type, `SessionRow`: `id` (unique), `startedAt`, `lastSavedAt`,
-// `title`, `payload` (the Session encoded with LiveCueJSON, external storage). The default store in
-// Application Support; that folder is set to "complete until first user authentication".
-actor SwiftDataSessionStore: SessionStoring {
-    static func open() throws -> SwiftDataSessionStore
+// Persistence/FileSessionStore.swift (R-33)
+// One JSON file per session, `<session id>.json` (the id as `uuidString`), in the folder `Sessions` under
+// Application Support. Each file holds one session, encoded with LiveCueJSON, together with its
+// last-saved time, and is written atomically. The folder is created by `open()` and protected "complete
+// until first user authentication". A file that does not decode is skipped silently on load. No file of
+// the app imports SwiftData.
+actor FileSessionStore: SessionStoring {
+    /// `directory` nil means `Sessions` under Application Support; tests pass a temporary folder.
+    static func open(directory: URL? = nil) throws -> FileSessionStore
 }
 
 // Persistence/PreferencesStoring.swift
@@ -1565,7 +1596,8 @@ struct AudioCaptureStreams: Sendable {
 `AudioCapture` (WP-07) is the implementation: `@MainActor final class AudioCapture: AudioCapturing { init() }`.
 `AudioTapConverter` is a `final class … @unchecked Sendable` that owns the `AVAudioConverter` and the two
 continuations; its `static func makeTapBlock(...) -> AVAudioNodeTapBlock` is `nonisolated`, so the block
-that runs on the audio thread is not main-actor isolated. Calls are those of research 3.3 step 5 and of the
+that runs on the audio thread is not main-actor isolated. (The stub declares `makeTapBlock(for:)`; WP-07
+is free to change its parameters, which nothing else calls.) Calls are those of research 3.3 step 5 and of the
 old app (`AVAudioEngine.inputNode.installTap(onBus:bufferSize:format:block:)`,
 `AVAudioConverter.convert(to:error:withInputFrom:)`).
 
@@ -1631,7 +1663,7 @@ struct TranscriberEvent: Sendable {
     let stream: AsyncStream<TranscriberEvent>
     private(set) var emittedCount: Int
     init()
-    func emit(_ kind: TranscriberEvent.Kind, generation: UUID)
+    func emit(_ kind: TranscriberEvent.Kind, generation: UUID)   // after `finish()`: dropped and not counted
     func finish()
 }
 
@@ -1680,6 +1712,7 @@ struct ModelPreparationProgress: Equatable, Sendable {
     let fraction: Double                                 // clamped to 0...1
     let phase: Phase
     let counter: Counter
+    init(fraction: Double, phase: Phase, counter: Counter)   // clamps the fraction
 }
 protocol OnDeviceEngineLoading: Sendable {
     /// Downloads when needed, then loads. `progress` is called off the main actor.
@@ -1941,6 +1974,12 @@ struct SessionNotice: Equatable, Sendable {
 }
 ```
 
+`assist()` and `retrySameText()` are declared in `SessionController+Assist.swift`, and
+`cancelSummary(forSession:)` in `SessionController+Summary.swift`, as extensions. Swift lets only the file
+that declares a `private(set)` property assign it, so code in the two extension files cannot write the
+observable state directly: it calls methods that `SessionController.swift` declares for that purpose
+(8.3).
+
 Helper types owned by WP-08, used only inside `Session/`:
 
 ```swift
@@ -2183,8 +2222,9 @@ Wiring done in `AppEnvironment.init` after the owners exist:
 `history.willDelete = { await session.cancelSummary(forSession: $0) }`.
 
 Live wiring (`AppDependencies.live()`): `SystemClock`; `SystemPermissions`; `SystemClipboard`;
-`UserDefaultsPreferencesStore`; `KeychainSecretStore(names: .live)`; `FilePairingStore(names: .live)`;
-`SwiftDataSessionStore.open()`, falling back to `InMemorySessionStore` if it throws;
+`UserDefaultsPreferencesStore`; `KeychainSecretStore(names: StorageNames.live)`;
+`FilePairingStore(names: StorageNames.live)`;
+`FileSessionStore.open()`, falling back to `InMemorySessionStore` if it throws;
 `RelayClient(transport: URLSessionHTTPTransport(), timing: clock.coreTiming)`;
 `OpenRouterClient(transport: URLSessionHTTPTransport(resourceTimeout: 120), timing: clock.coreTiming)`;
 the two answer services; `LiveMetaKeyTester`; `LiveOnDeviceEngineLoader`; a `LiveTranscriberFactory` with
@@ -2220,6 +2260,8 @@ struct LaunchConfiguration: Equatable, Sendable {
     /// "XCTestConfigurationFilePath" (the app is hosting unit tests; base test mode).
     init(arguments: [String], environment: [String: String])
     static var current: LaunchConfiguration { get }      // from ProcessInfo
+    static let uiTestingArgument = "-ui-testing"
+    static let unitTestHostKey = "XCTestConfigurationFilePath"
 }
 
 // TestSeam/FixtureValues.swift
@@ -2231,7 +2273,9 @@ enum FixtureValues {
     static let metaKey = "fixture-meta-key"
     static let codexCatalogue: [AssistantModelOption]    // gpt-6-astra, gpt-6-luna, gpt-5.6-sol, gpt-5.6-luna, gpt-5.3-codex-spark
     static let openRouterCatalogue: [AssistantModelOption]   // test/direct, ["default"]
-    static var pairing: PairingPayload { get }           // https://pc.example.test:11443/ and the synthetic token
+    static let pairingEndpoint = "https://pc.example.test:11443/"
+    static let pairingToken: String                      // the synthetic token of protocol 4.2
+    static var pairing: PairingPayload { get }           // `pairingEndpoint` and `pairingToken`
     static let execution: RelayExecution                 // codexMs 600, relayTotalMs 620, requestReadMs 2, relayOverheadMs 20
     static let openRouterUsage: AssistantUsage           // 120 prompt tokens, 40 completion tokens, cost 0.0001
     static let assistPartialSeconds: TimeInterval = 0.4
@@ -2244,6 +2288,7 @@ enum FixtureValues {
 // TestSeam/FixturePairingStore.swift, FixturePermissions.swift
 struct FixturePairingStore: PairingStoring { init() }    // always the fixture pairing; save and remove do nothing
 struct FixturePermissions: PermissionProviding { init() }   // both true, no prompt
+struct FixtureMetaKeyTester: MetaKeyTesting { init() }   // in FixturePermissions.swift; succeeds at once, opens no socket (R-34)
 
 // TestSeam/TestSeamLaunchActions.swift
 @MainActor enum TestSeamLaunchActions {
@@ -2273,10 +2318,11 @@ actor FixtureRelayGateway: RelayGateway { init(mode: TestMode, clock: any AppClo
 ```
 
 Fixture wiring (`AppDependencies.fixture(_:)`): `SystemClock`; `FixturePermissions`; `SystemClipboard`;
-`UserDefaultsPreferencesStore`; `KeychainSecretStore(names: .test)`;
-`FilePairingStore(names: .test)` when `pairingPersistenceTest`, else `FixturePairingStore`;
-`InMemorySessionStore`; `FixtureRelayGateway`; `FixtureAnswerServices`; `FixtureEngineLoader`;
-`FixtureTranscriberFactory`. With `onDeviceReady`, `AppEnvironment.init` calls
+`UserDefaultsPreferencesStore`; `KeychainSecretStore(names: StorageNames.test)`;
+`FilePairingStore(names: StorageNames.test)` when `pairingPersistenceTest`, else `FixturePairingStore`;
+`InMemorySessionStore`; `FixtureRelayGateway`; `FixtureAnswerServices`; a second
+`FixtureAnswerService(provider: .openrouter, …)` as the OpenRouter key verifier; `FixtureMetaKeyTester`;
+`FixtureEngineLoader`; `FixtureTranscriberFactory`. With `onDeviceReady`, `AppEnvironment.init` calls
 `models.installPreloaded(variant: "parakeet", …)`. Nothing in fixture mode opens a socket, a URL session,
 the microphone or the camera. Fixture behaviour is specified in 4.9.
 
@@ -2286,15 +2332,18 @@ the microphone or the camera. Fixture behaviour is specified in 4.9.
 final class ManualClock: AppClock, @unchecked Sendable {      // lock-protected
     init(now: Date = Date(timeIntervalSince1970: 1_790_000_000))
     func advance(by seconds: TimeInterval) async         // moves now and uptime; wakes due sleepers in order, yielding between them
+    func waitForSleepers(count: Int = 1) async           // returns when that many sleeps are waiting
+    var sleeperCount: Int { get }
 }
 
 @MainActor final class FakeTranscriber: SpeechTranscriber {
     init(provider: SpeechProvider)
     var startResult: Result<Void, TranscriberFailure>    // default success
     var finalizeResult: Result<Void, TranscriberFailure>
+    var transcribePendingResult: Result<Void, TranscriberFailure>
     var pendingSeconds: TimeInterval
-    var segmentsOnFinalize: [String]                     // emitted as segments before finalize returns
-    var segmentsOnTranscribePending: [String]
+    var segmentsOnFinalize: [String]                     // emitted as segments before finalize returns, then cleared
+    var segmentsOnTranscribePending: [String]            // the same for transcribePending
     private(set) var calls: [String]                     // "start", "finalize", "transcribePending", "shutdown"
     private(set) var starts: [TranscriberStart]
     func emit(_ kind: TranscriberEvent.Kind)             // with the generation of the last start
@@ -2307,21 +2356,39 @@ final class ManualClock: AppClock, @unchecked Sendable {      // lock-protected
     private(set) var made: [FakeTranscriber]
     var configure: ((FakeTranscriber) -> Void)?
 }
+actor FakeMetaKeyTester: MetaKeyTesting {                // in FakeTranscriber.swift
+    init()
+    func setResult(_ result: Result<Void, MetaSpeechError>)   // default success
+    func setHold(_ hold: Bool)                           // true: test(key:) suspends until `release()`
+    func release()
+    var testedKeys: [String] { get }
+}
 
 actor FakeAnswerService: AnswerService, OpenRouterKeyVerifying {
     init(provider: AssistantProvider)
-    func setCatalogue(_ result: Result<[AssistantModelOption], any Error>)
+    func setCatalogue(_ result: Result<[AssistantModelOption], any Error>)   // default: empty
+    /// Default, when never set: fixed texts and an `execution` that echoes the request's selection.
     func setAnswer(_ result: Result<AssistResponse, any Error>, progress: [String])
-    func setSummary(_ result: Result<SummaryResponse, any Error>)
-    func setHoldAnswer(_ hold: Bool)                     // answer suspends until released or cancelled
+    func setSummary(_ result: Result<SummaryResponse, any Error>)            // default: a fixed summary
+    func setVerify(_ result: Result<Void, any Error>)                        // default success
+    func setHoldAnswer(_ hold: Bool)                     // answer suspends, after its progress calls, until released or cancelled
     func releaseAnswer()
+    func setHoldSummary(_ hold: Bool)
+    func releaseSummary()
+    func waitForCatalogueCalls(count: Int) async
+    func waitForAnswerRequests(count: Int) async
+    func waitForSummaryRequests(count: Int) async
     var catalogueCalls: Int { get }
     var answerRequests: [AssistRequest] { get }
     var summaryRequests: [SummaryRequest] { get }
-    var cancelledIDs: [UUID] { get }
+    var cancelledIDs: [UUID] { get }                     // `cancel(requestId:)` also ends the held request of that id with CancellationError
+    var verifiedKeys: [String] { get }
 }
 struct FakeAnswerServices: AnswerServiceProviding { init(codex: FakeAnswerService, openRouter: FakeAnswerService) }
 
+/// Defaults: health, verify, models (empty) and the three PC model calls succeed; assist and summarize
+/// fail with L-NETWORK. Names, here and in `calls`, are the method names: "health", "verifyPairing",
+/// "models", "localModelStatus", "startLocalModel", "stopLocalModel", "assist", "summarize", "cancel".
 actor FakeRelayGateway: RelayGateway {
     init()
     func setHealth(_ result: Result<RelayHealth, RelayFailure>)
@@ -2330,25 +2397,64 @@ actor FakeRelayGateway: RelayGateway {
     func setStatus(_ result: Result<PCModelStatus, RelayFailure>)
     func setStart(_ result: Result<PCModelStatus, RelayFailure>)
     func setStop(_ result: Result<PCModelStatus, RelayFailure>)
-    var calls: [String] { get }                          // route names in call order
+    func setAssist(_ result: Result<AssistResponse, RelayFailure>)
+    func setSummary(_ result: Result<SummaryResponse, RelayFailure>)
+    func setHold(_ hold: Bool, for name: String)         // calls of that name suspend until `release` or cancellation
+    func release(_ name: String)
+    func waitForCalls(count: Int) async
+    var calls: [String] { get }                          // method names in call order
+    var pairings: [PairingPayload] { get }
+    var modelRequests: [SpeechProvider] { get }          // the provider of every start and stop
+    var assistRequests: [AssistRequest] { get }
+    var summaryRequests: [SummaryRequest] { get }
+    var cancelledIDs: [UUID] { get }
 }
 
-@MainActor final class FakePreferences: PreferencesStoring { init() }
+@MainActor final class FakePreferences: PreferencesStoring { init(); private(set) var remembered: [AssistantProvider: AssistantConfiguration]; private(set) var resetCount: Int }
 final class FakeSecrets: SecretStoring, @unchecked Sendable { init(_ values: [SecretKind: String] = [:]); var failStatus: Int32? }
-final class FakePairingStore: PairingStoring, @unchecked Sendable { init(_ pairing: PairingPayload? = nil); var saveFails: Bool }
+final class FakePairingStore: PairingStoring, @unchecked Sendable {
+    init(_ pairing: PairingPayload? = nil)
+    var saveFails: Bool
+    var saved: [PairingPayload] { get }
+    var removeKeychainCopyCalls: Int { get }
+}
 struct FakePermissions: PermissionProviding { init(microphone: Bool = true, camera: Bool = true) }
+@MainActor final class FakeClipboard: ClipboardWriting { init(); private(set) var copies: [String] }
 
-@MainActor final class FakeAudioCapture: AudioCapturing {
+@MainActor final class FakeAudioCapture: AudioCapturing {    // unbounded streams: a test sends `.overflow` itself
     init()
     var startFailure: AudioCaptureFailure?
     func feed(_ chunk: AudioChunk)
     func send(_ event: AudioCaptureEvent)
+    private(set) var requests: [AudioCaptureRequest]
     private(set) var stops: [Bool]                       // the `releaseSession` argument of each stop
 }
 
-actor FakeBatchEngine: BatchRecognizing { init(); func setResult(_ result: Result<BatchRecognition, any Error>); var calls: [Int] { get } }
-actor FakeStreamingEngine: StreamingRecognizing { init(); func emitPartial(_ text: String); func setFinal(_ text: String); func setProcessError(_ fails: Bool); var processed: Int { get } }
-struct FakeEngineLoader: OnDeviceEngineLoading { init(voz: FakeBatchEngine, parakeet: FakeStreamingEngine, steps: [ModelPreparationProgress] = [], failure: (any Error)? = nil) }
+struct FakeEngineFailure: Error, Equatable {}
+actor FakeGate { init(); func wait() async; func open() }    // `wait()` suspends until `open()` was called
+actor FakeBatchEngine: BatchRecognizing {
+    init()
+    func setResult(_ result: Result<BatchRecognition, any Error>)   // default: no words, duration of the samples at 16 kHz
+    func setGate(_ gate: FakeGate?)                      // transcribe records the call, then waits for the gate
+    var calls: [Int] { get }                             // the sample count of every transcribe
+}
+actor FakeStreamingEngine: StreamingRecognizing {
+    init()
+    func emitPartial(_ text: String)
+    func setFinal(_ text: String)
+    func setProcessError(_ fails: Bool)                  // process throws FakeEngineFailure
+    func setFinishError(_ fails: Bool)
+    var processed: Int { get }                           // calls of process
+    var processedSamples: Int { get }
+    var resetCount: Int { get }
+    var finishCount: Int { get }
+    var cleanupCount: Int { get }
+}
+/// Reports `steps`, waits for `gate` when there is one, then throws `failure` or returns the engine.
+struct FakeEngineLoader: OnDeviceEngineLoading {
+    init(voz: FakeBatchEngine, parakeet: FakeStreamingEngine, steps: [ModelPreparationProgress] = [],
+         failure: (any Error)? = nil, gate: FakeGate? = nil)
+}
 
 /// Builds every state owner on fakes, with the same wiring as `AppEnvironment.init`.
 @MainActor final class TestOwners {
@@ -2360,23 +2466,31 @@ struct FakeEngineLoader: OnDeviceEngineLoading { init(voz: FakeBatchEngine, para
     let gateway: FakeRelayGateway
     let codex: FakeAnswerService
     let openRouter: FakeAnswerService
+    let keyTester: FakeMetaKeyTester
     let transcribers: FakeTranscriberFactory
+    let vozEngine: FakeBatchEngine
+    let parakeetEngine: FakeStreamingEngine
+    let clipboard: FakeClipboard
     let app: AppModel
     let activity: SessionActivity
+    let toasts: ToastCenter
     let speech: SpeechSettings
     let assistant: AssistantSettings
     let models: OnDeviceModelManager
     let relay: RelayMonitor
+    let pairing: PairingController
     let history: HistoryModel
     let readiness: SystemReadiness
     let session: SessionController
-    init(paired: Bool = true, provider: SpeechProvider = .meta, answers: AssistantProvider = .codex, metaKey: String? = "fixture-meta-key")
+    init(paired: Bool = true, provider: SpeechProvider = .meta, answers: AssistantProvider = .codex,
+         metaKey: String? = "fixture-meta-key", microphoneGranted: Bool = true)
 }
 ```
 
-`Result<…, any Error>` is not `Sendable`; the fakes take it only inside actor-isolated setters called from
-the test's own task, which Swift 5 mode accepts with a warning. Builders do not copy that pattern into the
-app.
+`Error` is `Sendable`, so a `Result<…, any Error>` crosses into the fake actors without complaint. The
+fakes offer waits (`waitFor…`) and holds (`setHold…`, `FakeGate`) so that a test never has to sleep or
+guess at timing: it waits for the call it expects, then releases it. A test that needs a state owner built
+differently from `TestOwners` builds that one owner itself from the same fakes.
 
 ### 3.3 Design-system surface (WP-05)
 
@@ -2659,7 +2773,7 @@ extension View {
 | `SpeechStreamSession` | Actor | `events` is `nonisolated` |
 | `URLSessionHTTPTransport`, `URLSessionWebSocketTransport`, `KeychainStore`, `KeychainSecretStore`, `FilePairingStore`, `SystemPermissions`, `SystemClock`, engines, loaders | Structs | `Sendable` |
 | `SessionStoring`, `SecretStoring`, `PairingStoring`, `RelayGateway`, `AnswerService`, `AnswerServiceProviding`, `PermissionProviding`, `AppClock`, `BatchRecognizing`, `StreamingRecognizing`, `OnDeviceEngineLoading`, `MetaKeyTesting`, `OpenRouterKeyVerifying` | Protocols | `Sendable` |
-| `InMemorySessionStore`, `SwiftDataSessionStore`, `CodexRelayAnswerService`, `OpenRouterAnswerService`, fixture services and gateway | Actors | Synchronous protocol requirements are `nonisolated` |
+| `InMemorySessionStore`, `FileSessionStore`, `CodexRelayAnswerService`, `OpenRouterAnswerService`, fixture services and gateway | Actors | Synchronous protocol requirements are `nonisolated` |
 | `PreferencesStoring`, `SpeechTranscriber`, `SpeechTranscriberFactory`, `AudioCapturing` | Protocols | `@MainActor`, class-bound |
 | `TranscriberEventChannel`, `TranscriberEventPump`, `SessionPersistence`, the four transcribers, `AudioCapture`, `SystemReadiness`, `LiveTranscriberFactory` | Classes | `@MainActor`, not observable |
 | `AppEnvironment`, `AppModel`, `SessionActivity`, `SessionController`, `RelayMonitor`, `PairingController`, `AssistantSettings`, `SpeechSettings`, `HistoryModel`, `OnDeviceModelManager`, `ToastCenter`, every view model | Classes | `@MainActor @Observable final` |
@@ -3508,7 +3622,7 @@ They build owners with `TestOwners` (3.2.11) and drive time with `ManualClock`. 
 | `AssistantSettingsTests` (WP-09) | Switching saves and restores per-service selections (AC-IOS-124) and is refused while assisting; model and effort rules (AC-IOS-117); a stale catalogue result is dropped (AC-IOS-123); the catalogue messages; key save, verify, remove and their messages, including the malformed-key text |
 | `SpeechSettingsTests` (WP-09) | Unknown stored provider reads as Meta; `select` refused during a session and while blocked (AC-IOS-094); key actions refused during a session (AC-IOS-113); empty and whitespace keys give their two messages (AC-IOS-109 as changed); test and remove messages |
 | `HistoryModelTests`, `SystemReadinessTests` (WP-09) | Order newest first (AC-IOS-085); delete calls `willDelete` first; readiness for every provider and service (AC-IOS-008); lock reasons |
-| `KeychainSecretStoreTests`, `FilePairingStoreTests`, `UserDefaultsPreferencesStoreTests`, `SwiftDataSessionStoreTests`, `URLErrorMappingTests`, `TestSeamLaunchActionsTests` (WP-06) | Keys under the test accounts round-trip and remove (AC-IOS-152); pairing load order file then Keychain, restore without the Keychain copy, file excluded from backup and protected (AC-IOS-133, 141); preference keys and defaults of architecture 4.10; rows upsert, sort, skip undecodable payloads, and `closeInterruptedSessions` uses the row's last-saved time; each system error code maps as 3.2.1 says; each launch action |
+| `KeychainSecretStoreTests`, `FilePairingStoreTests`, `UserDefaultsPreferencesStoreTests`, `FileSessionStoreTests`, `URLErrorMappingTests`, `TestSeamLaunchActionsTests` (WP-06) | Keys under the test accounts round-trip and remove (AC-IOS-152); pairing load order file then Keychain, restore without the Keychain copy, file excluded from backup and protected (AC-IOS-133, 141); preference keys and defaults of architecture 4.10; session files upsert, sort, are written atomically into a protected folder, a file that does not decode is skipped, and `closeInterruptedSessions` uses the file's last-saved time (the store is given a temporary folder); each system error code maps as 3.2.1 says; each launch action |
 | `StreamingTranscriberEngineTests`, `VozTranscriberTests`, `ParakeetTranscriberTests`, `OnDeviceModelManagerTests`, `FixtureTranscriberTests` (WP-07) | The columns of 4.2 with `FakeAudioCapture` and fake engines: microphone after the handshake, audio session released or kept on Pause (IOS-B6), each failure kind and its text, `failed` last, events emitted before a call returns; the steps of 4.6 including Reload and the per-model progress block (IOS-B13, AC-IOS-145 to 149); fixture usage gains 1 s per second |
 | `HomeViewModelTests`, `LiveSessionViewModelTests`, `AssistantLabViewModelTests`, `TimingViewContentTests` (WP-10) | Home chip and rows for every combination (AC-IOS-004 to 014); live chip, preview and feed states (AC-IOS-027, 029, 038, 050, 072); comparisons limit and order (AC-IOS-126); price and effort labels; timing rows for Codex, OpenRouter, Parakeet, retry and missing PC timings (AC-IOS-069) |
 | `SettingsViewModelTests`, `TranscriptionViewModelTests`, `PCSpeechModelViewModelTests`, `MetaKeyViewModelTests`, `PairingViewModelTests`, `ModelLibraryViewModelTests`, `BenchmarkViewModelTests`, `HistoryViewModelTests`, `SessionDetailContentTests` (WP-11) | Provider rows by provider (AC-IOS-095 to 097); PC model button rules (AC-IOS-099 to 105); pairing fields after a read, alert without prefix on a failed verify; progress block only for its model; "Use latest transcript" source (IOS-D6); usage labels and sections only with content (AC-IOS-081, 084, 086, 088) |
@@ -3544,6 +3658,28 @@ T1 to T16 are ported to the new navigation.
 Not covered by a UI test because the fixed test seam has no argument for it: stream failures and the
 session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 
+`UITestSupport` (WP-01) is what the UI tests share:
+
+```swift
+enum UITestSupport {
+    static let launchTimeout: TimeInterval = 120         // the first element after a launch; a fresh runner is slow
+    static let timeout: TimeInterval = 15
+    @MainActor @discardableResult static func launch(_ arguments: [String] = []) -> XCUIApplication   // adds "-ui-testing"; also the relaunch
+    @MainActor static func element(_ identifier: String) -> XCUIElement       // any element type
+    @MainActor @discardableResult static func waitFor(_ identifier: String, timeout: TimeInterval = 15,
+                                                      file: StaticString = #filePath, line: UInt = #line) -> XCUIElement
+    @MainActor static func waitForLabel(_ identifier: String, equals label: String, timeout: TimeInterval = 15) -> Bool
+    @MainActor static func waitForLabel(_ identifier: String, contains text: String, timeout: TimeInterval = 15) -> Bool
+    @MainActor static func waitForDisappearance(of identifier: String, timeout: TimeInterval = 15) -> Bool
+    @MainActor static func waitUntilSelected(_ element: XCUIElement, timeout: TimeInterval = 15) -> Bool
+    @MainActor static func tabButton(_ title: String) -> XCUIElement
+    @MainActor static func attachScreenshot(named name: String, to testCase: XCTestCase)
+}
+```
+
+The first wait after a launch uses `launchTimeout`. CI gives a test 180 s by default and at most 600 s
+(`executionTimeAllowance`), so a test with several relaunches or the 8 s catalogue raises its own allowance.
+
 ### 6.4 Where each test runs
 
 | Run | What | Tests |
@@ -3551,6 +3687,18 @@ session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 | Linux, `swift:6.2-noble` | `swift test --package-path ios/LiveCueCore`; the glass and import lint | All of 6.1 |
 | Simulator, iOS 26.2 on `macos-26` | The scheme: all three bundles | 6.1, 6.2, 6.3 including the glass gate |
 | Simulator, iOS 18.6 on `macos-15` | The scheme: all three bundles | 6.1, 6.2, 6.3 except the glass gate |
+
+The workflow `.github/workflows/ios.yml` runs in two sizes, because a public repository gets only a few
+macOS jobs at a time:
+
+| Size | When | Jobs |
+|---|---|---|
+| quick | A push to a branch named `wp/**` | Linux core job; helper-script tests; one macOS job that builds the app and runs `LiveCueCoreTests` and `LiveCueRemakeTests` on the iOS 26.2 simulator. No UI tests, no iOS 18 leg, no device build |
+| full | A push to `main`; a pull request into `main`; a manual run | Linux core job; helper-script tests; both simulator legs with all three bundles and exported screenshots; the unsigned device build with IPA validation |
+
+A full run on a branch is started by hand: `gh workflow run ios.yml --ref <branch> -f scope=full`
+(`scope=quick` asks for the small run). A newer run for the same branch and trigger cancels the older one.
+The workflow starts only when a file under `ios/`, `scripts/ci/` or the workflow itself changed.
 
 ### 6.5 What only a device can show (for the owner)
 
@@ -3585,8 +3733,11 @@ session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 - Work from this file. Own only the files listed for the package; create new files only inside a folder
   the package owns and only for private helpers; file names stay unique in the target.
 - Replace every stub body marked `// STUB(WP-nn)`. Do not change a printed signature (see Conventions).
+  Some marked bodies are already right because the real thing was the cheapest valid stub (a switch, a
+  one-line getter); the owner checks them and removes the marker.
 - A package is done when its tests are added, the whole CI run is green on its branch, no `STUB(WP-nn)` of
-  its own remains, and its definition of done holds.
+  its own remains, and its definition of done holds. "The whole CI run" is the full run of 6.4, which a
+  builder starts by hand on the package's `wp/**` branch; pushes to that branch get the quick run.
 - Sizes are lines of Swift, sources plus tests, rounded.
 
 ### 7.2 Packages
@@ -3597,7 +3748,7 @@ session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 |---|---|
 | Goal | A repository in which every later package compiles against real declarations, and an app that launches into an empty shell on both simulator legs. |
 | Starts from | Branch `spike/ios-ci`: its `ios/project.yml`, workflow, CI scripts, lint, entitlements file, `LiquidGlass.swift`, `Theme.swift` and `GroundView.swift` are known to build and run. They are kept; what the research document says differently is ignored (R-30). |
-| Files | Everything marked WP-01 in section 2; and, as stubs, every other file of section 2. The removals listed at the end of section 2. `ios/project.yml` gains only: the target `LiveCueRemakeTests` (`bundle.unit-test`, sources `AppTests`, dependency on the app target, `GENERATE_INFOPLIST_FILE: "YES"`), and that target in the scheme's test list. The workflow's bundle check gains `--require-bundle LiveCueRemakeTests`. |
+| Files | Everything marked WP-01 in section 2; and, as stubs, every other file of section 2. The removals listed at the end of section 2. `ios/project.yml` gains only: the target `LiveCueRemakeTests` (`bundle.unit-test`, sources `AppTests`, dependency on the app target, `GENERATE_INFOPLIST_FILE: "YES"`), and that target in the scheme's test list. The workflow's bundle check gains `--require-bundle LiveCueRemakeTests`, and the workflow gains the quick and full sizes of 6.4. |
 | Provides | Every declaration of section 3 as compiling code. Complete: the domain model of 3.1.2 without the behaviours listed for WP-02; `PairingPayload`, `RelayEndpoint` and `JSONValue` (the fixture pairing needs them at launch); transport types and `CoreTiming`; `RelayConstants`, `RelayRoute`, `RelayFailure`; the error enums with their texts; `StreamTranscriptEvent`, `SpeechStreamTypes`, `MetaEvent`, `UsageUpdate`; the app protocols of 3.2; `KeychainStore`; `AppModel`, `SessionActivity`, `AppEnvironment` and both wirings; `LaunchConfiguration`, `TestMode`, `FixtureValues`; `InMemorySessionStore`; `TranscriberEventChannel`; `SystemClock`, `SystemClipboard`, `AppVersion`, `LiveMetaKeyTester`; `RootView`, `RouteDestination`; all test fakes of 3.1.12 and 3.2.11. Stubs: state owners and view models whose computed properties return fixed placeholder values and whose intents do nothing; screens that show their title in a `ScreenScaffold`; components that render their text plainly; core behaviours that return the cheapest valid value or throw the type's generic failure. No stub traps: the shell must launch. |
 | Tests | `ContractSmokeTests`, `PairingPayloadTests`, `RelayEndpointTests`, `JSONValueTests`, `LaunchConfigurationTests`, `AppEnvironmentSmokeTests`, `KeychainStoreTests`, `ShellUITests`. |
 | Done when | CI is green with all three bundles reported on both legs; the device build still produces an arm64 app with the bundle identifier of D-03; the lint passes; a list of every `STUB(WP-nn)` marker per package is posted. |
@@ -3660,7 +3811,7 @@ session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 | Consumes | Transport protocols, the store protocols, `StorageNames`, `PermissionProviding`, `QRScanFailure`, `TestMode`, `FixtureValues`. |
 | Provides | 3.2.1 adapters, 3.2.2 implementations, `TestSeamLaunchActions`. |
 | Tests | The WP-06 row of 6.2. |
-| Done when | Its tests pass on both legs; no file outside `Platform/` and `Persistence/` imports `Security` or `SwiftData`; no access group appears in any Keychain query. |
+| Done when | Its tests pass on both legs; no file outside `Platform/` and `Persistence/` imports `Security`; no file imports `SwiftData` (R-33); no access group appears in any Keychain query. |
 | Size | 1,700 |
 
 **WP-07 Audio and speech**
@@ -3765,10 +3916,10 @@ beneath it:
 
 | # | Item | For |
 |---|---|---|
-| H-1 | The scheme runs three bundles. The CI step that checks which bundles ran must require `LiveCueCoreTests`, `LiveCueRemakeTests` and `LiveCueRemakeUITests`. WP-01 makes this one change in the spike's workflow; the CI plan carries it into `ci.yml`. | CI plan |
+| H-1 | The scheme runs three bundles. The CI step that checks which bundles ran must require `LiveCueCoreTests`, `LiveCueRemakeTests` and `LiveCueRemakeUITests`. Done by WP-01 in `.github/workflows/ios.yml` (the quick run requires the first two); the CI plan carries it into `ci.yml`. | CI plan |
 | H-2 | `GlassContrastUITests` runs only on the leg named `glass` (it skips itself when the system is older than iOS 26), and reads the screenshot it takes itself; it needs nothing from the workflow. | CI plan |
 | H-3 | The synthetic token used by `CoreFixtures` and `FixtureValues` is the one of protocol 4.2 and must be on the audit allowlist (AUD-2). | CI plan |
-| H-4 | Architecture 4.6, row "Hand-off queue": the on-device overflow clause is superseded by R-07. Architecture 4.9, last sentence, is moot (R-10). Architecture 4.4 and protocol 14.3 say "alert" where R-03, R-27 and R-28 now say notice. Architecture 4.7's `TranscriberEvent` is completed by R-24. | Orchestrator, to note in the architecture file |
+| H-4 | Architecture 4.6, row "Hand-off queue": the on-device overflow clause is superseded by R-07. Architecture 4.9, last sentence, is moot (R-10). Architecture 4.4 and protocol 14.3 say "alert" where R-03, R-27 and R-28 now say notice. Architecture 4.7's `TranscriberEvent` is completed by R-24. Architecture 4.10's SwiftData store is replaced by R-33. Noted in `03-system-architecture.md` sections 4.4, 4.6, 4.7, 4.9 and 4.10 by WP-01. | Done |
 | H-5 | The README must carry the two Voz statements of architecture 4.13 and the LiveContainer notes of 6.5 item 1. | Whoever writes the README |
 
 ---
@@ -3815,6 +3966,9 @@ avoids it.
 | `@unchecked Sendable` | Allowed only for `AudioTapConverter`, the URL session delegate classes of WP-06, and the test fakes named in 3.2.11. Nowhere else, and never `nonisolated(unsafe)`. |
 | `Task { }` versus `Task.detached` | `Task { }` inside a `@MainActor` type runs on the main actor; that is what the state owners want. Do not use `Task.detached`, `DispatchQueue.main.async` or `Timer`; sleep with `clock.sleep(seconds:)`. |
 | A continuation resumed twice or never | Adapters that bridge a delegate to `async` (`URLSessionWebSocketTransport.open`) guard the continuation with a "resumed" flag under a lock and resume on every path, including cancellation. |
+| `private(set)` state written from an extension in another file | Only the declaring file can assign a `private(set)` property. `SessionController+Assist.swift` and `SessionController+Summary.swift` are extensions in their own files: they change state through methods that `SessionController.swift` declares, never by assignment. The same holds for every state owner. |
+| Capturing a local `var` in a `Task` | A `Task { }` closure may not mutate a captured local `var`. Keep the value in a property of the `@MainActor` owner, or in a small `@MainActor` class in a test. |
+| `await` inside `XCTAssert…` | The arguments are autoclosures that cannot suspend. Read the value into a `let` first, then assert. |
 | Warnings as errors | The app target is Swift 5 mode so that isolation findings are warnings. Never set `SWIFT_TREAT_WARNINGS_AS_ERRORS` or `-warnings-as-errors`. Deprecation warnings (for example `.allowBluetooth`) are accepted. |
 
 ### 8.4 SwiftUI
@@ -3840,7 +3994,7 @@ avoids it.
 | FluidAudio calls | `StreamingEouAsrManager` is an actor: `await manager.reset()`, `await manager.setPartialCallback { … }`, `_ = try await manager.process(audioBuffer:)`, `try await manager.finish()`, `await manager.cleanup()`. `MLModelConfiguration` needs `import CoreML`; `AVAudioPCMBuffer` needs `import AVFoundation`. Read signatures from research 3.3, not from the package README. |
 | Voz calls | `try await Voz(progress:)`; `try await voz.transcribe(samples:)` (it is `throws` on an actor, so `try await`). The result's `words` have `text`, `start`, `end`. |
 | Progress handlers | Both packages call them off the main actor and they are `@Sendable`: capture only `Sendable` values and hop. |
-| SwiftData | `import SwiftData` only in `SwiftDataSessionStore.swift`. Model objects never leave the actor: methods take and return `Session` values. In `#Predicate`, compare against a local `let` (`let target = id`), not a property path of `self`. |
+| Session files | No `import SwiftData` anywhere (R-33). `FileSessionStore` is an actor; `FileManager` and `Data.write(to:options:)` are called inside it with `.atomic` and `.completeFileProtectionUntilFirstUserAuthentication`. Build each file name from `id.uuidString`, never from text that came out of a file. A file that does not decode is skipped, not deleted. |
 | Keychain | Build queries as `[String: Any]` and cast with `as CFDictionary`. No `kSecAttrAccessGroup`. Treat `errSecItemNotFound` on delete as success. |
 | `URLSession` | Create sessions from `URLSessionConfiguration.ephemeral` with `urlCache = nil`, `httpCookieStorage = nil`, `httpShouldSetCookies = false`. The redirect delegate calls its completion handler with `nil`. `URLSession.bytes(for:)` appears only in `URLSessionHTTPTransport.swift`. |
 | The core on Linux | `import Foundation` only: no `FoundationNetworking`, `URLSession`, `os`, `OSLog`, `CryptoKit`, `Combine`, `Dispatch` queues or `autoreleasepool`. No `Bundle.module` resources in tests: fixtures are string literals. No locale-dependent formatting or comparison (`localizedCaseInsensitiveCompare`, `Date.formatted`). |

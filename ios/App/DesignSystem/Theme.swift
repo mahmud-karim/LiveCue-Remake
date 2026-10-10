@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Design tokens, named by role as in `docs/design/01-design-system.md` section 2.
 ///
-/// Only the tokens that the placeholder screen and the glass fallback read are defined so far.
-/// Views take them from the environment (`@Environment(\.theme)`) and never spell a colour themselves.
+/// Views take them from the environment (`@Environment(\.theme)`) and never spell a colour, a size, a
+/// radius or a font themselves. The values of Daylight, the only theme, are in `Theme+Daylight.swift`.
 struct Theme: Sendable {
     var ground: Ground
     var surface: Surface
@@ -11,6 +11,11 @@ struct Theme: Sendable {
     var sheen: Sheen
     var ink: Ink
     var accent: Accent
+    var status: Status
+    var track: Track
+    var radius: Radius
+    var space: Space
+    var size: Size
     var shadow: Shadows
     var motion: Motion
     var opacity: Opacity
@@ -33,19 +38,16 @@ struct Theme: Sendable {
     }
 
     struct Surface: Sendable {
-        /// Laid over a system material to make fallback floating chrome.
-        var floating: Color
-        /// Replaces `floating` and its material when Reduce Transparency is on.
-        var floatingSolid: Color
-        var raisedPressed: Color
+        var panel: Color, inset: Color, raised: Color, raisedPressed: Color
+        /// `floating` is laid over a system material to make fallback floating chrome; `floatingSolid`
+        /// replaces both when Reduce Transparency is on.
+        var floating: Color, floatingSolid: Color, overlay: Color, inverse: Color, scrim: Color, qr: Color
     }
 
     struct Stroke: Sendable {
-        /// `stroke.edge` runs from this colour at the top of a shape...
-        var edgeTop: Color
-        /// ...to this colour at the bottom.
-        var edgeBottom: Color
-        var onAccent: Color
+        /// `stroke.edge` runs from `edgeTop` at the top of a shape to `edgeBottom` at the bottom.
+        var edgeTop: Color, edgeBottom: Color, raised: Color, inset: Color, onAccent: Color
+        var hairline: Color, control: Color, danger: Color, focus: Color
     }
 
     struct Sheen: Sendable {
@@ -55,15 +57,59 @@ struct Theme: Sendable {
     }
 
     struct Ink: Sendable {
-        var primary: Color
-        var secondary: Color
-        var onAccent: Color
+        var primary: Color, secondary: Color, disabled: Color, onAccent: Color, onInverse: Color
     }
 
     struct Accent: Sendable {
-        var fill: Color
-        var pressed: Color
-        var strong: Color
+        var fill: Color, pressed: Color, strong: Color, tint: Color
+    }
+
+    struct Status: Sendable {
+        var live: Color, success: Color, warning: Color, danger: Color, offline: Color
+        var liveTint: Color, successTint: Color, warningTint: Color, dangerTint: Color, neutralTint: Color
+
+        func color(for tone: StatusTone) -> Color {
+            switch tone {
+            case .live: return live
+            case .success: return success
+            case .warning: return warning
+            case .danger: return danger
+            case .neutral: return offline
+            }
+        }
+
+        func tint(for tone: StatusTone) -> Color {
+            switch tone {
+            case .live: return liveTint
+            case .success: return successTint
+            case .warning: return warningTint
+            case .danger: return dangerTint
+            case .neutral: return neutralTint
+            }
+        }
+    }
+
+    struct Track: Sendable {
+        var progress: Color
+    }
+
+    /// 30, 26, 32, 22, 16, 12, 8
+    struct Radius: Sendable {
+        var panel: CGFloat, compactPanel: CGFloat, sheet: CGFloat, card: CGFloat, field: CGFloat, tile: CGFloat, small: CGFloat
+    }
+
+    /// 2, 4, 8, 12, 16, 20, 24, 32; 16, 16, 16, 12, 12, 8, 12
+    struct Space: Sendable {
+        var half: CGFloat, s1: CGFloat, s2: CGFloat, s3: CGFloat, s4: CGFloat, s5: CGFloat, s6: CGFloat, s8: CGFloat
+        var screenInset: CGFloat, panelInset: CGFloat, cardInset: CGFloat, panelGap: CGFloat, groupGap: CGFloat
+        var inlineGap: CGFloat, controlGap: CGFloat
+    }
+
+    /// 44, 52, 44, 64, 52, 52, 64, 48, 28, 36; 740
+    struct Size: Sendable {
+        var minimumTarget: CGFloat, largeButton: CGFloat, regularButton: CGFloat, sessionControl: CGFloat
+        var clusterCircle: CGFloat, row: CGFloat, twoLineRow: CGFloat, field: CGFloat, chip: CGFloat, iconTile: CGFloat
+        var compactHeightThreshold: CGFloat
     }
 
     struct Shadow: Sendable {
@@ -73,65 +119,17 @@ struct Theme: Sendable {
     }
 
     struct Shadows: Sendable {
-        var floating: Shadow
-        var accent: Shadow
+        var panel: Shadow, raised: Shadow, floating: Shadow, accent: Shadow
     }
 
     struct Motion: Sendable {
-        /// Press feedback: 100 ms, ease out.
-        var press: Animation
-        var pressedScale: CGFloat
+        var press: Animation, fast: Animation, base: Animation, emphasis: Animation, stream: Animation
+        var pulseSeconds: Double, pressedScale: CGFloat
     }
 
     struct Opacity: Sendable {
-        var disabled: Double
+        var disabled: Double, caretLow: Double
     }
-}
-
-extension Theme {
-    /// Daylight, the only theme.
-    static let daylight: Theme = {
-        let shade = Color(hex: 0x283C6E)
-        return Theme(
-            ground: Ground(
-                base: Color(hex: 0xE6ECF5),
-                blooms: [
-                    Bloom(color: Color(hex: 0xC7D3F5), center: UnitPoint(x: 0.92, y: 1.00), radius: 0.50),
-                    Bloom(color: Color(hex: 0xA8D4F2), center: UnitPoint(x: 0.02, y: 0.64), radius: 0.48),
-                    Bloom(color: Color(hex: 0xB9C4F7), center: UnitPoint(x: 0.96, y: 0.24), radius: 0.44),
-                    Bloom(color: Color(hex: 0x9DC1F5), center: UnitPoint(x: 0.06, y: -0.06), radius: 0.46)
-                ],
-                bloomFadeEnd: 0.72
-            ),
-            surface: Surface(
-                floating: Color(hex: 0xFFFFFF, alpha: 0.62),
-                floatingSolid: Color(hex: 0xF6F8FB),
-                raisedPressed: Color(hex: 0xEEF3FB)
-            ),
-            stroke: Stroke(
-                edgeTop: Color(hex: 0xFFFFFF, alpha: 0.95),
-                edgeBottom: Color(hex: 0xFFFFFF, alpha: 0.60),
-                onAccent: Color(hex: 0xFFFFFF, alpha: 0.30)
-            ),
-            sheen: Sheen(top: Color(hex: 0xFFFFFF, alpha: 0.28), fadeEnd: 0.40),
-            ink: Ink(
-                primary: Color(hex: 0x0E1B33),
-                secondary: Color(hex: 0x3D4A63),
-                onAccent: Color(hex: 0xFFFFFF)
-            ),
-            accent: Accent(
-                fill: Color(hex: 0x0B57D0),
-                pressed: Color(hex: 0x0949B0),
-                strong: Color(hex: 0x0842A0)
-            ),
-            shadow: Shadows(
-                floating: Shadow(color: shade.opacity(0.22), radius: 17, y: 14),
-                accent: Shadow(color: shade.opacity(0.28), radius: 8, y: 6)
-            ),
-            motion: Motion(press: .timingCurve(0, 0, 0.2, 1, duration: 0.1), pressedScale: 0.97),
-            opacity: Opacity(disabled: 0.45)
-        )
-    }()
 }
 
 extension EnvironmentValues {
@@ -140,7 +138,7 @@ extension EnvironmentValues {
 }
 
 extension Color {
-    /// An sRGB colour from a 24-bit value such as `0x0B57D0`.
+    /// An sRGB colour from a 24-bit value such as `0x0B57D0`. Only the theme definition uses it.
     init(hex: UInt32, alpha: Double = 1) {
         self.init(
             .sRGB,

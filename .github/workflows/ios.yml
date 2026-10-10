@@ -3,19 +3,44 @@ name: iOS
 # Builds and tests the iPhone app on free GitHub-hosted runners. No secrets are used and no signing
 # identity is needed: simulator builds are signed ad hoc and the device build is unsigned. No speech
 # model is downloaded or run.
+#
+# Two sizes of run, chosen by the Plan job:
+#
+#   quick  A push to a work-package branch (wp/**). The Linux core job, the helper-script tests and
+#          one macOS job that builds the app and runs the two unit-test bundles on the iOS 26
+#          simulator. A public repository gets only a few macOS jobs at a time, and many builders
+#          push at once, so a feature branch takes one.
+#   full   A push to main, a pull request into main, and a manual run (unless it asks for quick).
+#          Both simulator legs with all three bundles and exported screenshots, and the unsigned
+#          device build with IPA validation.
+#
+# A full run on any branch:  gh workflow run ios.yml --ref <branch> -f scope=full
 
 on:
   push:
+    branches:
+      - main
+      - "wp/**"
     paths:
       - "ios/**"
       - "scripts/ci/**"
       - ".github/workflows/ios.yml"
   pull_request:
+    branches:
+      - main
     paths:
       - "ios/**"
       - "scripts/ci/**"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
+    inputs:
+      scope:
+        description: "full: both simulator legs with UI tests, and the device build. quick: what a push to wp/** runs."
+        type: choice
+        options:
+          - full
+          - quick
+        default: full
 
 permissions:
   contents: read
@@ -44,6 +69,44 @@ env:
   MINIMUM_IOS: "18.0"
 
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      scope: ${{ steps.plan.outputs.scope }}
+      legs: ${{ steps.plan.outputs.legs }}
+    steps:
+      - name: Choose a quick or a full run
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REQUESTED: ${{ inputs.scope }}
+        run: |
+          scope=quick
+          if [[ "$EVENT" == "pull_request" || "$REF" == "refs/heads/main" ]]; then
+            scope=full
+          fi
+          if [[ "$EVENT" == "workflow_dispatch" ]]; then
+            scope="${REQUESTED:-full}"
+          fi
+
+          # Native Liquid Glass on macos-26. The material fallback on macos-15: only that image
+          # has iOS 18 simulator runtimes.
+          glass='"leg":"glass","runner":"macos-26","runtime":"26.2"'
+          fallback='"leg":"fallback","runner":"macos-15","runtime":"18.6"'
+          if [[ "$scope" == "full" ]]; then
+            legs="[{$glass,\"title\":\"iOS tests\",\"ui\":true},{$fallback,\"title\":\"iOS tests\",\"ui\":true}]"
+          else
+            scope=quick
+            legs="[{$glass,\"title\":\"iOS unit tests\",\"ui\":false}]"
+          fi
+
+          echo "Event $EVENT on $REF: a $scope run."
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "legs=$legs" >> "$GITHUB_OUTPUT"
+
   ci-scripts:
     name: CI scripts
     runs-on: ubuntu-latest
@@ -65,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     # The same compiler line as the pinned Xcode (Swift 6.2).
     container: swift:6.2-noble
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -83,22 +146,15 @@ jobs:
         run: swift test --package-path ios/LiveCueCore
 
   ios-tests:
-    name: iOS tests (${{ matrix.leg }}, iOS ${{ matrix.runtime }})
-    needs: [ci-scripts, core-linux]
+    name: ${{ matrix.title }} (${{ matrix.leg }}, iOS ${{ matrix.runtime }})
+    needs: [plan, ci-scripts, core-linux]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
+    # A full leg also runs the UI tests, whose runner can take several minutes to start.
+    timeout-minutes: ${{ matrix.ui && 60 || 40 }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Native Liquid Glass.
-          - leg: glass
-            runner: macos-26
-            runtime: "26.2"
-          # The material fallback. Only the macos-15 image has iOS 18 simulator runtimes.
-          - leg: fallback
-            runner: macos-15
-            runtime: "18.6"
+        include: ${{ fromJSON(needs.plan.outputs.legs) }}
     steps:
       - uses: actions/checkout@v7
 
@@ -120,9 +176,14 @@ jobs:
       # Signing is off in the project, and a simulator build made that way has no entitlements:
       # Keychain calls then fail with -34018. The three signing arguments switch ad hoc signing on
       # for the test run, which is what makes the Keychain work.
-      - name: Run unit and UI tests
-        timeout-minutes: 30
+      #
+      # A quick run skips the UI test bundle; the core tests and the hosted unit tests still run.
+      - name: Run the tests
+        timeout-minutes: ${{ matrix.ui && 40 || 25 }}
+        env:
+          SKIPPED: ${{ matrix.ui && ' ' || '-skip-testing:LiveCueRemakeUITests' }}
         run: |
+          # $SKIPPED is left unquoted on purpose: it is one argument or nothing.
           bash scripts/ci/xcodebuild_logged.sh "artifacts/xcodebuild-${{ matrix.leg }}.log" test \
             -project "$PROJECT" -scheme "$SCHEME" \
             -destination "platform=iOS Simulator,arch=arm64,id=${{ steps.simulator.outputs.udid }}" \
@@ -130,8 +191,9 @@ jobs:
             -resultBundlePath "artifacts/Tests-${{ matrix.leg }}.xcresult" \
             -parallel-testing-enabled NO \
             -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 120 \
-            -maximum-test-execution-time-allowance 180 \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 600 \
+            $SKIPPED \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=-
 
       - name: Show the app's signature and entitlements after a failure
@@ -148,15 +210,18 @@ jobs:
           done
 
       # xcodebuild also succeeds when a scheme stops running one of its bundles; this check does not.
-      - name: Check that both test bundles ran
+      - name: Check that every expected test bundle ran
         if: ${{ !cancelled() }}
+        env:
+          UI_BUNDLE: ${{ matrix.ui && '--require-bundle LiveCueRemakeUITests' || ' ' }}
         run: |
+          # $UI_BUNDLE is left unquoted on purpose: it is two arguments or nothing.
           python3 scripts/ci/check_test_results.py "artifacts/Tests-${{ matrix.leg }}.xcresult" \
-            --require-bundle LiveCueCoreTests --require-bundle LiveCueRemakeUITests \
+            --require-bundle LiveCueCoreTests --require-bundle LiveCueRemakeTests $UI_BUNDLE \
             --save "artifacts/test-results-${{ matrix.leg }}.json"
 
       - name: Save a final screenshot
-        if: ${{ !cancelled() && steps.simulator.outputs.udid != '' }}
+        if: ${{ !cancelled() && matrix.ui && steps.simulator.outputs.udid != '' }}
         continue-on-error: true
         timeout-minutes: 2
         run: |
@@ -164,7 +229,7 @@ jobs:
           xcrun simctl io "${{ steps.simulator.outputs.udid }}" screenshot "artifacts/final-screen-${{ matrix.leg }}.png"
 
       - name: Export screenshots from the result bundle
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.ui }}
         run: |
           python3 scripts/ci/export_screenshots.py "artifacts/Tests-${{ matrix.leg }}.xcresult" \
             "artifacts/screenshots-${{ matrix.leg }}" \
@@ -181,9 +246,10 @@ jobs:
 
   device-build:
     name: Device build (unsigned IPA)
-    needs: [ci-scripts, core-linux]
+    needs: [plan, ci-scripts, core-linux]
+    if: ${{ needs.plan.outputs.scope == 'full' }}
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 40
     env:
       IPA_NAME: LiveCueRemake.ipa
     steps:
@@ -201,7 +267,7 @@ jobs:
       # app (xcodebuild refuses -enableCodeCoverage outside test actions); validate_ipa.py fails
       # the job if the instrumentation comes back.
       - name: Build the Release app for devices, unsigned
-        timeout-minutes: 25
+        timeout-minutes: 30
         run: |
           bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild-device.log build \
             -project "$PROJECT" -scheme "$SCHEME" -configuration Release \

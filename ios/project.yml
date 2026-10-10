@@ -87,6 +87,20 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: "YES"
 
+  # Hosted unit tests: the app is their host, so the state owners and view models are tested in place.
+  LiveCueRemakeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+    dependencies:
+      - target: LiveCueRemake
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mahmudkarim.LiveCueRemake.Tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1"
+
   LiveCueRemakeUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -106,6 +120,7 @@ schemes:
     build:
       targets:
         LiveCueRemake: all
+        LiveCueRemakeTests: [test]
         LiveCueRemakeUITests: [test]
     run:
       config: Debug
@@ -118,6 +133,7 @@ schemes:
         - package: LiveCueCore/LiveCueCore
       targets:
         - package: LiveCueCore/LiveCueCoreTests
+        - name: LiveCueRemakeTests
         - name: LiveCueRemakeUITests
     profile:
       config: Release
