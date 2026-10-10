@@ -309,6 +309,8 @@ compiler refuses two files of the same name in one module.
 | `DesignSystem/SessionStartControl.swift`, `SessionControlCluster.swift` | DS 4.17 | WP-05 |
 | `DesignSystem/BrandMark.swift` | In-app mark and two-tone name (DS 8) | WP-05 |
 | `DesignSystem/Haptics.swift` | The events of DS 7.2 | WP-05 |
+| `DesignSystem/Surfaces.swift`, `Glyph.swift`, `Pill.swift`, `Scaling.swift`, `Pulse.swift`, `RowSupport.swift`, `BrandMarkArtwork.swift` | Private helpers of the components: the content surfaces, icon sizes, the pill shape, lengths that follow the text size, the live pulse, the row layout inside a panel or card, the geometry of the mark | WP-05 |
+| `DesignSystem/DesignGallery.swift` | Debug builds only: a gallery of the components, shown in place of every screen when the app is launched with `-design-gallery` | WP-05 |
 | `Features/Home/HomeScreen.swift`, `HomeViewModel.swift`, `HomeReadinessPanel.swift` | Screens 3 | WP-10 |
 | `Features/LiveSession/LiveSessionScreen.swift`, `LiveSessionViewModel.swift`, `LiveStatusPanel.swift`, `SessionNoticeBanner.swift`, `LiveTranscriptPanel.swift`, `AnswerFeed.swift`, `AssistErrorCard.swift`, `InProgressCard.swift`, `AnswerCard.swift`, `TimingView.swift`, `TimingViewContent.swift` | Screens 4 | WP-10 |
 | `Features/AssistantLab/AssistantLabScreen.swift`, `AssistantLabViewModel.swift`, `AnswerServicePanel.swift`, `AssistantModelPanel.swift`, `OpenRouterKeyPanel.swift`, `RecentComparisonsPanel.swift`, `OpenRouterModelsScreen.swift`, `ReasoningScreen.swift`, `RunDetailsScreen.swift` | Screens 5 | WP-10 |
@@ -2640,6 +2642,8 @@ extension View {
     /// Chrome-layer glass behind this view. `interactive` only for surfaces that respond to touch.
     func daylightChrome<S: InsettableShape>(in shape: S, interactive: Bool = false) -> some View
     func lcGlassID(_ id: some Hashable & Sendable, in namespace: Namespace.ID) -> some View
+    /// Pins the bar above the bottom safe area and insets it 16 from the screen edges: pass the controls
+    /// without padding of their own.
     func lcBottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View
     func lcScrollEdge(hard: Bool = false, for edges: Edge.Set) -> some View
     func lcTabBarMinimizesOnScroll() -> some View
