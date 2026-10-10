@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    View-model behaviour, the command line, and the theme dictionaries. No UI automation: the window
+    itself is exercised by the app's own self-test (LiveCueRemake.exe - -self-test), which CI runs
+    against the published build.
+  -->
+
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LiveCue.Desktop\LiveCue.Desktop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WPF projects leave these two out of the implicit usings. -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,121 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+  <!--
+    Type scale, design system 2.10 (Windows columns). Sizes and line heights are resources so the
+    Windows text-size setting can later replace them at run time (6.1); the styles below read them
+    through DynamicResource.
+
+    The styles set no Foreground on purpose: text takes its ink from where it sits (ink.primary from
+    the window, ink.onAccent inside a primary button). Use InkSecondaryBrush explicitly for
+    supporting text.
+  -->
+
+  <FontFamily x:Key="FontFamilyDisplay">Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI</FontFamily>
+  <FontFamily x:Key="FontFamilyText">Segoe UI Variable Text, Segoe UI</FontFamily>
+  <FontFamily x:Key="FontFamilyMono">Cascadia Mono, Consolas</FontFamily>
+
+  <sys:Double x:Key="TypeDisplaySize">30</sys:Double>
+  <sys:Double x:Key="TypeDisplayLineHeight">36</sys:Double>
+  <sys:Double x:Key="TypeTitleSize">22</sys:Double>
+  <sys:Double x:Key="TypeTitleLineHeight">28</sys:Double>
+  <sys:Double x:Key="TypeHeadlineSize">15</sys:Double>
+  <sys:Double x:Key="TypeHeadlineLineHeight">20</sys:Double>
+  <sys:Double x:Key="TypeCueSize">18</sys:Double>
+  <sys:Double x:Key="TypeCueLineHeight">26</sys:Double>
+  <sys:Double x:Key="TypeTranscriptSize">15</sys:Double>
+  <sys:Double x:Key="TypeTranscriptLineHeight">22</sys:Double>
+  <sys:Double x:Key="TypeBodySize">14</sys:Double>
+  <sys:Double x:Key="TypeBodyLineHeight">20</sys:Double>
+  <sys:Double x:Key="TypeLabelSize">14</sys:Double>
+  <sys:Double x:Key="TypeLabelLineHeight">20</sys:Double>
+  <sys:Double x:Key="TypeCaptionSize">13</sys:Double>
+  <sys:Double x:Key="TypeCaptionLineHeight">18</sys:Double>
+  <sys:Double x:Key="TypeMicroSize">12</sys:Double>
+  <sys:Double x:Key="TypeMicroLineHeight">16</sys:Double>
+  <sys:Double x:Key="TypeMonoSize">13</sys:Double>
+  <sys:Double x:Key="TypeMonoLineHeight">18</sys:Double>
+
+  <Style x:Key="Type.Base" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontWeight" Value="Regular" />
+    <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <!-- Brand title, hero figure -->
+  <Style x:Key="Type.Display" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyDisplay}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeDisplaySize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeDisplayLineHeight}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <!-- Screen and dialog titles -->
+  <Style x:Key="Type.Title" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyDisplay}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeTitleSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeTitleLineHeight}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+  </Style>
+
+  <!-- Card and row titles, large button labels -->
+  <Style x:Key="Type.Headline" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeHeadlineSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeHeadlineLineHeight}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Cue text: the hero of the live screen -->
+  <Style x:Key="Type.Cue" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeCueSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeCueLineHeight}" />
+    <Setter Property="TextTrimming" Value="None" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- Transcript text -->
+  <Style x:Key="Type.Transcript" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeTranscriptSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeTranscriptLineHeight}" />
+    <Setter Property="TextTrimming" Value="None" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- Body, row labels, field text -->
+  <Style x:Key="Type.Body" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeBodySize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeBodyLineHeight}" />
+  </Style>
+
+  <!-- Regular button labels, emphasised inline labels -->
+  <Style x:Key="Type.Label" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeLabelSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeLabelLineHeight}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Supporting lines, chip labels (semibold in chips) -->
+  <Style x:Key="Type.Caption" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeCaptionSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeCaptionLineHeight}" />
+  </Style>
+
+  <!-- Speaker labels, kickers -->
+  <Style x:Key="Type.Micro" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeMicroSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeMicroLineHeight}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Keys, addresses, codes. Tabular figures so digits that change in place do not jitter. -->
+  <Style x:Key="Type.Mono" TargetType="TextBlock" BasedOn="{StaticResource Type.Base}">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyMono}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeMonoSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeMonoLineHeight}" />
+  </Style>
+
+</ResourceDictionary>

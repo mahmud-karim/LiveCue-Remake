@@ -1,0 +1,179 @@
+<Window x:Class="LiveCue.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:ui="clr-namespace:LiveCue.Desktop.Controls"
+        Title="LiveCue"
+        Width="1240"
+        Height="660"
+        MinWidth="960"
+        MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource GroundBaseBrush}"
+        Foreground="{DynamicResource InkPrimaryBrush}"
+        FontFamily="{DynamicResource FontFamilyText}"
+        FontSize="{DynamicResource TypeBodySize}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="Auto">
+
+  <!--
+    The window is opaque and paints its own ground: no Mica, no Acrylic, no AllowsTransparency. An
+    opaque window is what keeps ClearType working (design system 3.5). A glass frame thickness of 1
+    keeps the system window shadow, the rounded corners and the resize behaviour.
+    CaptionHeight matches SizeTitleBar.
+  -->
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="48"
+                        ResizeBorderThickness="6"
+                        GlassFrameThickness="1"
+                        CornerRadius="0"
+                        UseAeroCaptionButtons="False" />
+  </shell:WindowChrome.WindowChrome>
+
+  <Grid x:Name="Root">
+
+    <!-- Ground: base colour and the four blooms, under everything including the title bar. -->
+    <ui:BloomLayer Base="{DynamicResource GroundBaseBrush}"
+                   Bloom1="{DynamicResource GroundBloom1Color}"
+                   Bloom2="{DynamicResource GroundBloom2Color}"
+                   Bloom3="{DynamicResource GroundBloom3Color}"
+                   Bloom4="{DynamicResource GroundBloom4Color}" />
+
+    <!-- Everything else. When the window is maximised this grid is inset by the part that overhangs the screen. -->
+    <Grid x:Name="Frame">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+
+      <!-- Title bar: part of the ground, no fill of its own. The whole strip is the drag region. -->
+      <Grid Grid.Row="0" Height="{DynamicResource SizeTitleBar}">
+        <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
+          <ui:BrandMark Height="20"
+                        VerticalAlignment="Center"
+                        Bubble="{DynamicResource BrandMarkBubbleBrush}"
+                        Bars="{DynamicResource BrandMarkBarsBrush}" />
+          <TextBlock Text="LiveCue" Margin="8,0,0,0" Style="{DynamicResource Chrome.Wordmark}" />
+        </StackPanel>
+
+        <ContentControl Style="{DynamicResource Chrome.CaptionCapsule}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0">
+          <StackPanel Orientation="Horizontal">
+            <Button Style="{DynamicResource Chrome.CaptionButton}"
+                    ui:ButtonAssist.Icon="{StaticResource Icon.Caption.Minimize}"
+                    Command="{x:Static SystemCommands.MinimizeWindowCommand}"
+                    ToolTip="Minimize"
+                    AutomationProperties.Name="Minimize" />
+            <Button x:Name="MaximizeButton"
+                    Style="{DynamicResource Chrome.CaptionButton}"
+                    ui:ButtonAssist.Icon="{StaticResource Icon.Caption.Maximize}"
+                    Command="{x:Static SystemCommands.MaximizeWindowCommand}"
+                    ToolTip="Maximize"
+                    AutomationProperties.Name="Maximize" />
+            <Button x:Name="RestoreButton"
+                    Style="{DynamicResource Chrome.CaptionButton}"
+                    ui:ButtonAssist.Icon="{StaticResource Icon.Caption.Restore}"
+                    Command="{x:Static SystemCommands.RestoreWindowCommand}"
+                    ToolTip="Restore"
+                    AutomationProperties.Name="Restore"
+                    Visibility="Collapsed" />
+            <Button Style="{DynamicResource Chrome.CaptionButton.Close}"
+                    ui:ButtonAssist.Icon="{StaticResource Icon.Caption.Close}"
+                    Command="{x:Static SystemCommands.CloseWindowCommand}"
+                    ToolTip="Close"
+                    AutomationProperties.Name="Close" />
+          </StackPanel>
+        </ContentControl>
+      </Grid>
+
+      <!--
+        Below the title bar (docs/design/03-windows-screens.md, 1.3 and 1.4): the sidebar, 16, then the
+        page. The page fills its area and decides its own scrolling, because some views fill the
+        height (Live, Activity) and others scroll (Pairing at the minimum height, Settings).
+      -->
+      <Grid Grid.Row="1" Margin="16,0,16,16">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="16" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar: a glass panel with the four navigation rows and, at its foot, the status card. -->
+        <ContentControl x:Name="Sidebar"
+                        Style="{DynamicResource Glass.Panel}"
+                        Padding="{DynamicResource InsetSidebar}"
+                        Width="{DynamicResource SizeSidebar}">
+          <DockPanel>
+            <!-- Always visible, and not a button: relay, iPhone, and what closing the window does. -->
+            <ContentControl DockPanel.Dock="Bottom"
+                            Style="{DynamicResource Glass.Card}"
+                            ui:Glass.CornerRadius="{DynamicResource RadiusCardInSidebar}"
+                            Padding="14">
+              <StackPanel>
+                <TextBlock Text="Relay"
+                           Style="{DynamicResource Type.Micro}"
+                           Foreground="{DynamicResource InkSecondaryBrush}" />
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                  <ui:StatusMark Kind="{Binding Relay.StatusKind}" Margin="0,0,8,0" />
+                  <TextBlock Text="{Binding Relay.ShortStatusText}"
+                             Style="{DynamicResource Type.Label}"
+                             AutomationProperties.AutomationId="SidebarRelayStatus" />
+                </StackPanel>
+                <TextBlock Text="iPhone"
+                           Style="{DynamicResource Type.Micro}"
+                           Foreground="{DynamicResource InkSecondaryBrush}"
+                           Margin="0,12,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                  <ui:StatusMark Kind="{Binding Relay.PhoneKind}" Margin="0,0,8,0" />
+                  <TextBlock Text="{Binding Relay.PhoneText}"
+                             Style="{DynamicResource Type.Label}"
+                             AutomationProperties.AutomationId="SidebarPhoneStatus" />
+                </StackPanel>
+                <TextBlock Text="Closing this window stops the relay."
+                           Style="{DynamicResource Type.Caption}"
+                           Foreground="{DynamicResource InkSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           TextTrimming="None"
+                           Margin="0,12,0,0" />
+              </StackPanel>
+            </ContentControl>
+
+            <ListBox Style="{DynamicResource Nav.List}"
+                     ItemContainerStyle="{DynamicResource Nav.Item}"
+                     ItemsSource="{Binding Pages}"
+                     SelectedItem="{Binding SelectedPage, Mode=TwoWay}"
+                     TextSearch.TextPath="Title"
+                     AutomationProperties.Name="Views">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Orientation="Horizontal">
+                    <ui:Icon Glyph="{Binding IconKey, Converter={StaticResource ResourceKey}}"
+                             Width="{DynamicResource IconSizeRegular}"
+                             Height="{DynamicResource IconSizeRegular}"
+                             Margin="0,0,12,0"
+                             VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Title}"
+                               VerticalAlignment="Center"
+                               LineHeight="{DynamicResource TypeBodyLineHeight}"
+                               LineStackingStrategy="BlockLineHeight" />
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </DockPanel>
+        </ContentControl>
+
+        <!-- The selected view. Views/Pages.xaml picks the view for the page view model's type. -->
+        <ContentControl x:Name="PageHost"
+                        Grid.Column="2"
+                        Content="{Binding SelectedPage.Page}"
+                        Focusable="False"
+                        IsTabStop="False" />
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

@@ -1,0 +1,74 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+
+  <!--
+    Icons (design system 2.18): line drawings on a 24 px grid, 2 px stroke, round caps and joins, no
+    fill. The state glyphs (microphone, stop, pause, play) and the alert are filled because they must
+    read at a glance. The shapes are the project's own, the same ones the screen mockups draw
+    (docs/design/mockups/windows.html), written as path data.
+
+    Use: <ui:Icon Glyph="{StaticResource Icon.Link}" Width="20" Height="20"/> (16, 20 or 24).
+  -->
+
+  <!-- Navigation -->
+  <ui:IconGlyph x:Key="Icon.Wave" Stroke="M4,10 v4 M8,6 v12 M12,3 v18 M16,7 v10 M20,10 v4" />
+  <ui:IconGlyph x:Key="Icon.Activity" Stroke="M3,12 h4 l2.5,-7 l5,14 l2.5,-7 h4" />
+  <ui:IconGlyph x:Key="Icon.Settings"
+                Stroke="M12,3 l1.2,2.3 l2.5,-0.7 l0.7,2.5 l2.3,1.2 l-1.1,2.3 l1.1,2.4 l-2.3,1.2 l-0.7,2.5 l-2.5,-0.7 L12,21 l-1.2,-2.3 l-2.5,0.7 l-0.7,-2.5 l-2.3,-1.2 l1.1,-2.4 l-1.1,-2.3 l2.3,-1.2 l0.7,-2.5 l2.5,0.7 z M12,8.8 a3.2,3.2 0 1 1 0,6.4 a3.2,3.2 0 1 1 0,-6.4 z" />
+  <ui:IconGlyph x:Key="Icon.Qr"
+                Stroke="M5,4 h4 a1,1 0 0 1 1,1 v4 a1,1 0 0 1 -1,1 h-4 a1,1 0 0 1 -1,-1 v-4 a1,1 0 0 1 1,-1 z M15,4 h4 a1,1 0 0 1 1,1 v4 a1,1 0 0 1 -1,1 h-4 a1,1 0 0 1 -1,-1 v-4 a1,1 0 0 1 1,-1 z M5,14 h4 a1,1 0 0 1 1,1 v4 a1,1 0 0 1 -1,1 h-4 a1,1 0 0 1 -1,-1 v-4 a1,1 0 0 1 1,-1 z M14,14 h2.5 v2.5 H14 z M20,14 v0.01 M17.5,20 H20 v-2.5 M14,20 v0.01" />
+
+  <!-- State glyphs (filled) -->
+  <ui:IconGlyph x:Key="Icon.Mic"
+                Fill="M12,3 a3,3 0 0 1 3,3 v5 a3,3 0 0 1 -6,0 v-5 a3,3 0 0 1 3,-3 z"
+                Stroke="M5.5,11 a6.5,6.5 0 0 0 13,0 M12,17.5 V21" />
+  <ui:IconGlyph x:Key="Icon.Stop"
+                Fill="M8.5,6 h7 a2.5,2.5 0 0 1 2.5,2.5 v7 a2.5,2.5 0 0 1 -2.5,2.5 h-7 a2.5,2.5 0 0 1 -2.5,-2.5 v-7 a2.5,2.5 0 0 1 2.5,-2.5 z" />
+  <ui:IconGlyph x:Key="Icon.Pause"
+                Fill="M8,5 h1 a1.5,1.5 0 0 1 1.5,1.5 v11 a1.5,1.5 0 0 1 -1.5,1.5 h-1 a1.5,1.5 0 0 1 -1.5,-1.5 v-11 a1.5,1.5 0 0 1 1.5,-1.5 z M15,5 h1 a1.5,1.5 0 0 1 1.5,1.5 v11 a1.5,1.5 0 0 1 -1.5,1.5 h-1 a1.5,1.5 0 0 1 -1.5,-1.5 v-11 a1.5,1.5 0 0 1 1.5,-1.5 z" />
+  <ui:IconGlyph x:Key="Icon.Play"
+                Fill="M8,5.2 v13.6 a1,1 0 0 0 1.5,0.86 l11,-6.8 a1,1 0 0 0 0,-1.7 l-11,-6.8 A1,1 0 0 0 8,5.2 z" />
+
+  <!-- Cue, history -->
+  <ui:IconGlyph x:Key="Icon.Sparkles"
+                Stroke="M10,4 l1.6,4.4 L16,10 l-4.4,1.6 L10,16 l-1.6,-4.4 L4,10 l4.4,-1.6 z M18,14 l0.8,2.2 L21,17 l-2.2,0.8 L18,20 l-0.8,-2.2 L15,17 l2.2,-0.8 z" />
+  <ui:IconGlyph x:Key="Icon.Clock"
+                Stroke="M12,3.5 a8.5,8.5 0 1 1 0,17 a8.5,8.5 0 1 1 0,-17 z M12,7.5 V12 l3,2" />
+
+  <!-- Phone, PC, pair / link -->
+  <ui:IconGlyph x:Key="Icon.Phone"
+                Stroke="M9.5,2.5 h5 a2.5,2.5 0 0 1 2.5,2.5 v14 a2.5,2.5 0 0 1 -2.5,2.5 h-5 a2.5,2.5 0 0 1 -2.5,-2.5 v-14 a2.5,2.5 0 0 1 2.5,-2.5 z M10.5,18.5 h3" />
+  <ui:IconGlyph x:Key="Icon.Monitor"
+                Stroke="M5,4 h14 a2,2 0 0 1 2,2 v8 a2,2 0 0 1 -2,2 h-14 a2,2 0 0 1 -2,-2 v-8 a2,2 0 0 1 2,-2 z M8.5,20 h7 M12,16 v4" />
+  <ui:IconGlyph x:Key="Icon.Link"
+                Stroke="M10,14 l4,-4 M8.5,11.5 l-1.8,1.8 a3.5,3.5 0 0 0 5,5 l1.8,-1.8 M15.5,12.5 l1.8,-1.8 a3.5,3.5 0 0 0 -5,-5 l-1.8,1.8" />
+
+  <!-- Copy, remove, information -->
+  <ui:IconGlyph x:Key="Icon.Copy"
+                Stroke="M11,8.5 h6 a2.5,2.5 0 0 1 2.5,2.5 v6 a2.5,2.5 0 0 1 -2.5,2.5 h-6 a2.5,2.5 0 0 1 -2.5,-2.5 v-6 a2.5,2.5 0 0 1 2.5,-2.5 z M15.5,5.5 V5 a2,2 0 0 0 -2,-2 H6 a2,2 0 0 0 -2,2 v7.5 a2,2 0 0 0 2,2 h0.5" />
+  <ui:IconGlyph x:Key="Icon.Trash"
+                Stroke="M4.5,7 h15 M9.5,3.5 h5 l1,3.5 M6.5,7 l1,13.5 h9 l1,-13.5 M10,11 v6 M14,11 v6" />
+  <ui:IconGlyph x:Key="Icon.Info"
+                Stroke="M12,3 a9,9 0 1 1 0,18 a9,9 0 1 1 0,-18 z M12,11 v6 M12,7.5 v0.1" />
+
+  <!-- Done, disclosure -->
+  <ui:IconGlyph x:Key="Icon.Check" Stroke="M5,12.5 l4.5,4.5 L19,7.5" />
+  <ui:IconGlyph x:Key="Icon.ChevronRight" Stroke="M9,5 l7,7 l-7,7" />
+
+  <!-- Warning / error (filled; the exclamation mark is cut out, so one colour is enough) -->
+  <ui:IconGlyph x:Key="Icon.Alert"
+                Fill="F0 M12,3.2 a1.6,1.6 0 0 1 1.4,0.8 l8,14 a1.6,1.6 0 0 1 -1.4,2.4 H4 a1.6,1.6 0 0 1 -1.4,-2.4 l8,-14 a1.6,1.6 0 0 1 1.4,-0.8 z M11,9 h2 v5.5 h-2 z M11,16.2 h2 v2 h-2 z" />
+
+  <!--
+    Window caption glyphs. They fill the same 24-unit grid but are shown at 10 px with
+    StrokeThickness 2.88, which is the 1.2 px line the design system asks for (3.5).
+  -->
+  <ui:IconGlyph x:Key="Icon.Caption.Minimize" Stroke="M4,12 H20" />
+  <ui:IconGlyph x:Key="Icon.Caption.Maximize"
+                Stroke="M7,4 h10 a3,3 0 0 1 3,3 v10 a3,3 0 0 1 -3,3 h-10 a3,3 0 0 1 -3,-3 v-10 a3,3 0 0 1 3,-3 z" />
+  <ui:IconGlyph x:Key="Icon.Caption.Restore"
+                Stroke="M6,8 h7.5 a2.5,2.5 0 0 1 2.5,2.5 v7.5 a2.5,2.5 0 0 1 -2.5,2.5 h-7.5 a2.5,2.5 0 0 1 -2.5,-2.5 v-7.5 a2.5,2.5 0 0 1 2.5,-2.5 z M9,4 h8.5 a2.5,2.5 0 0 1 2.5,2.5 V15" />
+  <ui:IconGlyph x:Key="Icon.Caption.Close" Stroke="M5,5 L19,19 M19,5 L5,19" />
+
+</ResourceDictionary>

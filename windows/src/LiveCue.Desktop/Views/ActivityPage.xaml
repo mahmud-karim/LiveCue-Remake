@@ -1,0 +1,94 @@
+<UserControl x:Class="LiveCue.Desktop.Views.ActivityPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:LiveCue.Desktop.Controls"
+             Focusable="False">
+
+  <!--
+    Activity (docs/design/03-windows-screens.md, section 4; mockups win-activity and
+    win-activity-empty): one panel that fills the page, holding the log or the empty state, then the
+    footer line.
+  -->
+  <DockPanel>
+
+    <Grid DockPanel.Dock="Top" MinHeight="{DynamicResource SizePageHeader}" Margin="4,0,4,16">
+      <TextBlock Text="{Binding Title}" Style="{DynamicResource Type.Display}" VerticalAlignment="Center" />
+      <Button Style="{DynamicResource Button.Secondary}"
+              HorizontalAlignment="Right"
+              ui:ButtonAssist.Icon="{StaticResource Icon.Trash}"
+              Content="Clear activity"
+              Command="{Binding ClearCommand}"
+              AutomationProperties.AutomationId="ClearActivityButton" />
+    </Grid>
+
+    <ContentControl Style="{DynamicResource Glass.Panel}">
+      <DockPanel>
+
+        <!-- Footer line -->
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+          <TextBlock DockPanel.Dock="Right"
+                     Text="{Binding CountText}"
+                     Style="{DynamicResource Type.Caption}"
+                     Foreground="{DynamicResource InkSecondaryBrush}"
+                     Typography.NumeralAlignment="Tabular"
+                     Margin="12,0,0,0" />
+          <TextBlock Text="Activity stays in memory on this PC. It is cleared when LiveCue closes and is never written to disk."
+                     Style="{DynamicResource Type.Caption}"
+                     Foreground="{DynamicResource InkSecondaryBrush}"
+                     TextWrapping="Wrap"
+                     TextTrimming="None" />
+        </DockPanel>
+
+        <Grid>
+          <!-- The log: each entry starts with its time, then its message. The card scrolls; nothing floats over it. -->
+          <ContentControl Style="{DynamicResource Glass.Card}"
+                          ui:Glass.CornerRadius="{DynamicResource RadiusField}"
+                          Padding="6"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False"
+                          Padding="10,8"
+                          AutomationProperties.AutomationId="ActivityLog">
+              <ItemsControl ItemsSource="{Binding Entries}" Focusable="False">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Style="{DynamicResource Type.Mono}" TextWrapping="Wrap" TextTrimming="None">
+                      <Run Text="{Binding TimeText, Mode=OneWay}" Foreground="{DynamicResource InkSecondaryBrush}" /><Run Text="  " /><Run Text="{Binding Message, Mode=OneWay}" />
+                    </TextBlock>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </ContentControl>
+
+          <!-- Empty state -->
+          <StackPanel VerticalAlignment="Center"
+                      HorizontalAlignment="Center"
+                      Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}}">
+            <Grid Width="64" Height="64" HorizontalAlignment="Center">
+              <Border CornerRadius="{DynamicResource RadiusCard}" Background="{DynamicResource SurfaceRaisedBrush}" />
+              <Border CornerRadius="{DynamicResource RadiusCard}" Background="{DynamicResource AccentTintBrush}">
+                <ui:Icon Glyph="{StaticResource Icon.Activity}"
+                         Width="28"
+                         Height="28"
+                         Foreground="{DynamicResource AccentTextBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+              </Border>
+            </Grid>
+            <TextBlock Text="No activity yet"
+                       Style="{DynamicResource Type.Title}"
+                       HorizontalAlignment="Center"
+                       Margin="0,16,0,0" />
+            <TextBlock Text="Start the relay, then tap Assist on your iPhone."
+                       Style="{DynamicResource Type.Body}"
+                       Foreground="{DynamicResource InkSecondaryBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,6,0,0" />
+          </StackPanel>
+        </Grid>
+      </DockPanel>
+    </ContentControl>
+  </DockPanel>
+</UserControl>

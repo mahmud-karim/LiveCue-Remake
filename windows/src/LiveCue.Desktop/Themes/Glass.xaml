@@ -1,0 +1,140 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+
+  <!--
+    Glass surfaces (design system 3.5 and 4.9).
+
+    Every surface that casts a shadow is two sibling Borders in one Grid:
+
+      Caster  the fill, and the only element with an Effect. It has no children.
+      Face    sheen, edge stroke and the content. No Effect, so text keeps ClearType.
+
+    There is no backdrop blur. Each surface sits on the ground or on another of our fills, and the
+    ground is a smooth gradient whose blurred image is itself. That only holds while two rules do:
+      W-1  nothing translucent floats over scrolling content;
+      W-2  panels never overlap panels. Inside a panel use Glass.Card or Glass.CardProminent.
+
+    The radius is ui:Glass.CornerRadius, set by each style to its token. Override it where a surface
+    is nested and must stay concentric (inner radius = outer radius minus the gap).
+  -->
+
+  <!-- Panel: on the ground. surface.panel + glass.sheen, stroke.edge, shadow.panel, radius.panel. -->
+  <Style x:Key="Glass.Panel" TargetType="ContentControl">
+    <Setter Property="ui:Glass.CornerRadius" Value="{DynamicResource RadiusPanel}" />
+    <Setter Property="Padding" Value="{DynamicResource InsetPanel}" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContentControl">
+          <Grid>
+            <Border x:Name="Caster"
+                    CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                    Background="{DynamicResource SurfacePanelBrush}"
+                    Effect="{DynamicResource ShadowPanel}" />
+            <Border x:Name="Face"
+                    CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                    Background="{DynamicResource GlassSheenBrush}"
+                    BorderBrush="{DynamicResource StrokeEdgeBrush}"
+                    BorderThickness="1"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Compact panel: a one-line strip on the ground (the Live status strip, the Reset pairing panel). -->
+  <Style x:Key="Glass.Panel.Compact" TargetType="ContentControl" BasedOn="{StaticResource Glass.Panel}">
+    <Setter Property="ui:Glass.CornerRadius" Value="{DynamicResource RadiusPanelCompact}" />
+    <Setter Property="Padding" Value="{DynamicResource InsetPanelCompact}" />
+  </Style>
+
+  <!-- Card: inside a panel only. surface.inset, stroke.inset, no shadow, radius.card. -->
+  <Style x:Key="Glass.Card" TargetType="ContentControl">
+    <Setter Property="ui:Glass.CornerRadius" Value="{DynamicResource RadiusCard}" />
+    <Setter Property="Padding" Value="{DynamicResource InsetCard}" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContentControl">
+          <Border CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                  Background="{DynamicResource SurfaceInsetBrush}"
+                  BorderBrush="{DynamicResource StrokeInsetBrush}"
+                  BorderThickness="1"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Prominent card: surface.raised, stroke.raised, shadow.raised, radius.card. At most one per screen. -->
+  <Style x:Key="Glass.CardProminent" TargetType="ContentControl">
+    <Setter Property="ui:Glass.CornerRadius" Value="{DynamicResource RadiusCard}" />
+    <Setter Property="Padding" Value="{DynamicResource InsetCard}" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContentControl">
+          <Grid>
+            <Border x:Name="Caster"
+                    CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                    Background="{DynamicResource SurfaceRaisedBrush}"
+                    Effect="{DynamicResource ShadowRaised}" />
+            <Border x:Name="Face"
+                    CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                    BorderBrush="{DynamicResource StrokeRaisedBrush}"
+                    BorderThickness="1"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Border>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!--
+    Read-only field (design system 4.6): surface.inset fill, stroke.hairline outline, radius.field,
+    at least 44 high. For values the user reads or copies, such as the PC address.
+  -->
+  <Style x:Key="Field.ReadOnly" TargetType="ContentControl">
+    <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContentControl">
+          <Border CornerRadius="{DynamicResource RadiusField}"
+                  Background="{DynamicResource SurfaceInsetBrush}"
+                  BorderBrush="{DynamicResource StrokeHairlineBrush}"
+                  BorderThickness="1"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+</ResourceDictionary>

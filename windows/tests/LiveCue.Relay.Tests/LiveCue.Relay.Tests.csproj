@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Protocol conformance, relay side, against a real Kestrel listener on a system-chosen port. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LiveCue.Relay\LiveCue.Relay.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>LiveCueRemake</AssemblyName>
+    <RootNamespace>LiveCue.Desktop</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Description>LiveCueRemake.exe: the LiveCue window for Windows, which hosts the relay in its own process.</Description>
+    <!-- English only: keeps a dozen satellite-resource folders out of the publish output. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Only for the source-generated P/Invoke stubs in Interop/NativeMethods.cs. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LiveCue.Hosting\LiveCue.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LiveCue.Desktop.Tests" />
+  </ItemGroup>
+
+</Project>

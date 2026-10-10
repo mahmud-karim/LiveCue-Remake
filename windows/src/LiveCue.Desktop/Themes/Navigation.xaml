@@ -1,0 +1,99 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
+
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="Interaction.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!--
+    Sidebar navigation (design system 4.8, "Selected (Windows navigation)").
+
+    A ListBox, so arrow keys move the selection and the group is one tab stop. Rows are 44 high, so
+    their capsule has radius 22; the sidebar around them is padded by 10. The 16 of padding inside a
+    row is 1 of outline and 15 of inset. The item's data context supplies its AutomationId.
+
+      Rest      no fill; type.body, ink.primary
+      Hover     state.hover
+      Selected  surface.raised + stroke.raised + shadow.raised; type.label in accent.fill; accent icon
+  -->
+
+  <Style x:Key="Nav.List" TargetType="ListBox">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+    <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Cycle" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBox">
+          <ItemsPresenter />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="Nav.Item" TargetType="ListBoxItem">
+    <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Pill}" />
+    <Setter Property="MinHeight" Value="{DynamicResource NavRowHeight}" />
+    <Setter Property="Margin" Value="0,0,0,4" />
+    <Setter Property="Padding" Value="15,0" />
+    <Setter Property="AutomationProperties.AutomationId" Value="{Binding AutomationId}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeBodySize}" />
+    <Setter Property="FontWeight" Value="Regular" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <Grid Background="Transparent">
+            <Border x:Name="Caster"
+                    ui:Pill.IsPill="True"
+                    Background="{DynamicResource SurfaceRaisedBrush}"
+                    Effect="{DynamicResource ShadowRaised}"
+                    Visibility="Collapsed" />
+            <Border x:Name="HoverFill"
+                    ui:Pill.IsPill="True"
+                    Background="{DynamicResource StateHoverBrush}"
+                    Opacity="0" />
+            <Border x:Name="Face"
+                    ui:Pill.IsPill="True"
+                    BorderBrush="Transparent"
+                    BorderThickness="1"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter VerticalAlignment="Center"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsMouseOver" Value="True" />
+                <Condition Property="IsSelected" Value="False" />
+              </MultiTrigger.Conditions>
+              <MultiTrigger.EnterActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverIn}" />
+              </MultiTrigger.EnterActions>
+              <MultiTrigger.ExitActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverOut}" />
+              </MultiTrigger.ExitActions>
+            </MultiTrigger>
+            <Trigger Property="IsSelected" Value="True">
+              <Setter TargetName="Caster" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource StrokeRaisedBrush}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+</ResourceDictionary>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>LiveCueRelayHost</AssemblyName>
+    <RootNamespace>LiveCue.Relay.Host</RootNamespace>
+    <Description>LiveCueRelayHost.exe: runs the LiveCue relay without a window, for headless use.</Description>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LiveCue.Hosting\LiveCue.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

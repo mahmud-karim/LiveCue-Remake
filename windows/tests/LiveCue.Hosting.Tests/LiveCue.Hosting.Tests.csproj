@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Settings validation, endpoint resolution and the relay supervisor, with a fake relay where a real one is not the point. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LiveCue.Hosting\LiveCue.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>
