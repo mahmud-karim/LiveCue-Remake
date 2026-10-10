@@ -2,15 +2,23 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
 
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="Interaction.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+
   <!--
-    Fields and the segmented control (design system 4.4 and 4.6). The read-only field is the spike's.
-    Field.Text and Segmented are first versions with plain looks; the desktop core gives each its
-    design-system appearance.
+    Inputs (design system 4.4 to 4.6): the text field, the read-only field, the segmented control and
+    the toggle.
+
+    An input sits in a panel, card or dialog (rule C-2). What identifies an empty field is its
+    outline, stroke.control at 3:1 or more, not its fill; the off track of a toggle is
+    track.toggleOff for the same reason (table D).
   -->
 
   <!--
-    Read-only field (design system 4.6): surface.inset fill, stroke.hairline outline, radius.field,
-    at least 44 high. For values the user reads or copies, such as the PC address.
+    Read-only field (design system 4.6, "Read-only"): surface.inset fill, stroke.hairline outline,
+    radius.field, at least 44 high. A frame for a value the user reads or copies, such as the PC
+    address or the command a dialog will run; put the text (and a copy button) inside.
   -->
   <Style x:Key="Field.ReadOnly" TargetType="ContentControl">
     <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
@@ -35,31 +43,211 @@
     </Setter>
   </Style>
 
-  <!-- Text field (design system 4.6). First version: the read-only field's face around an editable text box. -->
+  <!--
+    Text field (design system 4.6): radius.field, surface.raised fill, stroke.control outline, 44 high,
+    14 of padding, type.body in ink.primary.
+
+      Hover      fill surface.raised.hover
+      Focused    the outline becomes 2 wide in the accent; it is drawn over the resting outline, so
+                 nothing moves. There is no separate focus ring
+      Error      (Validation.HasError) the outline becomes 2 wide in status.danger. The error line
+                 under the field is the page's: type.caption in status.danger with an alert glyph
+      Read-only  (IsReadOnly) surface.inset and stroke.hairline; the text stays selectable
+      Multi-line (AcceptsReturn) at least 96 high, padding 14 / 10, text at the top
+
+    Tag is the placeholder: an example in ink.secondary, shown while the field is empty. The label
+    above the field (type.caption semibold, ink.secondary) belongs to the page and is always visible.
+  -->
   <Style x:Key="Field.Text" TargetType="TextBox">
     <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
-    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="Padding" Value="14,0" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
     <Setter Property="FontSize" Value="{DynamicResource TypeBodySize}" />
     <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
     <Setter Property="CaretBrush" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillBrush}" />
+    <Setter Property="SelectionOpacity" Value="0.3" />
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="Validation.ErrorTemplate" Value="{x:Null}" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="TextBox">
-          <Border x:Name="Face"
-                  CornerRadius="{DynamicResource RadiusField}"
-                  Background="{DynamicResource SurfaceInsetBrush}"
-                  BorderBrush="{DynamicResource StrokeControlBrush}"
-                  BorderThickness="1">
+          <Grid x:Name="Root">
+            <Border x:Name="Fill"
+                    CornerRadius="{DynamicResource RadiusField}"
+                    Background="{DynamicResource SurfaceRaisedBrush}" />
+            <Border x:Name="HoverFill"
+                    CornerRadius="{DynamicResource RadiusField}"
+                    Background="{DynamicResource SurfaceRaisedHoverBrush}"
+                    Opacity="0" />
+            <Border x:Name="Outline"
+                    CornerRadius="{DynamicResource RadiusField}"
+                    BorderBrush="{DynamicResource StrokeControlBrush}"
+                    BorderThickness="1" />
+            <Border x:Name="StateOutline"
+                    CornerRadius="{DynamicResource RadiusField}"
+                    BorderBrush="{DynamicResource AccentFillBrush}"
+                    BorderThickness="2"
+                    Visibility="Collapsed" />
+            <TextBlock x:Name="Placeholder"
+                       Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"
+                       Margin="{TemplateBinding Padding}"
+                       Padding="2,0"
+                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                       Foreground="{DynamicResource InkSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       IsHitTestVisible="False"
+                       Visibility="Collapsed" />
             <ScrollViewer x:Name="PART_ContentHost"
                           Margin="{TemplateBinding Padding}"
                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                           Focusable="False" />
-          </Border>
+          </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="Text" Value="">
+              <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsReadOnly" Value="True">
+              <Setter TargetName="Fill" Property="Background" Value="{DynamicResource SurfaceInsetBrush}" />
+              <Setter TargetName="HoverFill" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Outline" Property="BorderBrush" Value="{DynamicResource StrokeHairlineBrush}" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Trigger.EnterActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverIn}" />
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverOut}" />
+              </Trigger.ExitActions>
+            </Trigger>
             <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="Face" Property="BorderBrush" Value="{DynamicResource StrokeFocusBrush}" />
+              <Setter TargetName="StateOutline" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Validation.HasError" Value="True">
+              <Setter TargetName="StateOutline" Property="Visibility" Value="Visible" />
+              <Setter TargetName="StateOutline" Property="BorderBrush" Value="{DynamicResource StatusDangerBrush}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="Root" Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="AcceptsReturn" Value="True">
+        <Setter Property="MinHeight" Value="96" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <!--
+    Segmented control (design system 4.4): a capsule trough in track.segmented, 44 high with 4 of
+    padding; equal-width segments of at least 72; one thumb (surface.raised, stroke.raised,
+    shadow.raised, 36 high) under the selected segment, which the control slides over motion.base.
+
+      Unselected   type.body, ink.primary; hover state.hover in the segment's capsule
+      Selected     the thumb; label type.label (semibold) in the accent
+      Focused      the focus ring around the segment
+
+    Segments have equal width, so the change of weight never moves anything. The thumb lies under the
+    labels as their sibling: it carries the shadow and moves, and no text is inside it.
+  -->
+  <Style x:Key="Segmented.Item" TargetType="ListBoxItem">
+    <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Pill}" />
+    <Setter Property="MinWidth" Value="72" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeBodySize}" />
+    <Setter Property="FontWeight" Value="Regular" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ListBoxItem">
+          <Grid Background="Transparent">
+            <Border x:Name="HoverFill"
+                    ui:Pill.IsPill="True"
+                    Background="{DynamicResource StateHoverBrush}"
+                    Opacity="0" />
+            <Border ui:Pill.IsPill="True" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                TextBlock.LineHeight="{DynamicResource TypeBodyLineHeight}"
+                                TextBlock.LineStackingStrategy="BlockLineHeight" />
+            </Border>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <MultiTrigger>
+              <MultiTrigger.Conditions>
+                <Condition Property="IsMouseOver" Value="True" />
+                <Condition Property="IsSelected" Value="False" />
+              </MultiTrigger.Conditions>
+              <MultiTrigger.EnterActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverIn}" />
+              </MultiTrigger.EnterActions>
+              <MultiTrigger.ExitActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.HoverOut}" />
+              </MultiTrigger.ExitActions>
+            </MultiTrigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <Trigger Property="IsSelected" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="Segmented" TargetType="ui:SegmentedControl">
+    <Setter Property="Background" Value="{DynamicResource TrackSegmentedBrush}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="4" />
+    <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+    <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Cycle" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="ItemContainerStyle" Value="{StaticResource Segmented.Item}" />
+    <Setter Property="ItemsPanel">
+      <Setter.Value>
+        <ItemsPanelTemplate>
+          <UniformGrid Rows="1" />
+        </ItemsPanelTemplate>
+      </Setter.Value>
+    </Setter>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ui:SegmentedControl">
+          <Grid x:Name="Root">
+            <Border ui:Pill.IsPill="True" Background="{TemplateBinding Background}" />
+            <Grid x:Name="PART_Track" Margin="{TemplateBinding Padding}">
+              <Grid x:Name="PART_Thumb" Visibility="Hidden">
+                <Border ui:Pill.IsPill="True"
+                        Background="{DynamicResource SurfaceRaisedBrush}"
+                        Effect="{DynamicResource ShadowRaised}" />
+                <Border ui:Pill.IsPill="True"
+                        BorderBrush="{DynamicResource StrokeRaisedBrush}"
+                        BorderThickness="1" />
+              </Grid>
+              <ItemsPresenter />
+            </Grid>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="Root" Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -67,24 +255,77 @@
     </Setter>
   </Style>
 
-  <!-- Segmented control (design system 4.4). First version: a horizontal list on the segmented track; no travelling thumb yet. -->
-  <Style x:Key="Segmented" TargetType="ui:SegmentedControl">
-    <Setter Property="Background" Value="{DynamicResource TrackSegmentedBrush}" />
-    <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="Padding" Value="3" />
-    <Setter Property="HorizontalAlignment" Value="Left" />
-    <Setter Property="KeyboardNavigation.TabNavigation" Value="Once" />
+  <Style TargetType="ui:SegmentedControl" BasedOn="{StaticResource Segmented}" />
+
+  <!--
+    Toggle (design system 4.5): every CheckBox is drawn as one. The whole row is the target, at least
+    44 high: the label on the left, the track on the right. Track 52 x 30, knob 24 with shadow.knob,
+    inset 3, travel 22. Off is track.toggleOff, on is the accent; the knob travels and the track
+    cross-fades over motion.fast.
+
+    Not a style key of its own: a check box has no other look in this app.
+  -->
+  <Style TargetType="CheckBox">
+    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+    <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeBodySize}" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Template">
       <Setter.Value>
-        <ControlTemplate TargetType="ui:SegmentedControl">
-          <Border ui:Pill.IsPill="True" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-            <StackPanel Orientation="Horizontal" IsItemsHost="True" />
-          </Border>
+        <ControlTemplate TargetType="CheckBox">
+          <Grid x:Name="Root" Background="Transparent">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <ContentPresenter RecognizesAccessKey="True"
+                              Margin="0,0,16,0"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                              TextBlock.LineHeight="{DynamicResource TypeBodyLineHeight}"
+                              TextBlock.LineStackingStrategy="BlockLineHeight" />
+
+            <Grid Grid.Column="1" Width="52" Height="30" VerticalAlignment="Center">
+              <Border CornerRadius="15" Background="{DynamicResource TrackToggleOffBrush}" />
+              <Border x:Name="On"
+                      CornerRadius="15"
+                      Background="{DynamicResource AccentFillBrush}"
+                      ui:Motion.Fade="0" />
+              <Ellipse x:Name="Knob"
+                       Width="24"
+                       Height="24"
+                       Margin="3,0,0,0"
+                       HorizontalAlignment="Left"
+                       Fill="{DynamicResource ControlKnobBrush}"
+                       Effect="{DynamicResource ShadowKnob}" />
+              <Border x:Name="Ring"
+                      Margin="-4"
+                      CornerRadius="19"
+                      BorderBrush="{DynamicResource StrokeFocusBrush}"
+                      BorderThickness="2"
+                      Visibility="Collapsed" />
+            </Grid>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="On" Property="ui:Motion.Fade" Value="1" />
+              <Setter TargetName="Knob" Property="ui:Motion.OffsetX" Value="22" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+              <Setter TargetName="Ring" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="Root" Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
+              <Setter TargetName="Knob" Property="Effect" Value="{x:Null}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
-
-  <Style TargetType="ui:SegmentedControl" BasedOn="{StaticResource Segmented}" />
 
 </ResourceDictionary>

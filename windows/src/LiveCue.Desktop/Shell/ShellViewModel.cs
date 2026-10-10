@@ -3,15 +3,15 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveCue.Desktop.Session;
+using LiveCue.Relay.Protocol;
 
 namespace LiveCue.Desktop.Shell;
 
 /// <summary>
 /// The window: navigation, the sidebar status card, the dialog and toast layers (W-design 5.1, 5.2).
-/// It forwards the selected page, the open dialog and the toast to the three small objects that own them.
-///
-/// First version (foundation): navigation, the sidebar card from the session's state, and the start on
-/// the first render. Work package WP-W08 builds the rest.
+/// It forwards the selected page, the open dialog and the toast to the three small objects that own
+/// them, so a page view model reaches them through <see cref="INavigator"/>, <see cref="IDialogHost"/>
+/// and <see cref="IToastHost"/> and never through the window.
 /// </summary>
 internal sealed class ShellViewModel : ObservableObject, IShellViewModel
 {
@@ -19,6 +19,7 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
     private readonly Navigator _navigator;
     private readonly DialogHost _dialogs;
     private readonly ToastHost _toasts;
+    private readonly RelayCommand<object?> _navigate;
     private bool _startedOnce;
 
     public ShellViewModel(
@@ -49,13 +50,17 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
         _dialogs = dialogs;
         _toasts = toasts;
 
-        NavigateCommand = new RelayCommand<object?>(parameter =>
-        {
-            if (parameter is AppPage page)
+        // The keys and the sidebar do not reach behind an open dialog. A view model still navigates
+        // through INavigator while one is open (the reset dialog's new QR opens the Pairing view).
+        _navigate = new RelayCommand<object?>(
+            parameter =>
             {
-                Navigate(page);
-            }
-        });
+                if (parameter is AppPage page)
+                {
+                    Navigate(page);
+                }
+            },
+            _ => _dialogs.Current is null);
         EscapeCommand = new RelayCommand(() =>
         {
             if (_dialogs.Current is { IsBusy: false } dialog && dialog.CancelCommand.CanExecute(null))
@@ -65,10 +70,14 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
         });
 
         _navigator.PropertyChanged += OnNavigatorChanged;
-        _dialogs.PropertyChanged += (_, _) => OnPropertyChanged(nameof(ActiveDialog));
+        _dialogs.PropertyChanged += OnDialogChanged;
         _toasts.PropertyChanged += (_, _) => OnPropertyChanged(nameof(ToastText));
         _session.PropertyChanged += OnSessionChanged;
+        Live.PropertyChanged += OnLiveChanged;
     }
+
+    /// <summary>How long closing the window waits for the relay to stop (W-11).</summary>
+    internal TimeSpan CloseWait { get; init; } = ProtocolConstants.WindowCloseWait;
 
     public ILiveViewModel Live { get; }
 
@@ -110,17 +119,24 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
 
     public StatusIndicator SidebarRelayStatus => StatusTexts.Sidebar(_session.State, _session.FaultCode);
 
-    public StatusIndicator SidebarPhoneStatus => StatusTexts.Phone(_session.Presence);
+    /// <summary>The same indicator as the Live page, tooltip included.</summary>
+    public StatusIndicator SidebarPhoneStatus => Live.PhoneStatus;
 
     public IDialogViewModel? ActiveDialog => _dialogs.Current;
 
     public string? ToastText => _toasts.Text;
 
-    public ICommand NavigateCommand { get; }
+    public ICommand NavigateCommand => _navigate;
 
     public ICommand EscapeCommand { get; }
 
     public void Navigate(AppPage page) => _navigator.Navigate(page);
+
+    /// <summary>The pointer rests on the toast: it stays (design system 4.11).</summary>
+    internal void HoldToast() => _toasts.Hold();
+
+    /// <summary>The pointer left the toast: its time starts again.</summary>
+    internal void ReleaseToast() => _toasts.Release();
 
     public Task OnWindowRenderedAsync()
     {
@@ -133,13 +149,33 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
         return _session.StartAsync();
     }
 
-    public Task OnWindowClosingAsync() => _session.StopAsync();
+    /// <summary>
+    /// Stops the relay and waits for it for at most W-11: a stop that hangs must not keep the window
+    /// open. Never throws.
+    /// </summary>
+    public async Task OnWindowClosingAsync()
+    {
+        try
+        {
+            await _session.StopAsync().WaitAsync(CloseWait);
+        }
+        catch (TimeoutException)
+        {
+            // The window closes anyway; the process ends with it.
+        }
+    }
 
     private void OnNavigatorChanged(object? sender, PropertyChangedEventArgs change)
     {
         OnPropertyChanged(nameof(Current));
         OnPropertyChanged(nameof(SelectedPage));
         OnPropertyChanged(nameof(CurrentPage));
+    }
+
+    private void OnDialogChanged(object? sender, PropertyChangedEventArgs change)
+    {
+        OnPropertyChanged(nameof(ActiveDialog));
+        _navigate.NotifyCanExecuteChanged();
     }
 
     private void OnSessionChanged(object? sender, PropertyChangedEventArgs change)
@@ -150,12 +186,20 @@ internal sealed class ShellViewModel : ObservableObject, IShellViewModel
                 OnPropertyChanged(nameof(SidebarRelayStatus));
                 break;
 
-            case nameof(IDesktopSession.Presence):
+            case nameof(IDesktopSession.Presence) or nameof(IDesktopSession.LastPhoneSeen):
                 OnPropertyChanged(nameof(SidebarPhoneStatus));
                 break;
 
             default:
                 break;
+        }
+    }
+
+    private void OnLiveChanged(object? sender, PropertyChangedEventArgs change)
+    {
+        if (change.PropertyName is nameof(ILiveViewModel.PhoneStatus) or null or "")
+        {
+            OnPropertyChanged(nameof(SidebarPhoneStatus));
         }
     }
 }

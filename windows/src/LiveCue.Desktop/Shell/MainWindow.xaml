@@ -40,9 +40,17 @@
     <KeyBinding Modifiers="Control" Key="D2" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Pairing}" />
     <KeyBinding Modifiers="Control" Key="D3" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Activity}" />
     <KeyBinding Modifiers="Control" Key="D4" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Settings}" />
+    <KeyBinding Modifiers="Control" Key="NumPad1" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Live}" />
+    <KeyBinding Modifiers="Control" Key="NumPad2" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Pairing}" />
+    <KeyBinding Modifiers="Control" Key="NumPad3" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Activity}" />
+    <KeyBinding Modifiers="Control" Key="NumPad4" Command="{Binding NavigateCommand}" CommandParameter="{x:Static app:AppPage.Settings}" />
     <KeyBinding Key="Escape" Command="{Binding EscapeCommand}" />
   </Window.InputBindings>
 
+  <!--
+    Layers, bottom to top (W-design 5.1): the ground; the title bar over the sidebar and the page; the
+    toast; the dialog.
+  -->
   <Grid x:Name="Root">
 
     <!-- Ground: base colour and the four blooms, under everything including the title bar. -->
@@ -60,7 +68,7 @@
       </Grid.RowDefinitions>
 
       <!-- Title bar: part of the ground, no fill of its own. The whole strip is the drag region. -->
-      <Grid Grid.Row="0" Height="{DynamicResource SizeTitleBar}">
+      <Grid x:Name="TitleBar" Grid.Row="0" Height="{DynamicResource SizeTitleBar}">
         <StackPanel Orientation="Horizontal" Margin="18,0,0,0" VerticalAlignment="Center">
           <ui:BrandMark Height="20"
                         VerticalAlignment="Center"
@@ -69,6 +77,7 @@
           <TextBlock Text="LiveCue" Margin="8,0,0,0" Style="{DynamicResource Chrome.Wordmark}" />
         </StackPanel>
 
+        <!-- Like system caption buttons: reachable by pointer and through the system menu, never tab stops. -->
         <ContentControl Style="{DynamicResource Chrome.CaptionCapsule}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
@@ -120,7 +129,8 @@
                         Width="{DynamicResource SizeSidebar}">
           <DockPanel>
             <!-- Always visible, and not a button: relay, iPhone, and what closing the window does. -->
-            <ContentControl DockPanel.Dock="Bottom"
+            <ContentControl x:Name="StatusCard"
+                            DockPanel.Dock="Bottom"
                             Style="{DynamicResource Glass.Card}"
                             ui:Glass.CornerRadius="{DynamicResource RadiusCardInSidebar}"
                             Padding="14">
@@ -128,7 +138,9 @@
                 <TextBlock Text="Relay"
                            Style="{DynamicResource Type.Micro}"
                            Foreground="{DynamicResource InkSecondaryBrush}" />
+                <!-- This is the indicator that speaks: it is on screen whatever view is shown. -->
                 <ui:StatusIndicatorView Indicator="{Binding SidebarRelayStatus}"
+                                        Announces="True"
                                         Margin="0,4,0,0"
                                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.SidebarRelayStatus}" />
                 <TextBlock Text="iPhone"
@@ -136,6 +148,7 @@
                            Foreground="{DynamicResource InkSecondaryBrush}"
                            Margin="0,12,0,0" />
                 <ui:StatusIndicatorView Indicator="{Binding SidebarPhoneStatus}"
+                                        Announces="True"
                                         Margin="0,4,0,0"
                                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.SidebarPhoneStatus}" />
                 <TextBlock Text="Closing this window stops the relay."
@@ -218,28 +231,43 @@
           </DockPanel>
         </ContentControl>
 
-        <!-- The selected view. Shell/PageTemplates.xaml picks the view for the view model's type. -->
+        <!--
+          The selected view. Shell/PageTemplates.xaml picks the view for the view model's type. The
+          window sets the content itself, so that a change of view can fade (design system 7.1).
+        -->
         <ContentControl x:Name="PageHost"
                         Grid.Column="2"
-                        Content="{Binding CurrentPage}"
                         Focusable="False"
                         IsTabStop="False" />
 
-        <!-- Toast layer: one line at the bottom centre of the content area (design system 4.11). -->
-        <ContentControl x:Name="ToastLayer"
+        <!--
+          Toast layer: one line at the bottom centre of the content area, 24 from the bottom (design
+          system 4.11). An inverse tile, nearly opaque: one of the three things that may cover content.
+        -->
+        <ContentControl x:Name="Toast"
                         Grid.Column="2"
                         Style="{DynamicResource Toast}"
-                        Margin="0,0,0,8"
-                        Visibility="{Binding ToastText, Converter={StaticResource NullToVisibility}}">
-          <TextBlock Text="{Binding ToastText}" Style="{DynamicResource Type.Label}" Foreground="{DynamicResource InkOnInverseBrush}" />
+                        Margin="0,0,0,24"
+                        Visibility="Collapsed">
+          <TextBlock x:Name="ToastLabel"
+                     LineHeight="{DynamicResource TypeLabelLineHeight}"
+                     LineStackingStrategy="BlockLineHeight"
+                     TextTrimming="CharacterEllipsis"
+                     AutomationProperties.LiveSetting="Polite" />
         </ContentControl>
       </Grid>
     </Grid>
 
-    <!-- Dialog layer: a scrim over the whole window, sidebar included, and the dialog card (design system 4.10). -->
-    <Grid x:Name="DialogLayer" Visibility="{Binding ActiveDialog, Converter={StaticResource NullToVisibility}}">
-      <Border Style="{DynamicResource Dialog.Scrim}" />
-      <ContentControl Style="{DynamicResource Dialog.Card}" Content="{Binding ActiveDialog}" />
+    <!--
+      Dialog layer (design system 4.10): the scrim over the whole window, the sidebar and the title bar
+      included, and the dialog card. The scrim itself takes no input, so the caption buttons under it
+      still close and move the window; a second, invisible layer below the title bar takes the clicks
+      that cancel the dialog and keeps them from the page.
+    -->
+    <Grid x:Name="DialogLayer" Visibility="Collapsed">
+      <Border x:Name="Scrim" Style="{DynamicResource Dialog.Scrim}" IsHitTestVisible="False" />
+      <Border x:Name="ScrimInput" Margin="0,48,0,0" Background="Transparent" MouseLeftButtonDown="OnScrimPressed" />
+      <ContentControl x:Name="DialogCard" Style="{DynamicResource Dialog.Card}" />
     </Grid>
   </Grid>
 </Window>

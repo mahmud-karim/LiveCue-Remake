@@ -70,6 +70,19 @@ internal sealed class AppServices : IAsyncDisposable
         return new AppServices(hosting, session, shell, toasts);
     }
 
+    /// <summary>
+    /// What the real window does beyond showing the shell: it follows the saved "hide from screen
+    /// capture" setting (W-design 5.12). The self-test never calls this, so its window is left alone.
+    /// </summary>
+    public void Attach(MainWindow window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        window.FollowCaptureSetting(_session, _session.Report);
+    }
+
+    /// <summary>An exception reached the dispatcher: one "Relay diagnostic: " line, and the app continues.</summary>
+    public void ReportUnhandled(Exception exception) => _session.ReportUnhandled(exception);
+
     public async ValueTask DisposeAsync()
     {
         _session.Dispose();

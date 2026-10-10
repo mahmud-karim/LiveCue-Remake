@@ -9,18 +9,27 @@
   <!--
     Buttons (design system 4.1 to 4.3, and the session control of 4.17).
 
-      Button.Primary            the one accent-filled action on a screen (40 high)
-      Button.Primary.Session    the big start control in a page header (48 high)
-      Button.Secondary          supporting actions; several may appear together
-      Button.Destructive        a secondary button for a destructive action: danger label and outline
-      Button.Quiet              no fill at rest; only on surface.panel or denser
+      Button.Primary              the one accent-filled action on a screen (40 high)
+      Button.Primary.Session      the session control's idle face: the start control in a page header (48 high)
+      Button.Secondary            supporting actions; several may appear together
+      Button.Secondary.Session    the session control's neutral face (48 high)
+      Button.Destructive          a secondary button for a destructive action: danger label and outline
+      Button.DestructivePrimary   the confirm button of a destructive dialog: danger fill, white label
+      Button.Quiet                no fill at rest; only on surface.panel or denser
+      Button.Icon                 one glyph in a raised circle (40; set 36 and icon size 16 in rows)
+      Button.Icon.Quiet           one glyph, no fill at rest
 
     Leading icon: ui:ButtonAssist.Icon="{StaticResource Icon.Play}". Its colour is the label's unless
-    ui:ButtonAssist.IconBrush says otherwise.
+    ui:ButtonAssist.IconBrush says otherwise. An icon button takes its one glyph the same way and
+    needs AutomationProperties.Name and a ToolTip.
 
-    Anatomy is the caster and face pair from Glass.xaml. Hover is a separate fill layer that fades in
-    over motion.fast; fading a text-free layer keeps the label out of any opacity group. Hover and
-    pressed only ever swap to a lighter or stated fill, never dim, so contrast can only go up.
+    Busy: ui:ButtonAssist.IsBusy="True" puts a spinner where the icon is, keeps the label and the full
+    opacity, and makes the button ignore the pointer.
+
+    Anatomy is the caster and face pair from Glass.xaml. Hover and pressed are separate fill layers
+    that fade in (motion.fast, motion.press); fading a text-free layer keeps the label out of any
+    opacity group. They only ever swap to a lighter or stated fill, never dim, so contrast can only
+    go up.
   -->
 
   <!-- Shared by every button style: type.label, regular size, keyboard focus ring. -->
@@ -41,7 +50,7 @@
   </Style>
 
   <!--
-    The template of every button. A style supplies the fills through Background (rest),
+    The template of every button with a label. A style supplies the fills through Background (rest),
     ui:ButtonFills.Hover and ui:ButtonFills.Pressed, the outline through BorderBrush, and the shadow
     through ui:ButtonFills.Shadow.
   -->
@@ -58,7 +67,7 @@
       <Border x:Name="PressedFill"
               ui:Pill.IsPill="True"
               Background="{Binding Path=(ui:ButtonFills.Pressed), RelativeSource={RelativeSource TemplatedParent}}"
-              Visibility="Collapsed" />
+              Opacity="0" />
       <Border x:Name="Face"
               ui:Pill.IsPill="True"
               BorderBrush="{TemplateBinding BorderBrush}"
@@ -74,6 +83,12 @@
                    Height="{Binding Path=(ui:ButtonAssist.IconSize), RelativeSource={RelativeSource TemplatedParent}}"
                    Margin="0,0,8,0"
                    VerticalAlignment="Center" />
+          <ui:Spinner x:Name="Busy"
+                      Width="16"
+                      Height="16"
+                      Margin="0,0,8,0"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed" />
           <ContentPresenter RecognizesAccessKey="True"
                             VerticalAlignment="Center"
                             TextBlock.LineStackingStrategy="BlockLineHeight" />
@@ -84,6 +99,11 @@
       <Trigger Property="ui:ButtonAssist.Icon" Value="{x:Null}">
         <Setter TargetName="LeadingIcon" Property="Visibility" Value="Collapsed" />
       </Trigger>
+      <Trigger Property="ui:ButtonAssist.IsBusy" Value="True">
+        <Setter TargetName="LeadingIcon" Property="Visibility" Value="Collapsed" />
+        <Setter TargetName="Busy" Property="Visibility" Value="Visible" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+      </Trigger>
       <Trigger Property="IsMouseOver" Value="True">
         <Trigger.EnterActions>
           <BeginStoryboard Storyboard="{StaticResource Motion.HoverIn}" />
@@ -93,13 +113,91 @@
         </Trigger.ExitActions>
       </Trigger>
       <Trigger Property="IsPressed" Value="True">
-        <Setter TargetName="PressedFill" Property="Visibility" Value="Visible" />
+        <Trigger.EnterActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.PressIn}" />
+        </Trigger.EnterActions>
+        <Trigger.ExitActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.PressOut}" />
+        </Trigger.ExitActions>
       </Trigger>
       <!-- Disabled: opacity.disabled on the whole control, no shadow. The one place text sits under an opacity. -->
-      <Trigger Property="IsEnabled" Value="False">
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="IsEnabled" Value="False" />
+          <Condition Property="ui:ButtonAssist.IsBusy" Value="False" />
+        </MultiTrigger.Conditions>
         <Setter TargetName="Root" Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
         <Setter TargetName="Caster" Property="Effect" Value="{x:Null}" />
+      </MultiTrigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
+
+  <!-- The template of an icon button: the same layers around one centred glyph. A circle, because its sides are equal. -->
+  <ControlTemplate x:Key="Button.IconTemplate" TargetType="Button">
+    <Grid x:Name="Root" Background="Transparent">
+      <Border x:Name="Caster"
+              ui:Pill.IsPill="True"
+              Background="{TemplateBinding Background}"
+              Effect="{Binding Path=(ui:ButtonFills.Shadow), RelativeSource={RelativeSource TemplatedParent}}" />
+      <Border x:Name="HoverFill"
+              ui:Pill.IsPill="True"
+              Background="{Binding Path=(ui:ButtonFills.Hover), RelativeSource={RelativeSource TemplatedParent}}"
+              Opacity="0" />
+      <Border x:Name="PressedFill"
+              ui:Pill.IsPill="True"
+              Background="{Binding Path=(ui:ButtonFills.Pressed), RelativeSource={RelativeSource TemplatedParent}}"
+              Opacity="0" />
+      <Border x:Name="Face"
+              ui:Pill.IsPill="True"
+              BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}">
+        <Grid>
+          <ui:Icon x:Name="Glyph"
+                   Glyph="{Binding Path=(ui:ButtonAssist.Icon), RelativeSource={RelativeSource TemplatedParent}}"
+                   Tint="{Binding Path=(ui:ButtonAssist.IconBrush), RelativeSource={RelativeSource TemplatedParent}}"
+                   Width="{Binding Path=(ui:ButtonAssist.IconSize), RelativeSource={RelativeSource TemplatedParent}}"
+                   Height="{Binding Path=(ui:ButtonAssist.IconSize), RelativeSource={RelativeSource TemplatedParent}}"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
+          <ui:Spinner x:Name="Busy"
+                      Width="16"
+                      Height="16"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed" />
+        </Grid>
+      </Border>
+    </Grid>
+    <ControlTemplate.Triggers>
+      <Trigger Property="ui:ButtonAssist.IsBusy" Value="True">
+        <Setter TargetName="Glyph" Property="Visibility" Value="Collapsed" />
+        <Setter TargetName="Busy" Property="Visibility" Value="Visible" />
+        <Setter Property="IsHitTestVisible" Value="False" />
       </Trigger>
+      <Trigger Property="IsMouseOver" Value="True">
+        <Trigger.EnterActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.HoverIn}" />
+        </Trigger.EnterActions>
+        <Trigger.ExitActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.HoverOut}" />
+        </Trigger.ExitActions>
+      </Trigger>
+      <Trigger Property="IsPressed" Value="True">
+        <Trigger.EnterActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.PressIn}" />
+        </Trigger.EnterActions>
+        <Trigger.ExitActions>
+          <BeginStoryboard Storyboard="{StaticResource Motion.PressOut}" />
+        </Trigger.ExitActions>
+      </Trigger>
+      <MultiTrigger>
+        <MultiTrigger.Conditions>
+          <Condition Property="IsEnabled" Value="False" />
+          <Condition Property="ui:ButtonAssist.IsBusy" Value="False" />
+        </MultiTrigger.Conditions>
+        <Setter TargetName="Root" Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
+        <Setter TargetName="Caster" Property="Effect" Value="{x:Null}" />
+      </MultiTrigger>
     </ControlTemplate.Triggers>
   </ControlTemplate>
 
@@ -114,9 +212,10 @@
     <Setter Property="Template" Value="{StaticResource Button.Template}" />
   </Style>
 
-  <!-- 4.17 Session control, idle face: the start control in a page header. 48 high, type.headline, icon 20. -->
+  <!-- 4.17 Session control, idle face: the start control in a page header. 48 high, at least 180 wide, type.headline, icon 20. -->
   <Style x:Key="Button.Primary.Session" TargetType="Button" BasedOn="{StaticResource Button.Primary}">
     <Setter Property="FontSize" Value="{DynamicResource TypeHeadlineSize}" />
+    <Setter Property="TextBlock.LineHeight" Value="{DynamicResource TypeHeadlineLineHeight}" />
     <Setter Property="MinHeight" Value="{DynamicResource ButtonHeightSession}" />
     <Setter Property="Padding" Value="{DynamicResource ButtonPaddingSession}" />
     <Setter Property="ui:ButtonAssist.IconSize" Value="{DynamicResource IconSizeRegular}" />
@@ -133,10 +232,30 @@
     <Setter Property="Template" Value="{StaticResource Button.Template}" />
   </Style>
 
+  <!-- 4.17 Session control, neutral face: the running relay's control at the session size. -->
+  <Style x:Key="Button.Secondary.Session" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeHeadlineSize}" />
+    <Setter Property="TextBlock.LineHeight" Value="{DynamicResource TypeHeadlineLineHeight}" />
+    <Setter Property="MinHeight" Value="{DynamicResource ButtonHeightSession}" />
+    <Setter Property="Padding" Value="{DynamicResource ButtonPaddingSession}" />
+    <Setter Property="ui:ButtonAssist.IconSize" Value="{DynamicResource IconSizeRegular}" />
+  </Style>
+
   <!-- 4.2 Destructive variant: the red label sits on a fill we control (5.79:1). -->
   <Style x:Key="Button.Destructive" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
     <Setter Property="Foreground" Value="{DynamicResource StatusDangerBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource StrokeDangerBrush}" />
+  </Style>
+
+  <!-- 4.1 Destructive confirmation: the primary button with status.danger in place of the accent. Dialogs only. -->
+  <Style x:Key="Button.DestructivePrimary" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Foreground" Value="{DynamicResource InkOnAccentBrush}" />
+    <Setter Property="Background" Value="{DynamicResource StatusDangerBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeOnAccentBrush}" />
+    <Setter Property="ui:ButtonFills.Hover" Value="{DynamicResource StatusDangerHoverBrush}" />
+    <Setter Property="ui:ButtonFills.Pressed" Value="{DynamicResource StatusDangerPressedBrush}" />
+    <Setter Property="ui:ButtonFills.Shadow" Value="{DynamicResource ShadowAccent}" />
+    <Setter Property="Template" Value="{StaticResource Button.Template}" />
   </Style>
 
   <!-- 4.2 Quiet variant: no fill, stroke or shadow at rest. Accent label in semibold plus an icon (rule C-3). -->
@@ -151,27 +270,35 @@
     <Setter Property="Template" Value="{StaticResource Button.Template}" />
   </Style>
 
-  <!-- 4.17 Session control, running face: Pause, Resume and Stop in a page header. First version: the secondary button at the session size. -->
-  <Style x:Key="Button.Secondary.Session" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
-    <Setter Property="FontSize" Value="{DynamicResource TypeHeadlineSize}" />
-    <Setter Property="MinHeight" Value="{DynamicResource ButtonHeightSession}" />
-    <Setter Property="Padding" Value="{DynamicResource ButtonPaddingSession}" />
+  <!-- 4.3 Icon button, raised: 40 x 40 with a 20 glyph. In a row: Width and Height 36, ui:ButtonAssist.IconSize 16. -->
+  <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Width" Value="{DynamicResource ButtonHeightRegular}" />
+    <Setter Property="Height" Value="{DynamicResource ButtonHeightRegular}" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeRaisedBrush}" />
     <Setter Property="ui:ButtonAssist.IconSize" Value="{DynamicResource IconSizeRegular}" />
+    <Setter Property="ui:ButtonFills.Hover" Value="{DynamicResource SurfaceRaisedHoverBrush}" />
+    <Setter Property="ui:ButtonFills.Pressed" Value="{DynamicResource SurfaceRaisedPressedBrush}" />
+    <Setter Property="ui:ButtonFills.Shadow" Value="{DynamicResource ShadowRaised}" />
+    <Setter Property="Template" Value="{StaticResource Button.IconTemplate}" />
   </Style>
 
-  <!-- 4.2 Destructive primary: the confirm button of a destructive dialog. A solid danger fill with white text. -->
-  <Style x:Key="Button.DestructivePrimary" TargetType="Button" BasedOn="{StaticResource Button.Base}">
-    <Setter Property="Foreground" Value="{DynamicResource InkOnAccentBrush}" />
-    <Setter Property="Background" Value="{DynamicResource StatusDangerBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource StrokeOnAccentBrush}" />
-    <Setter Property="ui:ButtonFills.Hover" Value="{DynamicResource StatusDangerHoverBrush}" />
-    <Setter Property="ui:ButtonFills.Pressed" Value="{DynamicResource StatusDangerPressedBrush}" />
-    <Setter Property="Template" Value="{StaticResource Button.Template}" />
+  <!-- 4.3 Icon button, quiet: no fill at rest; hover and pressed as the quiet button, in a circle. -->
+  <Style x:Key="Button.Icon.Quiet" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Width" Value="{DynamicResource ButtonHeightRegular}" />
+    <Setter Property="Height" Value="{DynamicResource ButtonHeightRegular}" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="ui:ButtonAssist.IconSize" Value="{DynamicResource IconSizeRegular}" />
+    <Setter Property="ui:ButtonFills.Hover" Value="{DynamicResource StateHoverBrush}" />
+    <Setter Property="ui:ButtonFills.Pressed" Value="{DynamicResource StatePressedBrush}" />
+    <Setter Property="Template" Value="{StaticResource Button.IconTemplate}" />
   </Style>
-
-  <!-- 4.3 Icon button. First version: the secondary and the quiet button; a square face arrives with the desktop core. -->
-  <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Secondary}" />
-
-  <Style x:Key="Button.Icon.Quiet" TargetType="Button" BasedOn="{StaticResource Button.Quiet}" />
 
 </ResourceDictionary>

@@ -2,37 +2,56 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:ui="clr-namespace:LiveCue.Desktop.Controls">
 
-  <!--
-    Dialog, banner and toast (design system 4.10 and 4.11). First versions with plain looks: every key
-    exists and can be used by a page; the desktop core gives each its design-system appearance.
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="Icons.xaml" />
+  </ResourceDictionary.MergedDictionaries>
 
-    The dialog card and the toast are opaque on purpose: they sit over other content, and rule W-1 of
-    design system 3.5 forbids anything translucent there.
+  <!--
+    Dialog, toast and banner (design system 4.10 and 4.11).
+
+    The dialog card and the toast are the only things that ever cover content (rule W-1 of 3.5), and
+    both are nearly opaque fills we control: surface.overlay at 0.97 and surface.inverse at 0.90. A
+    banner is content: it sits in a panel, a card or a dialog and covers nothing.
   -->
 
-  <!-- The scrim over the whole window, sidebar included, while a dialog is open. -->
+  <!-- The scrim over the whole window, sidebar and title bar included, while a dialog is open: surface.scrim. -->
   <Style x:Key="Dialog.Scrim" TargetType="Border">
     <Setter Property="Background" Value="{DynamicResource SurfaceScrimBrush}" />
   </Style>
 
-  <!-- The dialog card. Shadow on the caster, content on the face, like every glass surface. -->
+  <!--
+    The dialog card (4.10): surface.overlay with the sheen, stroke.edge, shadow.overlay, radius.panel,
+    480 wide, 24 of padding, and never closer than 24 to the window's edge. The shadow is on the
+    caster and the content on the face, like every glass surface.
+
+    Focus stays inside: Tab, Ctrl+Tab and the arrow keys all cycle within the card. The dialog's view
+    is the content: a title in type.title, the body, and its buttons at the bottom right, primary
+    rightmost, 8 apart.
+  -->
   <Style x:Key="Dialog.Card" TargetType="ContentControl">
-    <Setter Property="Width" Value="440" />
+    <Setter Property="Width" Value="480" />
+    <Setter Property="Margin" Value="24" />
     <Setter Property="Padding" Value="24" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
     <Setter Property="HorizontalAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
     <Setter Property="KeyboardNavigation.TabNavigation" Value="Cycle" />
+    <Setter Property="KeyboardNavigation.ControlTabNavigation" Value="Cycle" />
+    <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="Cycle" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContentControl">
           <Grid>
-            <Border CornerRadius="{DynamicResource RadiusPanel}"
+            <Border x:Name="Caster"
+                    CornerRadius="{DynamicResource RadiusPanel}"
                     Background="{DynamicResource SurfaceOverlayBrush}"
                     Effect="{DynamicResource ShadowOverlay}" />
-            <Border CornerRadius="{DynamicResource RadiusPanel}"
+            <Border x:Name="Face"
+                    CornerRadius="{DynamicResource RadiusPanel}"
+                    Background="{DynamicResource GlassSheenBrush}"
                     BorderBrush="{DynamicResource StrokeEdgeBrush}"
                     BorderThickness="1"
                     Padding="{TemplateBinding Padding}">
@@ -44,35 +63,59 @@
     </Setter>
   </Style>
 
-  <!-- Toast: one short line at the bottom centre of the content area. -->
+  <!--
+    Toast (4.11): a short confirmation that needs no decision. A tile with radius.card, at least 48
+    high, padding 16 / 12, surface.inverse, shadow.raised; its text is type.label in ink.onInverse.
+    At most 480 wide. The window shows one at a time at the bottom centre of the content area.
+  -->
   <Style x:Key="Toast" TargetType="ContentControl">
-    <Setter Property="Padding" Value="16,10" />
+    <Setter Property="MinHeight" Value="48" />
+    <Setter Property="MaxWidth" Value="480" />
+    <Setter Property="Padding" Value="16,12" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
-    <Setter Property="IsHitTestVisible" Value="False" />
     <Setter Property="HorizontalAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Bottom" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Foreground" Value="{DynamicResource InkOnInverseBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeLabelSize}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ContentControl">
-          <Border ui:Pill.IsPill="True"
-                  Background="{DynamicResource SurfaceInverseBrush}"
-                  Padding="{TemplateBinding Padding}"
-                  TextElement.Foreground="{TemplateBinding Foreground}">
-            <ContentPresenter />
-          </Border>
+          <Grid>
+            <Border CornerRadius="{DynamicResource RadiusCard}"
+                    Background="{DynamicResource SurfaceInverseBrush}"
+                    Effect="{DynamicResource ShadowRaised}" />
+            <Border CornerRadius="{DynamicResource RadiusCard}"
+                    Padding="{TemplateBinding Padding}"
+                    TextElement.Foreground="{TemplateBinding Foreground}">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Border>
+          </Grid>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
   </Style>
 
-  <!-- Banner: a tinted strip with an optional title, a body and at most one quiet button. The tone picks the tint. -->
+  <!--
+    Banner (4.11): a persistent message inside the content. Radius.field, padding 12 / 16, a
+    surface.raised base under the tone's tint (so coloured text has its contrast, table C); a 20 glyph
+    and the title in the tone's colour, the body in type.body and ink.primary, and at most one quiet
+    button at the trailing edge.
+
+      Info      accent      information glyph        Success   status.success   check glyph
+      Warning   status.warning   alert glyph         Danger    status.danger    alert glyph
+  -->
   <Style x:Key="Banner" TargetType="ui:Banner">
-    <Setter Property="Padding" Value="14,10" />
+    <!-- 16 / 12 with the 1 of stroke.raised that a raised surface carries. -->
+    <Setter Property="Padding" Value="15,11" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
-    <Setter Property="AutomationProperties.Name" Value="{Binding Body, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ui:Banner">
@@ -81,36 +124,66 @@
             <Border x:Name="Tint"
                     CornerRadius="{DynamicResource RadiusField}"
                     Background="{DynamicResource AccentTintBrush}"
+                    BorderBrush="{DynamicResource StrokeRaisedBrush}"
+                    BorderThickness="1"
                     Padding="{TemplateBinding Padding}">
-              <DockPanel>
-                <Button x:Name="Action"
-                        DockPanel.Dock="Right"
-                        Style="{DynamicResource Button.Quiet}"
-                        Margin="12,0,0,0"
-                        VerticalAlignment="Center"
-                        Content="{TemplateBinding ActionLabel}"
-                        Command="{TemplateBinding Command}" />
-                <StackPanel VerticalAlignment="Center">
-                  <TextBlock x:Name="Title" Text="{TemplateBinding Title}" Style="{DynamicResource Type.Label}" />
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ui:Icon x:Name="Glyph"
+                         Glyph="{StaticResource Icon.Info}"
+                         Width="{DynamicResource IconSizeRegular}"
+                         Height="{DynamicResource IconSizeRegular}"
+                         Margin="0,0,12,0"
+                         VerticalAlignment="Top"
+                         Foreground="{TemplateBinding Foreground}" />
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                  <TextBlock x:Name="Title"
+                             Text="{TemplateBinding Title}"
+                             Style="{DynamicResource Type.Label}"
+                             Foreground="{TemplateBinding Foreground}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None" />
                   <TextBlock Text="{TemplateBinding Body}"
                              Style="{DynamicResource Type.Body}"
+                             Foreground="{DynamicResource InkPrimaryBrush}"
                              TextWrapping="Wrap"
                              TextTrimming="None" />
                 </StackPanel>
-              </DockPanel>
+
+                <!-- The button is 36 high in a row of 20: the negative margin keeps the banner as high as its text. -->
+                <Button x:Name="Action"
+                        Grid.Column="2"
+                        Style="{DynamicResource Button.Quiet}"
+                        Margin="12,-8,-8,-8"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding ActionLabel}"
+                        Command="{TemplateBinding Command}" />
+              </Grid>
             </Border>
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="Tone" Value="Success">
               <Setter TargetName="Tint" Property="Background" Value="{DynamicResource StatusSuccessTintBrush}" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Check}" />
             </Trigger>
             <Trigger Property="Tone" Value="Warning">
               <Setter TargetName="Tint" Property="Background" Value="{DynamicResource StatusWarningTintBrush}" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Alert}" />
             </Trigger>
             <Trigger Property="Tone" Value="Danger">
               <Setter TargetName="Tint" Property="Background" Value="{DynamicResource StatusDangerTintBrush}" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Alert}" />
             </Trigger>
             <Trigger Property="Title" Value="{x:Null}">
+              <Setter TargetName="Title" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Title" Value="">
               <Setter TargetName="Title" Property="Visibility" Value="Collapsed" />
             </Trigger>
             <Trigger Property="ActionLabel" Value="{x:Null}">
@@ -120,6 +193,17 @@
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <Trigger Property="Tone" Value="Success">
+        <Setter Property="Foreground" Value="{DynamicResource StatusSuccessBrush}" />
+      </Trigger>
+      <Trigger Property="Tone" Value="Warning">
+        <Setter Property="Foreground" Value="{DynamicResource StatusWarningBrush}" />
+      </Trigger>
+      <Trigger Property="Tone" Value="Danger">
+        <Setter Property="Foreground" Value="{DynamicResource StatusDangerBrush}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style TargetType="ui:Banner" BasedOn="{StaticResource Banner}" />

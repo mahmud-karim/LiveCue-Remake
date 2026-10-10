@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using LiveCue.Desktop.Composition;
 using LiveCue.Desktop.Infrastructure;
 using LiveCue.Desktop.SelfTest;
@@ -44,19 +45,25 @@ public partial class App : Application
 
         if (environment.IsSelfTest)
         {
-            // The self-test owns the lifetime: closing its window must not end the run early.
+            // The self-test owns the lifetime: closing its window must not end the run early. What it
+            // renders must not depend on the moment it looks, so nothing travels or fades; and it shows
+            // Daylight at 100% whatever this PC is set to, so the system's look is not followed.
+            SystemPreferences.PinAnimations(false);
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var exitCode = await SelfTestRunner.RunAsync(this, environment);
             Shutdown(exitCode);
             return;
         }
 
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
         try
         {
             Themes.FollowSystem();
             _services = AppServices.CreateForUser(new WpfUiDispatcher(Dispatcher));
-            MainWindow = new MainWindow(_services.Shell);
-            MainWindow.Show();
+            var window = new MainWindow(_services.Shell);
+            _services.Attach(window);
+            MainWindow = window;
+            window.Show();
         }
 #pragma warning disable CA1031 // Whatever stops the start-up is told to the user; only its type name is shown (R-33).
         catch (Exception exception)
@@ -68,6 +75,24 @@ public partial class App : Application
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(ExitStartupFailed);
+        }
+    }
+
+    /// <summary>
+    /// An exception that reaches the dispatcher is handled, reported as a "Relay diagnostic: " line with
+    /// the type name only, and the app continues (W-design 5.12).
+    /// </summary>
+    private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        e.Handled = true;
+        try
+        {
+            _services?.ReportUnhandled(e.Exception);
+        }
+#pragma warning disable CA1031 // Reporting a failure must not become one.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
         }
     }
 
