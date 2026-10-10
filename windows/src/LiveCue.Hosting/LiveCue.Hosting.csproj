@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>What a host needs around the LiveCue relay: the data folder, settings.json, endpoint resolution and the relay supervisor. No WPF.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LiveCue.Relay\LiveCue.Relay.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LiveCue.Hosting.Tests" />
+  </ItemGroup>
+
+</Project>

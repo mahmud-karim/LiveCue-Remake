@@ -2,12 +2,14 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <Description>Console host for the LiveCue relay, for headless runs.</Description>
+    <AssemblyName>LiveCueRelayHost</AssemblyName>
+    <RootNamespace>LiveCue.Relay.Host</RootNamespace>
+    <Description>LiveCueRelayHost.exe: runs the LiveCue relay without a window, for headless use.</Description>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\LiveCue.Relay\LiveCue.Relay.csproj" />
+    <ProjectReference Include="..\LiveCue.Hosting\LiveCue.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

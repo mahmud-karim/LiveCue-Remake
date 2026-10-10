@@ -11,7 +11,9 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
-  <PropertyGroup Label="Language">
+  <PropertyGroup Label="Target and language">
+    <!-- Every project targets Windows: the relay uses DPAPI and the tests run on Windows only. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -47,6 +49,9 @@
   </PropertyGroup>
 
   <ItemGroup Label="Tests" Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <Using Include="Xunit" />
   </ItemGroup>
 

@@ -1,15 +1,31 @@
 <Project>
 
-  <!-- Central package management: every package version used under windows/ is pinned here. -->
+  <!--
+    Central package management: every package version used under windows/ is pinned here.
+
+    These six are the only packages the architecture allows (docs/architecture/03-system-architecture.md,
+    section 3.1). Adding another needs a decision first, because this PC allows package restores only,
+    never new tooling.
+  -->
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
+  <ItemGroup Label="LiveCue.Relay">
+    <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.2.1" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup Label="LiveCue.Desktop">
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
   <ItemGroup Label="Tests">
-    <!-- xunit.v3 runs on Microsoft.Testing.Platform (see "test" in global.json); no VSTest packages. -->
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
 
 </Project>

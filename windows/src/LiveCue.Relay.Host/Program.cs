@@ -1,41 +1,82 @@
 using System.Globalization;
+using LiveCue.Hosting;
 using LiveCue.Relay;
-using LiveCue.Relay.Authentication;
+using LiveCue.Relay.Protocol;
 
-// Console host for the relay, for headless runs.
+// LiveCueRelayHost.exe: the relay supervisor without a window (architecture 3.14). It is for headless
+// use and for manual checks, not the everyday entry point.
 //
-//   LiveCue.Relay.Host [--port <n>]
+//   LiveCueRelayHost [--check-only] [--port <n>] [--data-dir <path>] [--endpoint <url>] [--mode private|public]
 //
-// The pairing token is read from the LIVECUE_RELAY_TOKEN environment variable. It is never taken
-// from the command line, because command lines are visible to every process on the PC.
+// Exit codes: 0 clean stop, 2 prerequisite or usage failure, 3 relay start fault.
+//
+// The spike has the arguments above. --show-pairing, --events json, --codex and --lab arrive with the
+// features they belong to. The pairing token is never printed and never read from the command line.
 
-const string TokenVariable = "LIVECUE_RELAY_TOKEN";
-const int ExitOk = 0;
-const int ExitStartFailed = 1;
-const int ExitUsage = 2;
+const int ExitClean = 0;
+const int ExitPrerequisite = 2;
+const int ExitStartFault = 3;
+const string Usage =
+    "Usage: LiveCueRelayHost [--check-only] [--port <n>] [--data-dir <path>] [--endpoint <url>] [--mode private|public]";
 
-var port = RelayDefaults.Port;
+var checkOnly = false;
+string? dataDirectoryArgument = null;
+var overrides = new SupervisorOverrides();
+
 for (var index = 0; index < args.Length; index++)
 {
-    if (args[index] == "--port"
-        && index + 1 < args.Length
-        && int.TryParse(args[index + 1], NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
-        && RelayOptions.IsAllowedPort(parsed))
+    var hasValue = index + 1 < args.Length;
+    switch (args[index])
     {
-        port = parsed;
-        index++;
-        continue;
-    }
+        case "--check-only":
+            checkOnly = true;
+            break;
 
-    Console.Error.WriteLine("Usage: LiveCue.Relay.Host [--port <0 or 1024-65535>]");
-    return ExitUsage;
+        case "--port" when hasValue
+            && int.TryParse(args[index + 1], NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+            && (port == 0 || ProtocolConstants.IsAllowedRelayPort(port)):
+            overrides = overrides with { Port = port };
+            index++;
+            break;
+
+        case "--data-dir" when hasValue:
+            dataDirectoryArgument = args[index + 1];
+            index++;
+            break;
+
+        case "--endpoint" when hasValue && EndpointGrammar.TryCanonicalize(args[index + 1], out var endpoint):
+            overrides = overrides with { Endpoint = endpoint };
+            index++;
+            break;
+
+        case "--mode" when hasValue && args[index + 1] is "private" or "public":
+            overrides = overrides with { Mode = args[index + 1] == "public" ? ConnectionMode.Public : ConnectionMode.Private };
+            index++;
+            break;
+
+        default:
+            Console.Error.WriteLine(Usage);
+            return ExitPrerequisite;
+    }
 }
 
-var token = Environment.GetEnvironmentVariable(TokenVariable);
-if (string.IsNullOrWhiteSpace(token))
+// Check 1 of architecture 3.11: the data folder is usable and settings.json loads, or defaults apply.
+var dataDirectory = DataFolder.Resolve(dataDirectoryArgument);
+var settings = new FileSettingsStore(dataDirectory);
+var loaded = settings.Load();
+if (loaded.Source == SettingsSource.DefaultsBecauseFileIsInvalid)
 {
-    Console.Error.WriteLine($"Set the {TokenVariable} environment variable to the pairing token before starting the relay.");
-    return ExitUsage;
+    Console.WriteLine("settings.json is not valid and was left untouched. Running on the default settings:");
+    foreach (var problem in loaded.Problems)
+    {
+        Console.WriteLine("  " + problem);
+    }
+}
+
+if (checkOnly)
+{
+    Console.WriteLine("LiveCue Relay prerequisites passed.");
+    return ExitClean;
 }
 
 using var stopRequested = new CancellationTokenSource();
@@ -45,32 +86,34 @@ Console.CancelKeyPress += (_, cancel) =>
     stopRequested.Cancel();
 };
 
-await using var relay = new RelayHost();
-relay.EventRaised += (_, relayEvent) => Console.WriteLine(relayEvent switch
+await using var supervisor = new RelaySupervisor(settings, dataDirectory, overrides: overrides);
+supervisor.EventReceived += (_, relayEvent) => Console.WriteLine(relayEvent switch
 {
-    RelayEvent.Started started =>
-        $"LiveCue relay {RelayDefaults.RelayVersion} listening on http://127.0.0.1:{started.Port} (Ctrl+C to stop)",
-    RelayEvent.Stopped => "LiveCue relay stopped",
-    RelayEvent.PhoneSeen seen => $"Phone seen at {seen.At:O}",
-    _ => relayEvent.ToString(),
+    RelayStarted started => string.Create(
+        CultureInfo.InvariantCulture,
+        $"Relay {started.RelayVersion} started on 127.0.0.1:{started.Port} (protocol {started.ProtocolVersion}). PC address: {started.Endpoint}"),
+    RelayStopped => "Relay stopped.",
+    RelayFaulted faulted => faulted.Message,
+    PhoneSeen => "iPhone seen.",
+    Diagnostic diagnostic => "Relay diagnostic: " + diagnostic.Message,
+    _ => relayEvent.GetType().Name,
 });
 
 try
 {
-    await relay.StartAsync(
-        new RelayOptions { Authenticator = new SharedTokenAuthenticator(token), Port = port },
-        stopRequested.Token);
+    await supervisor.StartAsync(stopRequested.Token);
 }
-catch (RelayStartException exception)
+catch (RelayStartException)
 {
-    Console.Error.WriteLine(exception.Message);
-    return ExitStartFailed;
+    // The fault text was printed by the event handler above.
+    return ExitStartFault;
 }
 catch (OperationCanceledException)
 {
-    return ExitOk;
+    return ExitClean;
 }
 
+Console.WriteLine("Press Ctrl+C to stop.");
 try
 {
     await Task.Delay(Timeout.Infinite, stopRequested.Token);
@@ -80,5 +123,5 @@ catch (OperationCanceledException)
     // Ctrl+C: fall through and stop.
 }
 
-await relay.StopAsync();
-return ExitOk;
+await supervisor.StopAsync();
+return ExitClean;
