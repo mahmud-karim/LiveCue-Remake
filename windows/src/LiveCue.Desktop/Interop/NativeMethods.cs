@@ -14,8 +14,6 @@ internal static partial class NativeMethods
     public const int AttachParentProcess = -1;
     public const int StdOutputHandle = -11;
 
-    public const uint PwRenderFullContent = 2;
-
     public const int WmGetMinMaxInfo = 0x0024;
 
     /// <summary>DPI_AWARENESS_CONTEXT_UNAWARE: windows created under it are laid out at 96 DPI.</summary>
@@ -41,36 +39,6 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
-
-    [LibraryImport("user32.dll")]
-    public static partial uint GetDpiForWindow(IntPtr hwnd);
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool PrintWindow(IntPtr hwnd, IntPtr hdc, uint flags);
-
-    [LibraryImport("user32.dll")]
-    public static partial IntPtr GetDC(IntPtr hwnd);
-
-    [LibraryImport("user32.dll")]
-    public static partial int ReleaseDC(IntPtr hwnd, IntPtr hdc);
-
-    [LibraryImport("gdi32.dll")]
-    public static partial IntPtr CreateCompatibleDC(IntPtr hdc);
-
-    [LibraryImport("gdi32.dll")]
-    public static partial IntPtr CreateCompatibleBitmap(IntPtr hdc, int width, int height);
-
-    [LibraryImport("gdi32.dll")]
-    public static partial IntPtr SelectObject(IntPtr hdc, IntPtr value);
-
-    [LibraryImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool DeleteObject(IntPtr value);
-
-    [LibraryImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool DeleteDC(IntPtr hdc);
 
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

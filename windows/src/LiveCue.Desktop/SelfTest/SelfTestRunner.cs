@@ -30,6 +30,12 @@ namespace LiveCue.Desktop.SelfTest;
 /// prints "Desktop self-test passed" and exits 0. The first failed check prints its name and exits 1.
 ///
 /// The window is shown off-screen and never takes the focus.
+///
+/// The PNGs come from WPF's own software renderer (RenderTargetBitmap), which draws the same tree
+/// with the same brushes and effects but with greyscale text. They are not a capture of the screen:
+/// WPF presents nothing for a window that is off-screen, or while the display is asleep, and
+/// PrintWindow returns an empty client area for it. So ClearType on the real window is protected by
+/// the crisp-text rule checked on every scene, not by pixels.
 /// </summary>
 internal static class SelfTestRunner
 {
@@ -200,8 +206,7 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         await DeliverAsync(window, services);
         Require(Text(root, "PhoneStatusText") == "iPhone connected", "a phone-seen event to show \"iPhone connected\"");
         Require(Text(root, "SidebarPhoneStatus") == "iPhone connected", "the sidebar to show \"iPhone connected\"");
-        var ready = await CaptureAsync(window, root, "live-ready");
-        await CaptureCompositedAsync(window, root, ready, "live-ready-composited");
+        await CaptureAsync(window, root, "live-ready");
 
         // Presence: connected for 15 s after the last request, then idle; it never falls back to "not connected".
         clock.Advance(RelayViewModel.ConnectedWindow + TimeSpan.FromSeconds(1));
@@ -480,95 +485,6 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         await ResizeAsync(window, root, BeyondAnyDesktop);
         log.Write($"layout: holds at {BeyondAnyDesktop.Width} x {BeyondAnyDesktop.Height}, beyond the desktop size");
         await ResizeAsync(window, root, DefaultSize);
-    }
-
-    /// <summary>
-    /// What the desktop compositor holds for the window: the real rendering path, with ClearType and
-    /// with effects drawn by the GPU (or its software stand-in), where the other PNGs come from WPF's
-    /// own software renderer. It is saved for comparison and never required, because it is often
-    /// unavailable: WPF stops presenting while the display is asleep or the session is locked, and the
-    /// compositor keeps no picture of a window that is entirely off-screen.
-    /// </summary>
-    private async Task CaptureCompositedAsync(MainWindow window, FrameworkElement root, BitmapSource rendered, string scene)
-    {
-        var width = rendered.PixelWidth;
-        var height = rendered.PixelHeight;
-
-        // Two pixels of the window at the far corner of the desktop are enough for the compositor,
-        // and nobody sees them.
-        InWindowDpiContext(() =>
-        {
-            window.Left = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 2;
-            window.Top = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 2;
-            return true;
-        });
-        await SettleAsync(window);
-        await Task.Delay(TimeSpan.FromMilliseconds(300));
-
-        var composited = InWindowDpiContext(() =>
-        {
-            var handle = new WindowInteropHelper(window).Handle;
-            var screen = NativeMethods.GetDC(IntPtr.Zero);
-            var memory = NativeMethods.CreateCompatibleDC(screen);
-            var surface = NativeMethods.CreateCompatibleBitmap(screen, width, height);
-            var previous = NativeMethods.SelectObject(memory, surface);
-            try
-            {
-                var printed = NativeMethods.PrintWindow(handle, memory, NativeMethods.PwRenderFullContent);
-                NativeMethods.SelectObject(memory, previous);
-                if (!printed)
-                {
-                    return null;
-                }
-
-                var source = Imaging.CreateBitmapSourceFromHBitmap(
-                    surface, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                var converted = new FormatConvertedBitmap(source, PixelFormats.Pbgra32, null, 0);
-                converted.Freeze();
-                return (BitmapSource)converted;
-            }
-            finally
-            {
-                NativeMethods.DeleteObject(surface);
-                NativeMethods.DeleteDC(memory);
-                _ = NativeMethods.ReleaseDC(IntPtr.Zero, screen);
-            }
-        });
-
-        InWindowDpiContext(() =>
-        {
-            window.Left = OffScreen;
-            window.Top = OffScreen;
-            return true;
-        });
-        await SettleAsync(window);
-
-        // It is our picture only if it shows what the software render shows, where nothing but glass is drawn.
-        var (x, y) = EmptySpotInSidebar(window, root);
-        if (composited is null || !IsWithin(PixelAt(composited, x, y), PixelAt(rendered, x, y), 12))
-        {
-            log.Write("composited capture: not available here (the window is not being presented: display asleep, locked session or no compositor); skipped");
-            return;
-        }
-
-        // Coloured fringes on the wordmark in the title bar mean ClearType is really on.
-        var fringes = 0;
-        for (var row = 12; row < 36; row++)
-        {
-            for (var column = 40; column < 100; column++)
-            {
-                var pixel = PixelAt(composited, column, row);
-                if (Math.Abs(pixel.R - pixel.B) > 40 && pixel.G < 200)
-                {
-                    fringes++;
-                }
-            }
-        }
-
-        var fileName = Save(composited, scene, DefaultSize);
-        log.Write(
-            $"composited capture: {fileName}; sidebar glass {Hex(PixelAt(composited, x, y))} against {Hex(PixelAt(rendered, x, y))} rendered; " +
-            $"subpixel text {(fringes > 8 ? "yes" : "no")} ({fringes} fringe pixels)");
     }
 
     /// <summary>A point inside the sidebar panel with nothing drawn on it: between the last row and the status card.</summary>
