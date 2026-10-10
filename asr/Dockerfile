@@ -10,7 +10,11 @@
 #   docker build --target nemotron -t livecue-remake-asr-nemotron:1.0 .
 #   docker build --target qwen3    -t livecue-remake-asr-qwen3:1.0 .
 
-FROM python:3.12-slim AS base
+# The base image is named by digest, so a build cannot receive a different
+# image under the same tag. To move to a newer python:3.12-slim, replace the
+# digest with the one that this prints:
+#   docker buildx imagetools inspect python:3.12-slim
+FROM python:3.12-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS base
 ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     HF_HUB_OFFLINE=1 \

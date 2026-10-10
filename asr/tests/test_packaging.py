@@ -86,7 +86,9 @@ def dockerfile_stages() -> dict:
 def test_dockerfile_has_a_shared_base_and_one_target_per_model():
     stages = dockerfile_stages()
     assert list(stages) == ["base", "nemotron", "qwen3"]
-    assert stages["base"]["from"] == "python:3.12-slim"
+    # By digest, not by the movable tag alone (architecture 5.1).
+    assert re.fullmatch(r"python:3\.12-slim@sha256:[0-9a-f]{64}", stages["base"]["from"])
+    assert len(re.findall(r"(?m)^FROM ", text("Dockerfile"))) == 3  # no other image comes in
     assert stages["nemotron"]["from"] == stages["qwen3"]["from"] == "base"
     for model in ("nemotron", "qwen3"):
         assert stages[model]["lines"][-1] == 'CMD ["python", "server.py"]'
