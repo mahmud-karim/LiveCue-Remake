@@ -310,6 +310,8 @@ compiler refuses two files of the same name in one module.
 | `DesignSystem/SessionStartControl.swift`, `SessionControlCluster.swift` | DS 4.17 | WP-05 |
 | `DesignSystem/BrandMark.swift` | In-app mark and two-tone name (DS 8) | WP-05 |
 | `DesignSystem/Haptics.swift` | The events of DS 7.2 | WP-05 |
+| `DesignSystem/Surfaces.swift`, `Glyph.swift`, `Pill.swift`, `Scaling.swift`, `Pulse.swift`, `RowSupport.swift`, `BrandMarkArtwork.swift` | Private helpers of the components: the content surfaces, icon sizes, the pill shape, lengths that follow the text size, the live pulse, the row layout inside a panel or card, the geometry of the mark | WP-05 |
+| `DesignSystem/DesignGallery.swift` | Debug builds only: a gallery of the components, shown in place of every screen when the app is launched with `-design-gallery` | WP-05 |
 | `Features/Home/HomeScreen.swift`, `HomeViewModel.swift`, `HomeReadinessPanel.swift` | Screens 3 | WP-10 |
 | `Features/LiveSession/LiveSessionScreen.swift`, `LiveSessionViewModel.swift`, `LiveStatusPanel.swift`, `SessionNoticeBanner.swift`, `LiveTranscriptPanel.swift`, `AnswerFeed.swift`, `AssistErrorCard.swift`, `InProgressCard.swift`, `AnswerCard.swift`, `TimingView.swift`, `TimingViewContent.swift` | Screens 4 | WP-10 |
 | `Features/AssistantLab/AssistantLabScreen.swift`, `AssistantLabViewModel.swift`, `AnswerServicePanel.swift`, `AssistantModelPanel.swift`, `OpenRouterKeyPanel.swift`, `RecentComparisonsPanel.swift`, `OpenRouterModelsScreen.swift`, `ReasoningScreen.swift`, `RunDetailsScreen.swift` | Screens 5 | WP-10 |
@@ -2749,6 +2751,8 @@ extension View {
     /// Chrome-layer glass behind this view. `interactive` only for surfaces that respond to touch.
     func daylightChrome<S: InsettableShape>(in shape: S, interactive: Bool = false) -> some View
     func lcGlassID(_ id: some Hashable & Sendable, in namespace: Namespace.ID) -> some View
+    /// Pins the bar above the bottom safe area and insets it 16 from the screen edges: pass the controls
+    /// without padding of their own.
     func lcBottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View
     func lcScrollEdge(hard: Bool = false, for edges: Edge.Set) -> some View
     func lcTabBarMinimizesOnScroll() -> some View
@@ -2908,6 +2912,23 @@ extension View {
     func haptic<T: Equatable>(_ haptic: Haptic, trigger: T) -> some View
 }
 ```
+
+What the components do by themselves, so that a screen does not do it again (WP-05):
+
+- `Panel`, `Card` and an open `DisclosureRow` lay out their own children. Adjacent `LCNavigationRow`s and
+  `ChoiceRow`s touch and get a hairline between them; adjacent `DetailRow`s touch; a `DisclosureRow` gets a
+  hairline above it unless it comes first; everything else sits 12 apart. List the children and add no
+  dividers or spacing. Children wrapped in a stack of the screen's own count as one child.
+- `ScreenScaffold` sets `ink.primary` as the default text colour, hides system backgrounds, applies
+  `lcTabBarChrome()` (a bar's background is read from the tab's content, so the call on the tab view in
+  `RootView` is not enough alone) and, on iOS 18, fades its content out above an `lcBottomBar`.
+- `Spinner` and every icon take the colour of the text around them (`foregroundStyle`).
+- A busy `LCButton`, `IconButton` or `SessionStartControl` ignores input and keeps its full appearance;
+  `disabled` is for controls that are unavailable.
+- An `LCTextField` or `LCSecureField` with an empty label draws no label and reads its placeholder to
+  assistive technology. A secure field's accessibility value is "Hidden" or "Shown", never its text.
+- Component sizes that a screen passes in are tokens too: `theme.component.brandMark` (68) and
+  `theme.component.compactBrandMark` (48).
 
 ### 3.4 Concurrency rule of each contract, in one place
 

@@ -90,11 +90,15 @@ enum LCGlassButtonShape: Equatable, Sendable {
     case capsule, circle
 }
 
-/// A capsule button for the chrome layer.
+/// A capsule or circle button for the chrome layer.
 ///
 /// On iOS 26 it is a system glass button. On iOS 18 the regular button is fallback chrome and the prominent
 /// button is a solid accent capsule. The label colour is set here on both paths, so pass an unstyled label.
 /// At most one prominent button should be visible at a time.
+///
+/// The button is as large as its label plus the system's padding. For a fixed size (the 64 high session
+/// control, the 52 circles beside it), give the label `frame(maxWidth: .infinity, maxHeight: .infinity)`
+/// and frame the button: the surface then fills that frame on both paths.
 struct LCGlassButton<Label: View>: View {
     private let isProminent: Bool
     private let shape: LCGlassButtonShape
@@ -102,6 +106,7 @@ struct LCGlassButton<Label: View>: View {
     private let label: Label
 
     @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
 
     /// `shape` has a default that keeps the call sites without it compiling.
     init(
@@ -110,8 +115,6 @@ struct LCGlassButton<Label: View>: View {
         action: @escaping @MainActor () -> Void,
         @ViewBuilder label: () -> Label
     ) {
-        // STUB(WP-05)
-        // `shape` is stored and not drawn yet: every button is still a capsule.
         self.isProminent = prominent
         self.shape = shape
         self.action = action
@@ -121,20 +124,29 @@ struct LCGlassButton<Label: View>: View {
     var body: some View {
         if #available(iOS 26.0, *) {
             if isProminent {
-                Button(action: action) { label.foregroundStyle(theme.ink.onAccent) }
+                // The system takes the tint away from a disabled prominent button and leaves pale glass,
+                // on which a white label cannot be read. Its label is ink then, and the system dims it.
+                Button(action: action) { label.foregroundStyle(isEnabled ? theme.ink.onAccent : theme.ink.primary) }
                     .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.capsule)
+                    .buttonBorderShape(borderShape)
                     .controlSize(.large)
                     .tint(theme.accent.fill)
             } else {
                 Button(action: action) { label.foregroundStyle(theme.ink.primary) }
                     .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
+                    .buttonBorderShape(borderShape)
                     .controlSize(.large)
             }
         } else {
             Button(action: action) { label }
-                .buttonStyle(FallbackGlassButtonStyle(isProminent: isProminent))
+                .buttonStyle(FallbackGlassButtonStyle(isProminent: isProminent, shape: shape))
+        }
+    }
+
+    private var borderShape: ButtonBorderShape {
+        switch shape {
+        case .capsule: return .capsule
+        case .circle: return .circle
         }
     }
 }
@@ -142,7 +154,11 @@ struct LCGlassButton<Label: View>: View {
 // MARK: - Bars and scrolling
 
 extension View {
-    /// Pins `bar` above the bottom safe area. On iOS 26 the scroll edge effect extends under it.
+    /// Pins `bar` above the bottom safe area, 16 from the screen edges, so pass the controls without
+    /// padding of their own. Its text stops growing at the second accessibility size, like a system bar.
+    ///
+    /// On iOS 26 the scroll edge effect extends under the bar. On iOS 18 a `ScreenScaffold` inside the
+    /// view fades its content out just above the bar instead (design system 3.3).
     func lcBottomBar<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
         modifier(LCBottomBar(bar: bar()))
     }
@@ -169,27 +185,76 @@ extension View {
 
     /// The chrome of the tab bar. iOS 18 to 25: a visible `.ultraThinMaterial` toolbar background for the
     /// tab bar. iOS 26: nothing, the system draws it.
+    ///
+    /// SwiftUI reads a bar's background from the content of the selected tab, so `ScreenScaffold` applies
+    /// this to every screen. Applying it to the tab view as well does no harm.
     func lcTabBarChrome() -> some View {
-        // STUB(WP-05)
-        self
+        modifier(LCTabBarChrome())
     }
 
     /// The chrome of a sheet: `.presentationBackground(theme.surface.overlay)`; before iOS 26 also corner
     /// radius 32 and a visible grabber (design system 3.3).
+    ///
+    /// Apply it to the content of the sheet. A sheet is an overlay surface: what is inside it uses the
+    /// content recipes, never glass.
     func lcSheetChrome() -> some View {
-        // STUB(WP-05)
-        self
+        modifier(LCSheetChrome())
     }
+}
+
+extension EnvironmentValues {
+    /// True inside a view whose bottom bar is drawn by the fallback path. `ScreenScaffold` reads it and
+    /// fades its content out above the bar.
+    @Entry var lcFadesAboveBottomBar: Bool = false
 }
 
 private struct LCBottomBar<Bar: View>: ViewModifier {
     let bar: Bar
 
+    @Environment(\.theme) private var theme
+
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content.safeAreaBar(edge: .bottom) { bar }
+            content.safeAreaBar(edge: .bottom) { insetBar }
         } else {
-            content.safeAreaInset(edge: .bottom) { bar }
+            content
+                .environment(\.lcFadesAboveBottomBar, true)
+                .safeAreaInset(edge: .bottom) { insetBar }
+        }
+    }
+
+    private var insetBar: some View {
+        bar
+            .padding(.horizontal, theme.space.screenInset)
+            .padding(.vertical, theme.space.s2)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    }
+}
+
+private struct LCTabBarChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+        } else {
+            content
+                .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+                .toolbarBackground(.visible, for: .tabBar)
+        }
+    }
+}
+
+private struct LCSheetChrome: ViewModifier {
+    @Environment(\.theme) private var theme
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            // The system sets the corner radius and shows its own grabber.
+            content.presentationBackground(theme.surface.overlay)
+        } else {
+            content
+                .presentationBackground(theme.surface.overlay)
+                .presentationCornerRadius(theme.radius.sheet)
+                .presentationDragIndicator(.visible)
         }
     }
 }
@@ -210,7 +275,8 @@ struct LCToolbarFixedSpacer: ToolbarContent {
 /// Floating chrome built from a system material and tokens.
 ///
 /// Bottom to top: material with the floating shadow, the floating fill, an optional sheen, the edge stroke.
-/// With Reduce Transparency on, the material and translucent fill give way to one opaque fill.
+/// With Reduce Transparency on, the material and translucent fill give way to one opaque fill with a
+/// `stroke.control` outline (design system 6.3).
 private struct FallbackChrome<S: InsettableShape>: View {
     let shape: S
     var showsSheen = true
@@ -227,6 +293,7 @@ private struct FallbackChrome<S: InsettableShape>: View {
                 shape
                     .fill(isPressed ? theme.surface.raisedPressed : theme.surface.floatingSolid)
                     .shadow(color: shadow.color, radius: shadow.radius, y: shadow.y)
+                shape.strokeBorder(theme.stroke.control, lineWidth: theme.component.stroke)
             } else {
                 shape
                     .fill(.ultraThinMaterial)
@@ -234,62 +301,49 @@ private struct FallbackChrome<S: InsettableShape>: View {
                 shape
                     .fill(isPressed ? theme.surface.raisedPressed : theme.surface.floating)
                 if showsSheen {
-                    shape.fill(sheen)
+                    shape.fill(theme.sheenFill)
                 }
+                shape.strokeBorder(theme.edgeStroke, lineWidth: theme.component.stroke)
             }
-            shape.strokeBorder(edge, lineWidth: 1)
         }
-    }
-
-    private var sheen: LinearGradient {
-        LinearGradient(
-            stops: [
-                Gradient.Stop(color: theme.sheen.top, location: 0),
-                Gradient.Stop(color: theme.sheen.top.opacity(0), location: theme.sheen.fadeEnd)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
-    private var edge: LinearGradient {
-        LinearGradient(
-            colors: [theme.stroke.edgeTop, theme.stroke.edgeBottom],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 }
 
 /// The iOS 18 look of `LCGlassButton`. The sheen is left off: the design system keeps it for panels and bars.
+/// A capsule in a square frame is a circle, so one shape draws both outlines.
 private struct FallbackGlassButtonStyle: ButtonStyle {
     let isProminent: Bool
+    let shape: LCGlassButtonShape
 
     @Environment(\.theme) private var theme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(isProminent ? theme.ink.onAccent : theme.ink.primary)
-            .padding(.horizontal, 24)
-            .frame(minHeight: 52)
+            .padding(.horizontal, shape == .circle ? 0 : theme.component.sessionControlInset)
+            .frame(
+                minWidth: shape == .circle ? theme.size.minimumTarget : nil,
+                minHeight: shape == .circle ? theme.size.minimumTarget : theme.size.largeButton
+            )
             .background {
                 if isProminent {
                     Capsule()
                         .fill(configuration.isPressed ? theme.accent.pressed : theme.accent.fill)
                         .shadow(
-                            color: theme.shadow.accent.color,
+                            color: theme.shadow.accent.color.opacity(isEnabled ? 1 : 0),
                             radius: theme.shadow.accent.radius,
                             y: theme.shadow.accent.y
                         )
                     Capsule()
-                        .strokeBorder(theme.stroke.onAccent, lineWidth: 1)
+                        .strokeBorder(theme.stroke.onAccent, lineWidth: theme.component.stroke)
                 } else {
                     FallbackChrome(shape: Capsule(), showsSheen: false, isPressed: configuration.isPressed)
                 }
             }
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? theme.motion.pressedScale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? theme.motion.pressedScale : 1)
             .opacity(isEnabled ? 1 : theme.opacity.disabled)
             .animation(theme.motion.press, value: configuration.isPressed)
     }
