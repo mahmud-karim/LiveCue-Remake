@@ -9,9 +9,10 @@ import SwiftUI
 // `-design-gallery-set N` picks the set of pages:
 //
 //   1  The components as the screens use them: a Home page, a Live session page, a form page.
-//   2  Every variant: controls and status elements, lists and messages, the accessibility variants.
-//   3  Set 1 with Increase Contrast, with Reduce Transparency, and at an accessibility text size.
-//   4  Home and Live at an accessibility text size, and lists with Increase Contrast.
+//   2  Every variant: controls and status elements, lists, the accessibility variants of one sample.
+//   3  Home at an accessibility text size; messages with the cluster disabled; lists at an accessibility
+//      text size with Increase Contrast.
+//   4  Home with Increase Contrast; Live session and the form at an accessibility text size.
 //
 // None of this is compiled into a release build.
 
@@ -22,7 +23,7 @@ enum DesignGallery {
 
     /// A set to show without the launch argument. A screenshot run on CI sets it for one commit, because
     /// the existing UI test cannot pass an argument; it is nil in every other commit.
-    static let forcedSet: Int? = 2
+    static let forcedSet: Int? = 3
 
     /// The set to show, or nil when the gallery was not asked for.
     static let activeSet: Int? = {
@@ -88,17 +89,19 @@ private struct DesignGalleryPage: View {
         case (2, 2):
             GalleryVariants()
         case (3, 0):
-            GalleryHome().environment(\.theme, contrastTheme)
-        case (3, 1):
-            GalleryLive().environment(\.theme, solidTheme)
-        case (3, 2):
-            GalleryForms().environment(\.dynamicTypeSize, .accessibility3)
-        case (4, 0):
             GalleryHome().environment(\.dynamicTypeSize, .accessibility3)
+        case (3, 1):
+            GalleryMessages()
+        case (3, 2):
+            GalleryLists()
+                .environment(\.dynamicTypeSize, .accessibility3)
+                .environment(\.theme, contrastTheme)
+        case (4, 0):
+            GalleryHome().environment(\.theme, contrastTheme)
         case (4, 1):
             GalleryLive().environment(\.dynamicTypeSize, .accessibility3)
         case (4, 2):
-            GalleryLists().environment(\.theme, contrastTheme)
+            GalleryForms().environment(\.dynamicTypeSize, .accessibility3)
         case (_, 1):
             GalleryLive()
         case (_, 2):
@@ -106,10 +109,6 @@ private struct DesignGalleryPage: View {
         default:
             GalleryHome()
         }
-    }
-
-    private var solidTheme: Theme {
-        theme.resolved(reduceTransparency: true, increaseContrast: false)
     }
 
     private var contrastTheme: Theme {
@@ -122,9 +121,11 @@ private struct DesignGalleryPage: View {
 /// Home: mark, name, chip, the readiness panel of value rows, and the Start control above the tab bar.
 private struct GalleryHome: View {
     @Environment(\.theme) private var theme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        LCScaffoldLayout(scrolls: false, content: content)
+        // Home fits without scrolling at the normal text sizes and scrolls at the accessibility sizes.
+        LCScaffoldLayout(scrolls: dynamicTypeSize.isAccessibilitySize, content: content)
             .lcBottomBar {
                 SessionStartControl(title: "Start conversation", systemImage: "mic.fill") {}
             }
@@ -372,7 +373,7 @@ private struct GalleryControls: View {
     }
 }
 
-/// Choice rows, a plain row, detail rows, cards, banners, the toast and the empty state.
+/// Choice rows, a plain row, detail rows, a card and a banner.
 private struct GalleryLists: View {
     @Environment(\.theme) private var theme
 
@@ -396,9 +397,6 @@ private struct GalleryLists: View {
             SectionTitle("Pinned source")
             detailPanel
             Banner(tone: .danger, title: "Assist could not finish", message: "OpenRouter rate-limited this request.")
-            Banner(tone: .success, title: "Paired", message: "Your pairing is saved on this iPhone.")
-            LCToastTile(message: "Copied")
-            EmptyStateView(systemImage: "sparkles", title: "Your assistant", message: "Tap Assist when you want help with a question.")
         }
     }
 
@@ -419,6 +417,45 @@ private struct GalleryLists: View {
                 Text(verbatim: "One more week for the onboarding flow.")
                     .lcText(.body)
             }
+        }
+    }
+}
+
+/// The toast, a banner, the small mark with a progress bar, and the empty state, above a cluster that is
+/// disabled because an Assist is running.
+private struct GalleryMessages: View {
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        LCScaffoldLayout(scrolls: true, content: content)
+            .lcBottomBar {
+                SessionControlCluster(
+                    isPaused: false,
+                    isAssisting: true,
+                    isTransitioning: false,
+                    onPauseResume: {},
+                    onAssist: {},
+                    onStop: {}
+                )
+            }
+    }
+
+    private var content: some View {
+        Group {
+            LCToastTile(message: "Copied")
+                .frame(maxWidth: .infinity)
+            Banner(tone: .success, title: "Paired", message: "Your pairing is saved on this iPhone.")
+            Panel("Model Library") {
+                HStack(spacing: theme.space.s3) {
+                    BrandMark(height: theme.component.compactBrandMark)
+                    BrandName(role: .headline)
+                    Spacer(minLength: 0)
+                    StatusChip("Recommended", tone: .live, mark: .none)
+                }
+                LCProgressBar(value: 0.64)
+                CaptionText("64% setup · 01:12 elapsed")
+            }
+            EmptyStateView(systemImage: "clock", title: "No conversations yet", message: "Completed sessions will appear here.")
         }
     }
 }
