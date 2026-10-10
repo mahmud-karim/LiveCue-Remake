@@ -56,7 +56,12 @@ public sealed class SmokeTests
     [Fact]
     public async Task The_speech_socket_is_accepted_and_refused_with_a_typed_frame()
     {
-        await using var host = await RelayTestHost.StartAsync(options => options.UseSystemClock = true);
+        // Without a lab folder the real bridge refuses at step S-4, as the foundation's stand-in always did.
+        await using var host = await RelayTestHost.StartAsync(options =>
+        {
+            options.UseSystemClock = true;
+            options.LabConfigured = false;
+        });
         using var socket = await host.OpenSpeechAsync();
 
         var buffer = new byte[1024];
