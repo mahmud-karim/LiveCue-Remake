@@ -547,6 +547,40 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         ])
     }
 
+    /// AC-IOS-041: a resumed session opens a new stream, and the session's usage gains one stream.
+    /// This is the one test of the file that needs `TranscriptionUsage` (WP-02) to hold its streams.
+    func testEachStreamAddsOneUsageStreamToTheSession() async throws {
+        var usage = TranscriptionUsage(provider: "nemotron")
+
+        let (first, _) = try await runWholeStream(FakeWebSocketTransport(), time: ManualTime())
+        for case .usage(let update) in first {
+            usage.apply(update)
+        }
+        XCTAssertEqual(usage.streams.count, 1)
+        XCTAssertEqual(usage.streams.first?.state, SpeechStreamUsage.completed)
+        XCTAssertEqual(usage.streams.first?.sentMs, 163.125)
+        XCTAssertEqual(usage.streams.first?.processedMs, 163.125)
+        XCTAssertEqual(usage.streams.first?.hasTranscript, true)
+        XCTAssertEqual(usage.firstTextMs, 1_500)
+        XCTAssertEqual(usage.finalizationMs, 35)
+        XCTAssertFalse(usage.isIncomplete)
+
+        // Resume: a new session, a new stream. This one is cut off.
+        let transport = FakeWebSocketTransport()
+        let resumed = try await startedSession(transport)
+        await resumed.send(audio: Data(count: 2_560))
+        await transport.drop()
+        let second = await allEvents(of: resumed)
+        for case .usage(let update) in second {
+            usage.apply(update)
+        }
+        XCTAssertEqual(usage.streams.count, 2)
+        XCTAssertEqual(usage.streams.last?.state, SpeechStreamUsage.interrupted)
+        XCTAssertNotEqual(usage.streams.first?.id, usage.streams.last?.id)
+        XCTAssertTrue(usage.isIncomplete)
+        XCTAssertEqual(usage.firstTextMs, 1_500, "First words are recorded once per session.")
+    }
+
     // MARK: - Refused upgrades and transport failures (P2-217)
 
     func testARefusedUpgradeFailsTheStartWithItsClassification() async throws {
