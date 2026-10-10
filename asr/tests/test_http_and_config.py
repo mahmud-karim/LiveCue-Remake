@@ -13,7 +13,7 @@ import pytest
 import engines
 import server
 from engines.fake import FakeEngine
-from support import DigestEngine, Lab, receive
+from support import HOST, HOST_PORT, ORIGIN, DigestEngine, Lab, receive, refused
 
 ASR_ROOT = Path(server.__file__).resolve().parent
 
@@ -50,10 +50,8 @@ def test_health_reports_load_time_and_follows_the_session():
         assert lab.health()["busy"] is False
 
 
-def test_health_ignores_the_host_header_and_is_not_cached():
-    """Loopback HTTP has no admission rule; only the sockets do."""
-    lab = Lab()
-    response = lab.client.get("/health", headers={"host": "anything.example"})
+def test_health_is_not_cached():
+    response = Lab().client.get("/health")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["content-type"] == "application/json"
@@ -61,11 +59,161 @@ def test_health_ignores_the_host_header_and_is_not_cached():
 
 def test_no_cors_headers_anywhere():
     lab = Lab()
-    for path in ("/health", "/", "/sample", "/missing"):
-        response = lab.client.get(path, headers={"origin": "https://evil.example"})
-        assert not [name for name in response.headers if name.lower().startswith("access-control-")]
-    preflight = lab.client.options("/health", headers={"origin": "https://evil.example"})
-    assert preflight.status_code == 405
+    for origin in ("https://evil.example", ORIGIN):
+        for path in ("/health", "/", "/sample", "/missing"):
+            response = lab.client.get(path, headers={"origin": origin})
+            assert not [name for name in response.headers if name.lower().startswith("access-control-")]
+    # No preflight is ever answered with permission: refused for a foreign
+    # origin, and not a method of the route for the lab's own.
+    assert lab.client.options("/health", headers={"origin": "https://evil.example"}).status_code == 403
+    assert lab.client.options("/health", headers={"origin": ORIGIN}).status_code == 405
+
+
+# -- admission of HTTP requests ------------------------------------------------
+#
+# The lab's Host on every route; on HTTP also no foreign Origin and no
+# cross-site fetch (protocol 11.1). The sockets' own rules are in
+# test_relay.py and test_stream.py.
+
+HTTP_ROUTES = ("/health", "/", "/sample")
+
+
+@pytest.fixture
+def lab_with_sample(tmp_path):
+    clip = tmp_path / "sample.wav"
+    clip.write_bytes(b"RIFF" + bytes(40))
+    return Lab(sample_path=clip)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "evil.example:47842",
+        "127.0.0.1:8765",
+        "127.0.0.1",
+        "localhost",
+        "127.0.0.1:47843",
+        "LOCALHOST:47842",
+        "[::1]:47842",
+        "0.0.0.0:47842",
+        "127.0.0.1:47842.evil.example",
+        "",
+    ],
+)
+def test_http_under_another_host_is_refused(lab_with_sample, host):
+    for path in HTTP_ROUTES:
+        response = lab_with_sample.client.get(path, headers={"host": host})
+        assert response.status_code == 403, path
+        assert response.content == b"" and response.headers["content-length"] == "0"
+        assert response.headers["cache-control"] == "no-store"
+        assert "content-type" not in response.headers
+
+
+@pytest.mark.parametrize("host", [HOST, f"localhost:{HOST_PORT}"])
+def test_http_under_both_loopback_names_is_served(lab_with_sample, host):
+    for path in HTTP_ROUTES:
+        assert lab_with_sample.client.get(path, headers={"host": host}).status_code == 200, path
+
+
+def test_http_with_two_host_headers_is_refused(lab_with_sample):
+    twice = [("host", HOST), ("host", "evil.example:47842")]
+    assert lab_with_sample.client.get("/health", headers=twice).status_code == 403
+    assert lab_with_sample.client.get("/health", headers=[("host", HOST), ("host", HOST)]).status_code == 403
+
+
+def test_http_host_check_follows_the_configured_port():
+    lab = Lab(host_port=50123)
+    assert lab.client.get("/health", headers={"host": HOST}).status_code == 403
+    assert lab.client.get("/health", headers={"host": "127.0.0.1:8765"}).status_code == 403
+    assert lab.client.get("/health", headers={"host": "127.0.0.1:50123"}).status_code == 200
+    assert lab.client.get("/health", headers={"origin": ORIGIN}).status_code == 403
+    assert lab.client.get("/health", headers={"origin": "http://localhost:50123"}).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://evil.example",
+        "http://127.0.0.1:8765",
+        f"https://127.0.0.1:{HOST_PORT}",
+        f"http://127.0.0.1:{HOST_PORT}/",
+        f"http://127.0.0.1:{HOST_PORT}.evil.example",
+        f"http://LOCALHOST:{HOST_PORT}",
+        "http://127.0.0.1",
+        "null",
+        "",
+    ],
+)
+def test_http_with_a_foreign_origin_is_refused(lab_with_sample, origin):
+    for path in HTTP_ROUTES:
+        response = lab_with_sample.client.get(path, headers={"origin": origin})
+        assert response.status_code == 403 and response.content == b"", path
+
+
+@pytest.mark.parametrize("origin", [ORIGIN, f"http://localhost:{HOST_PORT}"])
+def test_http_with_the_labs_own_origin_is_served(lab_with_sample, origin):
+    for path in HTTP_ROUTES:
+        assert lab_with_sample.client.get(path, headers={"origin": origin}).status_code == 200, path
+    twice = [("origin", origin), ("origin", origin)]
+    assert lab_with_sample.client.get("/health", headers=twice).status_code == 403
+
+
+def test_http_cross_site_fetch_is_refused_and_the_pages_own_fetch_is_served(lab_with_sample):
+    client = lab_with_sample.client
+    for path in HTTP_ROUTES:
+        assert client.get(path, headers={"sec-fetch-site": "cross-site"}).status_code == 403, path
+        # A good Origin does not excuse it, and neither does a second value.
+        both = {"sec-fetch-site": "cross-site", "origin": ORIGIN}
+        assert client.get(path, headers=both).status_code == 403, path
+        twice = [("sec-fetch-site", "same-origin"), ("sec-fetch-site", "cross-site")]
+        assert client.get(path, headers=twice).status_code == 403, path
+        # same-origin: the lab page's own fetch. none: the address typed into the browser.
+        for site in ("same-origin", "none", "same-site"):
+            assert client.get(path, headers={"sec-fetch-site": site}).status_code == 200, (path, site)
+
+
+def test_refusal_comes_before_routing_whatever_the_path_or_method():
+    lab = Lab()
+    evil = {"host": "evil.example:47842"}
+    assert lab.client.get("/missing", headers=evil).status_code == 403
+    assert lab.client.post("/health", headers=evil).status_code == 403
+    assert lab.client.get("/relay", headers=evil).status_code == 403
+    assert lab.client.get("/missing", headers={"origin": "https://evil.example"}).status_code == 403
+    assert lab.client.post("/health", headers={"sec-fetch-site": "cross-site"}).status_code == 403
+    # A socket that no route would take is refused for its Host, like the two that exist.
+    assert refused(lab, "/missing", host="evil.example:47842") == 1008
+    assert refused(lab, "/", host="evil.example:47842") == 1008
+    # With the lab's own Host the same requests reach the router.
+    assert lab.client.get("/missing").status_code == 404
+    assert lab.client.post("/health").status_code == 405
+
+
+def test_a_refused_request_runs_no_handler():
+    """The health handler reads the engine; a refused request must not get that far."""
+    reads = []
+
+    class Watched(FakeEngine):
+        @property
+        def load_seconds(self):
+            reads.append("health")
+            return 0.0
+
+        @load_seconds.setter
+        def load_seconds(self, value):
+            pass
+
+    engine = Watched()
+    engine.load()
+    lab = Lab(engine)
+    for headers in (
+        {"host": "evil.example:47842"},
+        {"origin": "https://evil.example"},
+        {"sec-fetch-site": "cross-site"},
+    ):
+        assert lab.client.get("/health", headers=headers).status_code == 403
+    assert reads == []
+    assert lab.client.get("/health").status_code == 200
+    assert reads == ["health"]
 
 
 # -- / and /sample -----------------------------------------------------------
