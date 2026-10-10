@@ -1,17 +1,12 @@
-using System.Net.WebSockets;
 using LiveCue.Relay.Core;
 using LiveCue.Relay.LocalModel;
-using LiveCue.Relay.Protocol;
 
 namespace LiveCue.Relay.Speech;
 
 /// <summary>
-/// Protocol section 10 from admission to the last close.
-///
-/// First version (foundation): every accepted socket is refused the same way. It gets one
-/// <c>error</c> frame with LAB_NOT_CONFIGURED and is closed with 1008 and that code as the reason; the
-/// bridge then waits C-58 for the phone's close and aborts. Nothing is prepared and no lab is contacted.
-/// Work package WP-W05 builds the bridge.
+/// Protocol section 10 from admission to the last close: one <see cref="SpeechStream"/> per accepted
+/// socket. The bridge itself holds no state between streams. What they share is the one speech lease
+/// (C-34), the PC model controller and the lab connector.
 /// </summary>
 internal sealed class SpeechBridge : ISpeechBridge
 {
@@ -33,42 +28,18 @@ internal sealed class SpeechBridge : ISpeechBridge
 
     public async Task RunAsync(SpeechConnection connection)
     {
-        _ = _localModel;
-        _ = _lease;
-        _ = _connector;
-
-        var socket = connection.Socket;
-        var error = RelayErrors.LabNotConfigured;
+        ArgumentNullException.ThrowIfNull(connection);
         try
         {
-            using var limit = new CancellationTokenSource(ProtocolConstants.CloseHandshakeWait, _context.Clock);
-            using var wait = CancellationTokenSource.CreateLinkedTokenSource(limit.Token, _context.Access.Stopping);
-
-            await socket.SendAsync(SpeechFrames.Error(error), WebSocketMessageType.Text, endOfMessage: true, wait.Token)
-                .ConfigureAwait(false);
-            await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, error.Code, wait.Token).ConfigureAwait(false);
-
-            // Wait for the phone's close frame; whatever it still sends is not read as a command.
-            var scratch = new byte[256];
-            while (socket.State is WebSocketState.CloseSent or WebSocketState.Open)
-            {
-                var received = await socket.ReceiveAsync(scratch.AsMemory(), wait.Token).ConfigureAwait(false);
-                if (received.MessageType == WebSocketMessageType.Close)
-                {
-                    break;
-                }
-            }
+            using var stream = new SpeechStream(_context, _localModel, _connector, _lease, connection);
+            await stream.RunAsync().ConfigureAwait(false);
         }
-        catch (Exception exception) when (exception is WebSocketException or OperationCanceledException or IOException)
+#pragma warning disable CA1031 // The contract: a stream never throws into the route. The socket is dropped instead.
+        catch (Exception exception)
+#pragma warning restore CA1031
         {
-            // The phone went away, or did not close in time.
-        }
-        finally
-        {
-            if (socket.State is not (WebSocketState.Closed or WebSocketState.Aborted))
-            {
-                socket.Abort();
-            }
+            _context.Events.Diagnostic("speech", "A speech stream could not be run.", exception);
+            connection.Socket.Abort();
         }
     }
 }
