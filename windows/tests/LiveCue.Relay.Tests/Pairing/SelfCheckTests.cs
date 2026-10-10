@@ -474,9 +474,9 @@ public sealed class SelfCheckTests
                     connections.Add(ServeAsync(client));
                 }
             }
-            catch (Exception exception) when (exception is OperationCanceledException or SocketException or ObjectDisposedException)
+            catch (Exception exception) when (exception is OperationCanceledException or SocketException or InvalidOperationException)
             {
-                // The stub was stopped.
+                // The stub was stopped, perhaps before it accepted anything.
             }
 
             await Task.WhenAll(connections);
