@@ -566,17 +566,18 @@ final class RelayMonitorTests: XCTestCase {
             "Could not check the PC model. Keep the updated LiveCue Desktop running. " + timeoutText
         )
 
-        // Another refresh in flight: nothing.
+        // Another refresh in flight: the second one sends nothing and returns with the first.
         await owners.gateway.setStatus(.success(ready))
         await owners.gateway.setHold(true, for: "localModelStatus")
         let first = Task { await relay.refreshPCModel() }
         await owners.gateway.waitForCalls(count: 3)
-        await relay.refreshPCModel()
-        let whileHeld = await owners.gateway.calls
-        XCTAssertEqual(whileHeld.count, 3)
+        let second = Task { await relay.refreshPCModel() }
         await owners.gateway.setHold(false, for: "localModelStatus")
         await owners.gateway.release("localModelStatus")
         await first.value
+        await second.value
+        let afterBoth = await owners.gateway.calls
+        XCTAssertEqual(afterBoth.count, 3, "Status checks never overlap.")
         XCTAssertEqual(relay.pcModelStatus, ready)
 
         // A provider that is not PC-local: nothing.

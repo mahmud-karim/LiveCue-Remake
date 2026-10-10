@@ -157,8 +157,15 @@ import Observation
         updatePCModelLoop()
     }
 
+    /// One status check. It does nothing for a provider that is not PC-local and while a command is in
+    /// flight. While another check is in flight it sends nothing and returns when that check ends, so the
+    /// status is fresh for whoever waited.
     func refreshPCModel() async {
-        guard speech.provider.isPCLocal, !isPCModelCommandInFlight, pcModelRefreshTask == nil else { return }
+        guard speech.provider.isPCLocal, !isPCModelCommandInFlight else { return }
+        if let running = pcModelRefreshTask {
+            await running.value
+            return
+        }
         guard let pairing else {
             pcModelStatus = nil
             pcModelMessage = RelayMonitor.pairFirstMessage

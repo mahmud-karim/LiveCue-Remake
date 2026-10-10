@@ -2307,9 +2307,11 @@ What the declarations leave open, as built by WP-09. No declaration changes.
   model check that follows a successful check, so its caller finds the PC model status fresh. A check
   that is in flight when the pairing changes is dropped, and what was known about the PC model is
   forgotten with the old pairing.
-- A PC model command first ends a status check that is in flight (the check is cancelled and its answer
-  dropped), so the two never overlap (protocol 13.3). A status check that returns after the provider
-  stopped being PC-local says nothing.
+- `refreshPCModel()` called while a status check is in flight sends nothing and returns when that check
+  ends, so its caller (start check 2, for one) reads a status that arrived after the call. A PC model
+  command first ends a status check that is in flight (the check is cancelled and its answer dropped), so
+  the two never overlap (protocol 13.3). A status check that returns after the provider stopped being
+  PC-local says nothing.
 - `PairingController.verifyAndPair` reports invalid input before it looks at anything else. Besides the
   two errors of its declaration it can throw `CancellationError` (the caller's task was cancelled, or a
   verification is already running) and, when the relay accepted the pairing and the store then refused
