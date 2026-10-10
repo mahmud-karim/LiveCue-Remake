@@ -60,7 +60,9 @@ public struct RelayClient: Sendable {
         throw RelayFailure.local(.network)
     }
 
-    /// Route 9, best effort. Never throws; both answers count as done.
+    /// Route 9, best effort. Never throws; both answers count as done. The id in the path is
+    /// `requestId.uuidString`, the same upper-case text the encoder wrote in the body: the relay compares
+    /// ids byte for byte.
     public func cancel(requestId: UUID, pairing: PairingPayload) async {
         // STUB(WP-03)
     }

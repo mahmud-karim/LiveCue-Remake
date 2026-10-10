@@ -5,6 +5,16 @@ public struct RelayEndpoint: Equatable, Sendable {
     /// "https://" + lower-case host + optional ":port" + path ending in exactly one "/".
     public let canonical: String
 
+    /// The lower-case host of `canonical`, without scheme, port or path. Added by the review for the
+    /// "replace this PC?" confirmation (architecture 5.9).
+    public var host: String {
+        // The canonical text is the scheme, the host, then ":" of a port or "/" of the path. Neither
+        // character can be part of a host.
+        let afterScheme = canonical.utf8.dropFirst(RelayEndpoint.scheme.utf8.count)
+        let hostBytes = afterScheme.prefix { $0 != Byte.colon && $0 != Byte.slash }
+        return String(decoding: hostBytes, as: UTF8.self)
+    }
+
     /// The grammar of protocol 4.3, parsed by hand. No trimming and no case change of the scheme.
     ///
     ///     endpoint = "https://" host [ ":" port ] [ path ]

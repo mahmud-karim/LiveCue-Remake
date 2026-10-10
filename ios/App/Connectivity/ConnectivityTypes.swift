@@ -14,3 +14,15 @@ struct InlineMessage: Equatable, Sendable {
         self.isError = isError
     }
 }
+
+/// Added by the review: pairing with another host while a PC is saved needs a confirmation
+/// (architecture 5.9). Both hosts are lower case, as `RelayEndpoint.host` gives them.
+struct PairingReplacement: Equatable, Sendable {
+    let currentHost: String
+    let newHost: String
+
+    /// `newHost` ends in ".ts.net".
+    var newHostIsTailscaleName: Bool {
+        newHost.hasSuffix(".ts.net")
+    }
+}

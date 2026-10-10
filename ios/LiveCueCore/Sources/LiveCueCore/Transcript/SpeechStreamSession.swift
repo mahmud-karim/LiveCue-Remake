@@ -22,8 +22,10 @@ public actor SpeechStreamSession {
 
     /// Opens the socket and returns when the provider is ready for audio: the Meta acknowledgement
     /// (limit 30 s) or the relay's valid `ready` (limit C-59). Emits `.status` while waiting, then
-    /// `.status(.connected)` and `.usage(.begin)`. Throws `SpeechStreamFailure` or `CancellationError`;
-    /// after a throw the socket is closed and `events` has finished.
+    /// `.status(.connected)` and `.usage(.begin)`. For the relay dialect, when C-59 passes first the socket
+    /// is closed and the failure is `.relay(.local(.timeout, origin: .stream))`. Throws
+    /// `SpeechStreamFailure` or `CancellationError`; after a throw the socket is closed and `events` has
+    /// finished.
     public func start() async throws {
         // STUB(WP-04)
         continuation.finish()

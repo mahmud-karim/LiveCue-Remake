@@ -114,6 +114,18 @@ final class PairingPayloadTests: XCTestCase {
         assertRejected(payload(endpoint: endpoint, token: ""), "an empty token")
     }
 
+    func testRejectsATokenFollowedByALineBreak() {
+        // ST-13: V-4 is a whole-text check. The escapes are JSON escapes, so the decoded token holds the
+        // character itself next to 43 valid ones. One row carries U+2028 unescaped, which JSON allows.
+        let endpoint = "https://pc.example.test/"
+        assertRejected(payload(endpoint: endpoint, token: token + "\\n"), "a line feed after the token")
+        assertRejected(payload(endpoint: endpoint, token: token + "\\r"), "a carriage return after the token")
+        assertRejected(payload(endpoint: endpoint, token: token + "\\r\\n"), "a carriage return and line feed after the token")
+        assertRejected(payload(endpoint: endpoint, token: token + "\\u2028"), "an escaped U+2028 after the token")
+        assertRejected(payload(endpoint: endpoint, token: token + "\u{2028}"), "U+2028 after the token")
+        assertRejected(payload(endpoint: endpoint, token: "\\n" + token), "a line feed before the token")
+    }
+
     func testRejectsTextThatIsNotAPairingObject() {
         assertRejected("not a pairing QR", "plain text (AC-CORE-007)")
         assertRejected("", "empty text")
@@ -167,7 +179,13 @@ final class PairingPayloadTests: XCTestCase {
             ("https://pc example.test/", token, "space inside the address"),
             ("", token, "empty address"),
             ("https://pc.example.test/", " " + String(token.dropFirst()), "token with a space: it is not trimmed"),
-            ("https://pc.example.test/", String(token.dropLast()), "short token")
+            ("https://pc.example.test/", String(token.dropLast()), "short token"),
+            ("https://pc.example.test/", token + " ", "token followed by a space: it is not trimmed"),
+            ("https://pc.example.test/", token + "\n", "token followed by a line feed (ST-13)"),
+            ("https://pc.example.test/", token + "\r", "token followed by a carriage return (ST-13)"),
+            ("https://pc.example.test/", token + "\r\n", "token followed by a carriage return and line feed (ST-13)"),
+            ("https://pc.example.test/", token + "\u{2028}", "token followed by U+2028 (ST-13)"),
+            ("https://pc.example.test/", "\n" + token, "token after a line feed")
         ]
         for row in invalid {
             XCTAssertThrowsError(try PairingPayload.manual(address: row.address, token: row.token), row.reason) { error in

@@ -13,7 +13,8 @@ public enum RelaySpeechFrame: Equatable, Sendable {
     case unknown
 
     /// nil when the text is not a JSON object with a string `type`. Members of the wrong JSON type are
-    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`.
+    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`. `loading` with a
+    /// missing member is still `loading`, with 0 or "" in its place.
     public static func parse(_ text: String) -> RelaySpeechFrame? {
         // STUB(WP-04)
         nil
