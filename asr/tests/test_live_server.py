@@ -41,8 +41,8 @@ def wait_until(condition, timeout: float = 10.0) -> None:
         time.sleep(0.02)
 
 
-def handshake_status(port: int, path: str, headers: dict) -> int:
-    """Send a WebSocket upgrade request by hand and return the HTTP status."""
+def upgrade(port: int, path: str, headers: dict) -> tuple:
+    """Send a WebSocket upgrade request by hand. Returns ``(socket, HTTP status)``."""
     lines = [f"GET {path} HTTP/1.1"]
     base = {
         "Upgrade": "websocket",
@@ -52,10 +52,23 @@ def handshake_status(port: int, path: str, headers: dict) -> int:
     }
     for name, value in {**base, **headers}.items():
         lines.append(f"{name}: {value}")
-    with socket.create_connection(("127.0.0.1", port), timeout=5) as raw:
-        raw.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
-        reply = raw.recv(4096).decode("latin-1")
-    return int(reply.split(" ", 2)[1])
+    raw = socket.create_connection(("127.0.0.1", port), timeout=5)
+    raw.sendall(("\r\n".join(lines) + "\r\n\r\n").encode())
+    reply = raw.recv(4096).decode("latin-1")
+    return raw, int(reply.split(" ", 2)[1])
+
+
+def handshake_status(port: int, path: str, headers: dict) -> int:
+    raw, status = upgrade(port, path, headers)
+    raw.close()
+    return status
+
+
+def client_frame(payload: bytes) -> bytes:
+    """One masked binary WebSocket frame, as a client must send it (126 to 65,535 bytes)."""
+    mask = os.urandom(4)
+    masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+    return bytes([0x82, 0x80 | 126]) + len(payload).to_bytes(2, "big") + mask + masked
 
 
 @pytest.fixture
@@ -163,39 +176,54 @@ def test_a_client_that_drops_the_tcp_connection_frees_the_model(port):
 # -- a client that stops reading ----------------------------------------------------
 
 
-def test_a_client_that_stops_reading_is_cut_off_and_the_model_is_freed(serve_lab):
-    """Outbound overflow for real: TCP back-pressure stalls the sender, the
-    256-event queue fills, and the session ends by itself within its 2 s
-    allowance (shortened here) instead of holding the model."""
+def test_a_client_that_stops_reading_is_cut_off_and_the_model_is_freed(serve_lab, capfd):
+    """Outbound overflow for real. The engine talks steadily; the client stops
+    reading; TCP back-pressure stalls the sender; the event queue fills; and
+    the session ends by itself within its allowance (2 s, shortened here)
+    instead of holding the model for a client that is not listening.
 
-    def chatty(audio, on_partial):
+    The client is a bare socket: a WebSocket library would go on reading in the
+    background. The idle limit is set far away so that only the overflow can
+    be what ends the session.
+    """
+
+    def talkative(audio, on_partial):
         audio.read()
-        padding = "x" * 4000
+        padding = "x" * 65_000  # large frames fill the socket buffers quickly
         number = 0
-        while not audio.cancelled and number < 500_000:
+        while not audio.cancelled and number < 100_000:
             number += 1
             on_partial(f"{number} {padding}")
+            time.sleep(0.001)  # slow enough for a client that does read
         drain(audio)
         return ""
 
     port = free_port()
-    with serve_lab(port, port, CallbackEngine(chatty), server.Limits(closing_seconds=0.3)) as lab:
-        stalled = connect(f"ws://127.0.0.1:{port}/relay", max_size=None)
-        assert json.loads(stalled.recv(timeout=5))["type"] == "ready"
-        assert json.loads(stalled.recv(timeout=5))["type"] == "speechStart"
-        stalled.send(bytes(320))
+    limits = server.Limits(idle_seconds=600, closing_seconds=0.3, relay_outbound_events=32)
+    with serve_lab(port, port, CallbackEngine(talkative), limits) as lab:
+        stalled, status = upgrade(port, "/relay", {"Host": f"127.0.0.1:{port}"})
+        assert status == 101
+        wait_until(lambda: lab.busy)
+        stalled.sendall(client_frame(bytes(320)))
         # From here the client reads nothing. The service must not wait for it.
-        wait_until(lambda: not lab.busy, timeout=30)
+        wait_until(lambda: not lab.busy, timeout=60)
+        assert '{"event":"outbound_overflow","route":"relay"}' in capfd.readouterr().out
 
         with connect(f"ws://127.0.0.1:{port}/relay") as fresh:  # the service carries on
             assert json.loads(fresh.recv(timeout=5))["type"] == "ready"
 
-        # What had already left the service is still readable; then the socket ends.
-        seen = []
-        with pytest.raises(ConnectionClosed):
+        # Once the client reads again it finds what had already left, then the end.
+        stalled.settimeout(10)
+        received = 0
+        try:
             while True:
-                seen.append(json.loads(stalled.recv(timeout=10))["type"])
-        assert set(seen) <= {"transcript", "error"} and "transcript" in seen
+                data = stalled.recv(1 << 20)
+                if not data:
+                    break
+                received += len(data)
+        except ConnectionError:
+            pass
+        assert received > 0
         stalled.close()
 
 
