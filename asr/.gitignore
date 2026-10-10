@@ -1,0 +1,8 @@
+# Model weights, the optional sample clip and anything else machine-local.
+private/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

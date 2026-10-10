@@ -1,0 +1,7 @@
+# Everything the tests need. No torch, no model library, no GPU.
+-r base.txt
+pytest==9.1.1
+httpx==0.28.1
+# The two real engine adapters are exercised against stand-in model libraries.
+# They convert audio with numpy.
+numpy==2.2.6
