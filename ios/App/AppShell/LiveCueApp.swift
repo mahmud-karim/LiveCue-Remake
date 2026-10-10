@@ -1,21 +1,19 @@
-import OSLog
 import SwiftUI
 
+/// The app entry. It builds the environment once, from the launch arguments, and hands it to the root
+/// view. Daylight is the only theme: the root view forces the light appearance, and Info.plist does too.
 @main
 struct LiveCueApp: App {
+    @State private var environment: AppEnvironment
+
     init() {
-        let speechTypes = SpeechPackages.linkedTypeNames.joined(separator: ", ")
-        Logger(subsystem: "com.mahmudkarim.LiveCueRemake", category: "launch")
-            .info("Speech packages linked: \(speechTypes, privacy: .public)")
+        _environment = State(initialValue: AppEnvironment.make(LaunchConfiguration.current))
     }
 
     var body: some Scene {
         WindowGroup {
-            PlaceholderRootView()
-                .environment(\.theme, .daylight)
-                .tint(Theme.daylight.accent.fill)
-                // Daylight is the only theme. Info.plist forces the light style as well.
-                .preferredColorScheme(.light)
+            RootView()
+                .appEnvironment(environment)
         }
     }
 }

@@ -85,6 +85,11 @@ struct LCGlassContainer<Content: View>: View {
 
 // MARK: - Buttons
 
+/// The outline of an `LCGlassButton`.
+enum LCGlassButtonShape: Equatable, Sendable {
+    case capsule, circle
+}
+
 /// A capsule button for the chrome layer.
 ///
 /// On iOS 26 it is a system glass button. On iOS 18 the regular button is fallback chrome and the prominent
@@ -92,13 +97,23 @@ struct LCGlassContainer<Content: View>: View {
 /// At most one prominent button should be visible at a time.
 struct LCGlassButton<Label: View>: View {
     private let isProminent: Bool
+    private let shape: LCGlassButtonShape
     private let action: @MainActor () -> Void
     private let label: Label
 
     @Environment(\.theme) private var theme
 
-    init(prominent: Bool = false, action: @escaping @MainActor () -> Void, @ViewBuilder label: () -> Label) {
+    /// `shape` has a default that keeps the call sites without it compiling.
+    init(
+        prominent: Bool = false,
+        shape: LCGlassButtonShape = .capsule,
+        action: @escaping @MainActor () -> Void,
+        @ViewBuilder label: () -> Label
+    ) {
+        // STUB(WP-05)
+        // `shape` is stored and not drawn yet: every button is still a capsule.
         self.isProminent = prominent
+        self.shape = shape
         self.action = action
         self.label = label()
     }
@@ -150,6 +165,20 @@ extension View {
         } else {
             self
         }
+    }
+
+    /// The chrome of the tab bar. iOS 18 to 25: a visible `.ultraThinMaterial` toolbar background for the
+    /// tab bar. iOS 26: nothing, the system draws it.
+    func lcTabBarChrome() -> some View {
+        // STUB(WP-05)
+        self
+    }
+
+    /// The chrome of a sheet: `.presentationBackground(theme.surface.overlay)`; before iOS 26 also corner
+    /// radius 32 and a visible grabber (design system 3.3).
+    func lcSheetChrome() -> some View {
+        // STUB(WP-05)
+        self
     }
 }
 

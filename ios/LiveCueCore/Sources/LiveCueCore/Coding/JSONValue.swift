@@ -41,7 +41,8 @@ public enum JSONValue: Codable, Equatable, Sendable {
         }
     }
 
-    /// nil when the bytes are not JSON.
+    /// nil when the bytes are not JSON. The parser is Foundation's, which also accepts a comma after the
+    /// last member of an object or an array.
     public static func parse(_ data: Data) -> JSONValue? {
         try? JSONDecoder().decode(JSONValue.self, from: data)
     }

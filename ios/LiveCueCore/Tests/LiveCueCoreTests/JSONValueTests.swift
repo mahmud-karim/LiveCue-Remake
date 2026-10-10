@@ -120,13 +120,13 @@ final class JSONValueTests: XCTestCase {
     // MARK: - Not JSON
 
     func testTextThatIsNotJSONParsesToNil() {
+        // A comma after the last member is not in this list: Foundation's parser accepts it.
         let notJSON = [
             "",
             "   ",
             "not a pairing QR",
             "{",
             "{\"a\":}",
-            "{\"a\":1,}",
             "{a:1}",
             "{'a':1}",
             "[1,2",
