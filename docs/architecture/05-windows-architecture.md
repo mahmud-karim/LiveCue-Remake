@@ -3376,6 +3376,7 @@ the result is `PairingStoreUnreadable` and the file is not touched: at most W-05
 `schemaVersion` is the number 1; `tokenHash` matches `^[a-f0-9]{64}$`; `protectedToken` is Base64 that
 unprotects to exactly C-02 ASCII characters of the token alphabet; their SHA-256 equals `tokenHash`
 (constant time). A leftover `pairing.json.pending` is ignored at load and overwritten by the next write.
+A first pairing that cannot be protected or written is the same fault, and leaves no file.
 
 **Atomic write** (`PairingFiles.WriteAtomic`): create `pairing.json.pending` with `FileShare.None`, write,
 `Flush(flushToDisk: true)`, close, then `File.Move(pending, final, overwrite: true)`.
@@ -3383,17 +3384,24 @@ unprotects to exactly C-02 ASCII characters of the token alphabet; their SHA-256
 **Plaintext in memory.** The token is not kept between uses. It exists as a byte buffer only inside `Create`,
 `Load` (to verify), `Show`, `Reset`, `GetPayload` and a running self-check, and every buffer is cleared with
 `CryptographicOperations.ZeroMemory` in a `finally`. The only `string` that ever holds it is the return value
-of `GetPayloadAsync` and of `StoredPairingPayload.ReadAsync` (console host, `--show-pairing`).
+of `GetPayloadAsync` and of `StoredPairingPayload.ReadAsync` (console host, `--show-pairing`), and the
+argument a running self-check hands to `ISelfCheckClient.GetHealthAsync`, whose signature takes text.
 
 **Payload and matrix.** The payload bytes are `{"endpoint":"` + canonical endpoint + `","token":"` + token +
 `"}`; both values consist of characters that need no JSON escaping, so no serialiser is involved and the text
-is exact (protocol 4.2). `QrMatrix.Encode` calls `QrCode.EncodeSegments` with one `QrSegment.MakeBytes`
-segment (byte mode), `Ecc.Medium`, versions 1 to 40, automatic mask and **`boostEcl: false`** (the library
-would otherwise raise the level above M when space allows). The result is copied to `bool[size][size]`,
-row-major, with no quiet zone.
+is exact (protocol 4.2). `QrMatrix.Encode` calls `QrCode.EncodeSegments` with one
+`DataSegment.MakeSegment(DataSegmentMode.Binary, ...)` segment (byte mode), `Ecc.Medium`, versions 1 to 40 and
+**`boostEcl: false`** (the library would otherwise raise the level above M when space allows). These are the
+names of the pinned package version 3.2.1, which has no mask argument: the encoder always chooses the mask.
+`DataSegment.FromBinaryData` and `QrCode.EncodeBinary` are not used, because they may split the bytes into
+segments of other modes or raise the level. The result is copied to `bool[size][size]`, row-major, with no
+quiet zone.
 
 **Show** (`PairingService.ShowAsync`, one at a time): read and verify the file as in Load; build the matrix;
-publish `PairingShown`; start the self-check; return. One decryption per call (WIN-20).
+publish `PairingShown`; start the self-check; return. One decryption per call (WIN-20). The file must hold the
+pairing the relay accepts: when it is missing, fails a load rule or holds another token, the call throws
+`IOException` with the fixed text "The saved pairing could not be read." and nothing is shown or checked.
+`GetPayloadAsync` reads the file the same way.
 
 **Reset** (`ResetAsync`): create a token; protect it; write the file atomically; only then build a new
 `AcceptedPairing` (the new hash and a new revocation source), swap it in with one `Interlocked.Exchange`, and
@@ -3407,10 +3415,18 @@ the object, holds a token that this reset cancels (test plan ST-12).
 C-49 token; result `NotVerified` when it returns false or times out, otherwise `VerifiedThroughFunnel` when
 `NoteSelfCheckArrival(true)` was recorded for this nonce, otherwise `Verified`; unregister the nonce; publish
 `SelfCheckCompleted`. The production client is an `HttpClient` over `SocketsHttpHandler` with
-`AllowAutoRedirect`, `UseCookies` and `UseProxy` all false; it reads at most W-06 bytes.
+`AllowAutoRedirect`, `UseCookies` and `UseProxy` all false; it reads at most W-06 bytes. Each check opens
+exactly one connection and closes it: the handler's connect callback refuses a second one, because the HTTP
+stack would otherwise repeat a request whose connection was closed before any answer. `NoteSelfCheckArrival`
+carries no nonce: it counts for the check whose nonce `IsSelfCheckNonce` matched just before it on the same
+thread, which is how P-5 calls the two. A check that is cut off because the relay is stopping publishes
+nothing (the last event stays `RelayStopped`).
 
 **`PairingMaintenance`** forwards to `StoredPairingReset.RunAsync`, which creates a token and writes the file
-with the production protector and files, replacing whatever was there.
+with the production protector and files, replacing whatever was there. One case writes nothing: a data
+folder that does not exist holds no pairing, so the call succeeds without creating the folder or a file, and
+the next start (whose check 1 creates the folder) creates the first pairing. An existing folder always gets
+a new file, also when it held none.
 
 **`StoredPairingExport`** forwards to `StoredPairingPayload.ReadAsync`, which reads and verifies the file as in
 Load with the production protector and files, never writes, and returns the payload text for the canonical

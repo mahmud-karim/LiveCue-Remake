@@ -252,18 +252,4 @@ public sealed class RelayInterfaceTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
-
-    [Fact]
-    public async Task The_stored_pairing_helpers_of_the_foundation_touch_nothing()
-    {
-        using var data = new LiveCue.TestSupport.TempFolder();
-
-        await PairingMaintenance.ResetStoredPairingAsync(data.Path, CancellationToken.None);
-        var payload = await StoredPairingExport.ReadPayloadAsync(data.Path, RelayTestHost.Endpoint, CancellationToken.None);
-
-        Assert.Null(payload);
-        Assert.Empty(data.FileNames());
-        await Assert.ThrowsAsync<ArgumentException>(
-            () => StoredPairingExport.ReadPayloadAsync(data.Path, "http://pc.example.test/", CancellationToken.None));
-    }
 }
