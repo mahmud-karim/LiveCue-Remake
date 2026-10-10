@@ -155,7 +155,9 @@ project; `LiveCue.Hosting` references no WPF assembly; `LiveCue.Desktop` never u
 
 Allowed NuGet packages: the two named above, `xunit`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`,
 and `CommunityToolkit.Mvvm` in the desktop project. Any other package needs the orchestrator's approval,
-because the owner allows package restores only, not new tooling.
+because the owner allows package restores only, not new tooling. Restores are locked: every project commits
+its `packages.lock.json` (`RestorePackagesWithLockFile` in `Directory.Build.props`), and CI restores with
+`--locked-mode`, so a dependency of a dependency cannot change without a commit.
 
 ### 3.2 Relay library: internal boundaries
 
@@ -218,7 +220,7 @@ public sealed record RelayOptions(
     int Port,                      // loopback port; 0 picks a free port (tests only)
     string AdvertisedEndpoint,     // canonical, protocol 4.3
     ConnectionMode Mode,           // Private or Public (protocol E-1)
-    string DataDirectory,          // pairing.json and schemas\ live here
+    string DataDirectory,          // pairing.json, schemas\, lab\ and work\ live here (3.5)
     string? CodexExecutablePath,   // absolute path of codex.exe, or null when none was found
     string? LabFolder,             // null = PC speech models not configured
     int LabPort,
@@ -280,6 +282,7 @@ Events. Every record derives from `RelayEvent` and has `DateTimeOffset At`.
 | `LocalModelChanged` | `Status` (the five-member status object), `Message` | A model operation began or ended. |
 | `SpeechStreamChanged` | `Phase` (`Loading`, `Ready`, `Stopped`, `Failed`), `Model`, `Code?`, `Message` | Stream progress. |
 | `SpeechText` | `Text` | Each final transcript segment. |
+| `EdgeStatistics` | `Malformed`, `TokenNotAccepted`, `FunnelInPrivateMode` (totals since this relay instance started) | The rejected-request counters of protocol 5.5: at most once per 60 s and only when a total changed; once more just before `RelayStopped` when a total changed since the last one. The desktop shows the three totals on the Activity page as plain numbers. It is not an activity line and raises no alert. |
 | `Diagnostic` | `Source`, `Message` | 3.10. |
 
 The old `speech-status` event carried three unrelated things; they are now `AssistantNotice`,
@@ -314,10 +317,17 @@ Interface tests (they replace the old child-process tests):
   settings.json        owned by LiveCue.Hosting
   pairing.json         owned by LiveCue.Relay
   schemas\             assist.schema.json, summary.schema.json, rewritten from embedded copies at each start
+  lab\                 Start-ASR-Lab.ps1, Stop-ASR-Lab.ps1, LabCommon.ps1: the relay's own copies, rewritten
+                       from embedded copies at each start; the only launcher scripts the relay ever runs (3.8)
+  work\                one folder per answer request in flight (protocol 12.2); emptied at each start
 ```
 
 Both JSON files are UTF-8, two-space indented, written atomically (write `<name>.pending`, then replace).
-Nothing else is persisted: no request log, no transcript, no audio, no activity.
+Nothing else is persisted by LiveCue: no request log, no transcript, no audio, no activity. The one place
+where conversation text touches the disk is `work\<request>\output.json`, which Codex writes (the answer and
+the rolling memory, in plain text) and which the relay deletes when the request ends; a folder left behind
+by a crash or a kill is deleted at the next relay start. After a failed validation of `settings.json` a
+copy `settings.json.invalid` may exist beside it (below).
 
 **`settings.json`**
 
@@ -330,8 +340,10 @@ Nothing else is persisted: no request log, no transcript, no audio, no activity.
   "publicHttpsPort": 10000,
   "publicPathPrefix": "/livecue",
   "codexExecutablePath": null,
+  "codexContainmentCheckedVersion": null,
   "asrLabFolder": null,
   "asrLabPort": 47842,
+  "hideFromScreenCapture": true,
   "ownedMappings": []
 }
 ```
@@ -340,16 +352,24 @@ Nothing else is persisted: no request log, no transcript, no audio, no activity.
 |---|---|---|
 | `relayPort` | Integer 1024 to 65535. **Never 47831.** Not equal to `asrLabPort`. | 47841 |
 | `connectionMode` | `private` or `public`. | `private` |
-| `privateHttpsPort` | Integer 1 to 65535, not equal to `publicHttpsPort`. | 11443 |
+| `privateHttpsPort` | Integer 1 to 65535, not equal to `publicHttpsPort`, and **never 443, 8443 or 10000**: a tailnet-only listener is kept off the ports on which Funnel can be switched on. | 11443 |
 | `publicHttpsPort` | One of 443, 8443, 10000 (the ports Tailscale Funnel can use). | 10000 |
-| `publicPathPrefix` | Matches `^/[a-z0-9][a-z0-9-]{0,31}$`. Never `/`. | `/livecue` |
+| `publicPathPrefix` | Matches `^/[a-z0-9][a-z0-9-]{0,31}$` as a whole text (protocol section 1, shapes: a value with a trailing line break is refused). Never `/`. | `/livecue` |
 | `codexExecutablePath` | `null`, or the absolute path of an existing file named `codex.exe`. | `null` |
-| `asrLabFolder` | `null`, or the absolute path of a folder that contains both launcher scripts. `null` means: use `asr\` beside the executable when it contains both scripts, otherwise PC speech is "not configured". | `null` |
+| `codexContainmentCheckedVersion` | `null`, or the Codex version text (3.7: 1 to 64 characters of letters, digits, space, `.`, `_`, `+`, `-`) for which the owner last confirmed the live containment check. Written only by "Mark as checked" in the Assistant settings. | `null` |
+| `asrLabFolder` | `null`, or the absolute path of a folder that contains both launcher scripts. The path must start with a drive letter and lie on a fixed local volume: a UNC path (`\\host\share\…`), a device-namespace path (`\\?\…`, `\\.\…`), a relative or drive-relative path and a network or removable drive are refused when the settings are saved and again each time the folder is used. `null` means: use `asr\` beside the executable when it contains both scripts, otherwise PC speech is "not configured". The two script files only mark a folder as a lab folder; the relay never runs them (3.8). | `null` |
 | `asrLabPort` | Integer 1024 to 65535, never 47831 or 8765, not equal to `relayPort`. No UI; file only. | 47842 |
+| `hideFromScreenCapture` | Boolean. While `true` the desktop window is excluded from screen capture, screen sharing and recording (the operating system shows it as an empty area), so the QR, transcripts and answers cannot be captured by accident. | `true` |
 | `ownedMappings` | The ledger of 3.9: entries `{"mode","httpsPort","path","target","createdAt"}`. | `[]` |
 
 A missing file means defaults. A file that fails validation is left untouched; the desktop reports it and
 runs on defaults until the user saves settings. 47831 is never offered, suggested or accepted anywhere.
+
+One part of a failed file is not dropped: the ledger. Every `ownedMappings` entry of that file that is valid
+by itself is kept and is part of the settings the application runs on, so that a mapping LiveCue created
+stays known and removable. The first save writes those entries back, and before it replaces the file it
+copies the failed file to `settings.json.invalid` (replacing an older copy), so that nothing the user wrote
+is lost. A file that is not JSON at all has no entry to keep and is copied the same way.
 
 **`pairing.json`**
 
@@ -362,7 +382,7 @@ runs on defaults until the user saves settings. 47831 is never offered, suggeste
 }
 ```
 
-Load rules: `tokenHash` must match `^[a-f0-9]{64}$`; `protectedToken` must decrypt and hash to `tokenHash`.
+Load rules: `tokenHash` must match `^[a-f0-9]{64}$` as a whole text; `protectedToken` must decrypt and hash to `tokenHash`.
 Only "file does not exist" leads to creating a pairing. Every other load problem is the fault
 `PAIRING_STORE_UNREADABLE`; the relay does not start and the file is not modified. There is no plaintext
 member, no previous-token member and no legacy format.
@@ -388,7 +408,25 @@ Discovery (`CodexLocator`), first match wins:
 The resolved path is used both for answers and for the catalogue. Sign-in is checked by running
 `<codex> login status` (limit 15 s); a non-zero exit is "not signed in". Its output is discarded.
 
-Child process rules are in protocol section 12. In addition, every Codex process is placed in a Windows job
+**Version and the containment check.** Codex updates itself, so the tool set behind the relay can change
+without any change in LiveCue. Two things make that visible; neither refuses anything.
+
+- The version text of the Codex in use is read by running `<codex> --version` (limit 15 s, at most 256 bytes
+  of output kept): its first line, when that is 1 to 64 characters of letters, digits, space, `.`, `_`, `+`
+  and `-`; anything else is "unknown". It is the one piece of Codex output LiveCue ever shows (3.10). The
+  desktop's Assistant settings show it beside the Codex path.
+- `settings.json` remembers the version for which the owner last ran the live containment check
+  (`codexContainmentCheckedVersion`; the check is test plan L-4). It is written only when the owner chooses
+  "Mark as checked" in the Assistant settings. When the version in use is unknown or is not that version,
+  prerequisite 2 still passes, but its row, the Assistant settings and one activity line per start carry the
+  warning "Codex is version `<v>`; the containment check was last run for `<w>`." (or "… has not been run
+  yet."), followed by "Run the containment check, then choose Mark as checked in Settings."
+
+There is no hash of the executable and no refusal by mode: an answer is never refused because of the Codex
+version.
+
+Child process rules are in protocol section 12, with the allowlisted environment and the tool switches of
+protocol 12.6. In addition, every Codex process is placed in a Windows job
 object with kill-on-close, so no Codex process outlives the application. Lab launcher scripts are **not**
 placed in that job, because they start Docker Desktop and a container that must outlive a relay restart.
 
@@ -399,6 +437,15 @@ It never starts the lab on its own: a model is loaded only when a paired phone a
 stream that needs it). Stopping the relay or closing the window does not stop the container. Building the
 images and downloading weights are manual, documented steps (section 5) and are never triggered by the
 application.
+
+The launcher scripts the relay runs are its own: `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1` and the shared
+`LabCommon.ps1` that both load from their own folder are embedded in `LiveCue.Relay` (the build embeds the
+three files of `asr/`, so there is one source), written to `<data folder>\lab\`
+at each start as the schema files are, checked against the embedded bytes again before each run, and
+started with the PowerShell of the system directory that the operating-system API reports (protocol 11.5).
+The configured lab folder is passed to the start script as `-LabFolder` and supplies data only: weights and
+the Python service, mounted read-only into a container without capabilities. A script that someone edited
+in the lab folder is therefore never run by the relay, whoever may write to that folder.
 
 ### 3.9 Tailscale mapping manager
 
@@ -426,6 +473,15 @@ The serve status JSON is read as: `TCP` (port to `{HTTPS, HTTP, TCPForward, …}
 structures, including any foreground session and any service, mentions it. A handler is **ours** when its
 port and mount are the configured ones and its `Proxy` is exactly `http://127.0.0.1:<relayPort>`.
 
+**Exposure report.** Every read of the serve status also yields the list of **every** handler, on any port
+and mount and in any of those structures, whose `Proxy` is exactly `http://127.0.0.1:<relayPort>`, each with
+whether Funnel is on for its port and whether the ledger has an entry for it. This list, not the ledger, is
+what the desktop's exposure warnings are made from: it is what Tailscale actually forwards to the relay
+port, whoever created it. A handler that is in the ledger is offered "Remove…" as before (TS-8). A handler
+that is not in the ledger is never removed by the application; the warning shows the exact removal command
+as text for the owner to run in a terminal, and "Check again". When the serve status cannot be read the
+report is "unknown", and the desktop says so instead of showing nothing.
+
 Safety rules. Each is a test in `LiveCue.Hosting.Tests` against a fake CLI runner.
 
 | Id | Rule |
@@ -433,7 +489,7 @@ Safety rules. Each is a test in `LiveCue.Hosting.Tests` against a fake CLI runne
 | TS-1 | Every action begins with `tailscale serve status --json`. If it fails, times out or cannot be parsed into the shape above, nothing is written. |
 | TS-2 | Only the four write commands above can be produced, with validated integers and a prefix that matches the settings rule. |
 | TS-3 | Never produced, in any circumstance: `reset`; `off` without `--set-path`; `tailscale serve --bg <port>` without `--https=`; `--yes`; any `--tcp` or `--tls-terminated-tcp` form; any command for a port or path other than the configured one. |
-| TS-4 | Apply Private is allowed only when `privateHttpsPort` is unoccupied, or occupied by our handler alone with Funnel off. (Running `serve` on a port that has Funnel on would switch Funnel off for that whole port.) |
+| TS-4 | Apply Private is allowed only when `privateHttpsPort` is unoccupied, or occupied by our handler alone with Funnel off. (Running `serve` on a port that has Funnel on would switch Funnel off for that whole port.) It is never produced for port 443, 8443 or 10000 (3.5): a tailnet-only root handler on a port where Funnel can later be switched on by anything else would be published with it. |
 | TS-5 | Apply Public is allowed only when the mounts `<prefix>` and `<prefix>/` are absent or ours, the port has no TCP forwarding, and either Funnel is already on for that port or the port is unoccupied. (Turning Funnel on for a port that has tailnet-only handlers would publish them.) |
 | TS-6 | No write when `relayPort` is 47831 or the target is anything but `http://127.0.0.1:<relayPort>`. |
 | TS-7 | After every write the status is read again. Every entry that is not ours must be identical to the snapshot taken before. Any difference is reported prominently and kept in the activity list; nothing is repaired automatically. |
@@ -449,13 +505,20 @@ What the desktop shows from the manager's read-only inspection at each start and
 | Absent, can be added | Relay runs on loopback. The status says the connection is not set up and offers "Set up connection". "Show QR" is disabled until the mapping is present. |
 | Blocked (TS-4 or TS-5) | Same, with the reason and a pointer to the port or prefix setting. |
 | Our mapping for the *other* mode still exists | A standing warning with "Remove". In Private mode the relay additionally refuses requests that arrived through Funnel (protocol E-1), so a stale public mount cannot reach it. |
+| The exposure report lists a handler that is neither the selected mode's mapping nor in the ledger (made by hand after a timed-out set-up, left by a process that died between the command and the ledger write, or made by other software) | A standing warning on the Live page and in Settings: what it is (port, path, whether Funnel publishes it), the exact removal command as text, and "Check again". LiveCue never runs that command. |
+| Private mode is selected and the exposure report lists a handler with Funnel on | **The relay does not start** (3.11, check 6a). The status line says "A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode." The warning above shows the handler and how to remove it. Rule E-1 stays as the second line of defence. |
+| The serve status cannot be read | The relay starts; the Live page and Settings say that Tailscale's configuration could not be read and that exposure is unknown, with "Check again". |
 
 Applying a mapping adds a ledger entry; removing one deletes it. Mappings are persistent Tailscale
-configuration and stay after the relay stops, as in the old app.
+configuration and stay after the relay stops, as in the old app. That has a cost the owner should know
+(6.5): while LiveCue is closed, a mapping keeps forwarding to a loopback port that nothing of LiveCue is
+listening on.
 
 ### 3.10 Logging and what is never logged
 
-There are no log files. The relay writes nothing to disk except `pairing.json` and the two schema files.
+There are no log files. The relay writes nothing to disk except `pairing.json`, the two schema files and its
+launcher-script copies under `lab\`; and, for the life of one answer request, Codex writes its output
+file in that request's folder under `work\` (3.5).
 
 | Sink | Content |
 |---|---|
@@ -468,11 +531,15 @@ Never logged, shown or placed in an event, by any component:
   blob;
 - the self-check nonce;
 - output of Codex, PowerShell, Docker or Tailscale, and exception messages from them (a diagnostic carries
-  the exception **type name** and a fixed description only);
+  the exception **type name** and a fixed description only). The one exception is the Codex version text of
+  3.7, and only after it passed its fixed shape;
 - forwarding headers and client addresses;
 - audio, ever.
 
-Conversation text (transcripts, answers) is shown in the desktop's memory only and never written to disk.
+Conversation text (transcripts, answers) is shown in the desktop's memory only. LiveCue itself never writes
+it to disk. It is written to disk only as Codex's output file, in the per-request working folder, for the
+life of one request (protocol 12.2). The console host prints it only when `--include-content` is given
+(3.14).
 
 ### 3.11 Start-up, prerequisites and shutdown
 
@@ -484,10 +551,11 @@ window stays responsive and shows "Checking Codex and Tailscale..." with Start d
 | 1 | Data folder usable; `settings.json` loads or defaults apply | "LiveCue could not open its data folder." |
 | 2 | Codex CLI found (3.7) | "Codex CLI was not found. Install or update the Codex desktop app, then open it once and sign in." |
 | 3 | Codex signed in | "Codex is installed but not signed in. Open Codex and sign in with ChatGPT." |
-| 4 | Tailscale CLI found (`%ProgramFiles%\Tailscale\tailscale.exe`, else `PATH`) | "Tailscale is not installed in Program Files." |
+| 4 | Tailscale CLI found (`Tailscale\tailscale.exe` under the Program Files folder that the known-folder API reports, not the environment variable; else `PATH`) | "Tailscale is not installed in Program Files." |
 | 5 | Tailscale running and online | "Tailscale is not online. Open Tailscale and connect first." |
 | 6 | Tailscale reports this PC's DNS name | "Tailscale did not return this PC DNS name." |
-| 7 | Relay starts (`StartAsync`) | `PORT_IN_USE`: "Port `<n>` is already in use. Close the other LiveCue window, or change the relay port in Settings, then start the relay." `PAIRING_STORE_UNREADABLE`: "The saved pairing could not be read. Reset pairing to create a new one." Other: "Could not start the relay." |
+| 6a | Private mode only: one read-only mapping inspection (3.9) before the relay starts. The exposure report holds no handler with Funnel on. A serve status that cannot be read does not fail this check | "A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode." The relay is not started. (Console host: exit code 2.) |
+| 7 | Relay starts (`StartAsync`) | `PORT_IN_USE`: "Port `<n>` is already in use. Close the other LiveCue window, or change the relay port in Settings, then start the relay." `PORT_IN_USE` while the exposure report lists a mapping to that port: "Port `<n>` is in use by another program while a Tailscale mapping points at it. That program may have received your iPhone's requests, including the pairing token. Free the port, start the relay, then reset pairing." `PAIRING_STORE_UNREADABLE`: "The saved pairing could not be read. Reset pairing to create a new one." Other: "Could not start the relay." |
 | 8 | Mapping inspection (3.9), read-only | Not a failure; shown as connection state. |
 
 Stop ("Stop relay", closing the window): the relay stops accepting, cancels every answer run (process tree
@@ -579,6 +647,20 @@ GPU check, not the everyday entry point.
 
 There is no reset-pairing argument. Exit codes: 0 clean, 2 prerequisite failure, 3 relay start fault.
 
+Two rules added by the security review:
+
+- **`--show-pairing` prints the token only to an interactive console** when it works on the default data
+  folder. If standard output is redirected there (to a file, a pipe, a wrapper that keeps output), the host
+  prints one fixed line that contains nothing of the payload and exits 2. A run with an explicit
+  `--data-dir` may be redirected: that is how the manual GPU check reads the throw-away pairing of its
+  temporary folder.
+- **Conversation text is not printed by default.** With `--events json`, the members `Transcript`,
+  `PartialTranscript`, `Instruction` and `PayloadJson` of the request events and `Text` of `SpeechText` are
+  left out of the lines unless the argument `--include-content` is also given. The text form never prints
+  them.
+
+The refusal of check 6a (3.11) is exit code 2, like a prerequisite failure.
+
 ### 3.15 Build and publish
 
 - `dotnet test windows/LiveCueRemake.sln -c Release` runs every Windows test.
@@ -600,11 +682,11 @@ There is no reset-pairing argument. Exit codes: 0 clean, 2 prerequisite failure,
 | Item | Value |
 |---|---|
 | Xcode | 26.3, pinned on every macOS job with `DEVELOPER_DIR`; a job fails at once if that folder is missing. Not Xcode 27. |
-| Project | XcodeGen 2.46.0 from `ios/project.yml`. The generated project is never committed. |
+| Project | XcodeGen 2.46.0 from `ios/project.yml`. The generated project is never committed. CI checks the installed XcodeGen version and fails when it is another one. |
 | Deployment target, devices | iOS 18.0, iPhone only, portrait only |
 | App target | `LiveCueRemake`. Swift 5 language mode with `SWIFT_STRICT_CONCURRENCY: complete`. `SWIFT_DEFAULT_ACTOR_ISOLATION` left unset; state owners are annotated `@MainActor` explicitly. |
 | Core package | `ios/LiveCueCore`, tools version 6.0, Swift 6 language mode, platforms iOS 18 and macOS 15, no dependencies. Linked statically as a local package. |
-| Speech packages | `FluidAudio` exactly 0.15.6 (product `FluidAudio`); `desert-ant-core` exactly 3.1.0 (product `Voz`). No other third-party code. |
+| Speech packages | `FluidAudio` exactly 0.15.6 (product `FluidAudio`); `desert-ant-core` exactly 3.1.0 (product `Voz`). No other third-party code. Their own dependencies are pinned too: the Swift package resolution file is committed as `ios/Package.resolved`, copied into the generated project before packages are resolved, and every build runs with automatic resolution disabled, so a build fails when the file would have to change. |
 | UI tests | Target `LiveCueRemakeUITests`. The one scheme runs the core package tests and the UI tests, with coverage. |
 | Signing | Off by default (`CODE_SIGNING_ALLOWED`, `CODE_SIGNING_REQUIRED` = `"NO"`, empty identity, manual style). Simulator tests turn on ad hoc signing on the command line and use `Support/Simulator.entitlements`, scoped to `sdk=iphonesimulator*`, so Keychain calls work. Device builds carry no entitlements. |
 | Shipped build | Release configuration, unsigned, arm64, packaged as `Payload/LiveCueRemake.app` in `LiveCueRemake.ipa`, for LiveContainer. |
@@ -853,7 +935,10 @@ saved-PC state and message, and the PC model status. It makes no request at all 
 
 `PairingController` implements the three entry paths of spec 01 section 2.2 on top of `PairingPayload`
 (protocol 4.3): reading a payload only fills the two fields; "Verify and pair" calls route 2 and saves on
-200. "PC connected" in the manual section is shown only when the relay is online and the address field
+200. When a pairing is already saved and the new address names another host, "Verify and pair" first asks
+"Replace `<current host>` with `<new host>`? Only do this with the QR shown by LiveCue Desktop on your own
+PC.", with one more line when the new host is not a Tailscale name; nothing is sent until the user confirms
+(`04-ios-architecture.md` 5.9). "PC connected" in the manual section is shown only when the relay is online and the address field
 equals the saved endpoint.
 
 ### 4.10 Persistence, preferences, Keychain
@@ -876,7 +961,7 @@ device only, **no access group**, no synchronisation)
 
 | Account | Content | Test-mode account |
 |---|---|---|
-| `relayPairing` | Pairing JSON `{endpoint, token}` | `relayPairing-tests` |
+| `relayPairing` | Pairing JSON `{endpoint, token}`. The authority for the pairing (below) | `relayPairing-tests` |
 | `meta-api-key` | Meta API key | `meta-api-key-ui-test` |
 | `openrouter-api-key` | OpenRouter API key | `openrouter-api-key-ui-test` |
 
@@ -884,13 +969,26 @@ device only, **no access group**, no synchronisation)
 
 | Location | Content | Protection |
 |---|---|---|
-| Application Support / `pairedPC.json` (`pairedPC-tests.json` in test mode) | Pairing JSON | Atomic write; complete until first user authentication; excluded from backup |
+| Application Support / `pairedPC.json` (`pairedPC-tests.json` in test mode) | Pairing JSON: a fallback copy, read only when the Keychain gives no pairing | Atomic write; complete until first user authentication; excluded from backup |
 | Application Support / default SwiftData store | Sessions | Folder protected until first user authentication; in memory only in test mode |
 | Library caches chosen by the speech packages | On-device model files | Managed by the packages; excluded from backup |
 
-Pairing load order: file, then (refreshing the Keychain copy from it) the Keychain copy. Pairing save: file
-first (must succeed), Keychain best effort. The file exists because Keychain access inside LiveContainer can
-fail. API keys are stored in the Keychain only; if the Keychain refuses, the key is not saved anywhere.
+**The Keychain item is the authority for the pairing; the file is a fallback.** Other apps in the same
+LiveContainer can read and replace the file, and a replaced file must never redirect the app to another
+server.
+
+- Load: the Keychain item first. When it holds a valid pairing, that is the pairing; if the file is missing
+  or holds anything else, the file is rewritten from the Keychain item. The file is read only when the
+  Keychain has no item or cannot be read (or holds text that is not a valid pairing). **The Keychain is
+  never written from the file.**
+- Save: the Keychain item first. When that write succeeds, the file is rewritten best effort. When it
+  fails, the file must be written, and an older Keychain item is then deleted so that it cannot win at the
+  next load; if an older item can be neither replaced nor deleted, the save fails and the file is put back
+  to what the Keychain holds. After a save that succeeded, the next load returns that pairing.
+
+The file exists because Keychain access inside LiveContainer can fail, and a phone that loses its pairing on
+every Keychain hiccup would be worse (6.5). API keys are stored in the Keychain only; if the Keychain
+refuses, the key is not saved anywhere.
 
 **Session rows**: one row per session with a unique id, start time, last-saved time, title, and a JSON
 payload of the whole `Session` encoded with `LiveCueJSON`. Rows that fail to decode are skipped. Save
@@ -989,7 +1087,7 @@ can never collide with, or be mistaken for, an old lab on the same PC.
 | Container name | `livecue-remake-asr` (one container; one model loaded at a time) |
 | Ownership label | `com.livecueremake.component=asr-lab` |
 | Images | `livecue-remake-asr-nemotron:1.0`, `livecue-remake-asr-qwen3:1.0` (Dockerfile targets `nemotron` and `qwen3` over a shared `base` stage) |
-| Base image | `python:3.12-slim` |
+| Base image | `python:3.12-slim`, referenced in the Dockerfile by digest (`python:3.12-slim@sha256:…`), not by the movable tag alone. Python requirements are installed with `pip install --require-hashes` from files that carry a hash for every package |
 | GPU | `--gpus all`. The service refuses to load without CUDA. |
 | Hardening | `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 512`, `--shm-size 1g` |
 | Run-time environment | `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`, `GRADIO_ANALYTICS_ENABLED=False`, `ASR_HOST_PORT=<lab port>` |
@@ -999,8 +1097,10 @@ can never collide with, or be mistaken for, an old lab on the same PC.
 | Command | `python server.py` (uvicorn on 8765, access log off, WebSocket message limit 65,536 bytes) |
 
 The image supplies the dependencies only; the Python code is the bind-mounted folder, so a code change needs
-no image rebuild. The Dockerfile does not copy the service files. The container makes no network calls;
-weights are downloaded beforehand.
+no image rebuild. The Dockerfile does not copy the service files. The service makes no network calls:
+weights are downloaded beforehand and the telemetry switches above are set. Those switches are requests, not
+a barrier: the container runs on Docker's default bridge network and could reach the internet. That is
+accepted for 1.0 (6.5), because the images are built by the owner from dependencies pinned by hash.
 
 Pinned dependencies are those of spec 03 section 9.3, minus the two that nothing uses (`python-multipart`
 and the `curl` OS package). `httpx` and `pytest` are test-only requirements.
@@ -1009,7 +1109,7 @@ and the `curl` OS package). `httpx` and `pytest` are test-only requirements.
 
 | File | Role |
 |---|---|
-| `server.py` | FastAPI app: `/health`, `/`, `/sample`, WebSocket `/relay` and `/stream`, admission rules, the single-session lock, windowing, queues and timers. Contains no model code. |
+| `server.py` | FastAPI app: `/health`, `/`, `/sample`, WebSocket `/relay` and `/stream`, admission rules, the single-session lock, windowing, queues and timers. One check in front of every route, HTTP and WebSocket, applies the `Host` rule of protocol 11.1; the three HTTP routes also apply its `Origin` and `Sec-Fetch-Site` rules. Contains no model code. |
 | `engines/nemotron.py`, `engines/qwen3.py` | The two real engines behind one small interface (load, warm up, recognise a window as a stream of partial and final texts). Settings are those of spec 03 section 5.4 (models table). |
 | `engines/fake.py` | Test engine: a partial `test caption` for every audio chunk and a final `test caption` at end of input. Selected only by the tests; no image sets it. |
 | `static/index.html` | The lab test page (spec 03 section 5.6), without the hard-coded GPU label. |
@@ -1019,8 +1119,11 @@ Start-up order is unchanged: load weights, warm up on 2 s of synthetic silence, 
 
 ### 5.3 Launcher scripts
 
-`Start-ASR-Lab.ps1 [-Model nemotron|qwen3] [-Port <n>] [-NoBrowser] [-EnsureDocker]` (defaults: `nemotron`,
-47842):
+`Start-ASR-Lab.ps1 [-LabFolder <folder>] [-Model nemotron|qwen3] [-Port <n>] [-NoBrowser] [-EnsureDocker]`
+(defaults: the script's own folder, `nemotron`, 47842). `<lab folder>` below is `-LabFolder`: run by hand
+from `asr\` it is that folder; run by the relay, whose copy of the script lives in the data folder
+(3.8), it is the configured lab folder. The shared `LabCommon.ps1` is always loaded from the folder of the
+script that runs, never from `-LabFolder`.
 
 1. Require `docker.exe` on `PATH` ("Docker Desktop is required.").
 2. Check the engine with `docker info`. If it is down: without `-EnsureDocker` fail ("Start Docker Desktop
@@ -1045,7 +1148,8 @@ Start-up order is unchanged: load weights, warm up on 2 s of synthetic silence, 
 4. If health reports busy, fail ("An ASR session is active. Stop it before unloading the model.").
 5. `docker stop --timeout 15`. The container is stopped, not removed. Images and weights are untouched.
 
-The relay always calls Start with `-NoBrowser -EnsureDocker` (protocol 11.5).
+The relay always calls Start with `-LabFolder <lab folder> -NoBrowser -EnsureDocker` (protocol 11.5), and it
+calls its own copies of the scripts, never the files in the lab folder.
 
 ### 5.4 Setup, done by hand
 
@@ -1058,7 +1162,8 @@ Documented in `asr/README.md` and never run by the application, by a test or by 
    name them (open item, see `01-decisions.md` section 7).
 4. Optionally place a mono 16 kHz PCM16 WAV at `private\sample.wav` for the lab page.
 5. Point LiveCue Desktop at the folder (Settings, speech lab folder) unless it is the `asr\` folder beside
-   the executable.
+   the executable. The folder must be on a fixed local drive (3.5). The README tells the owner to unpack the
+   Windows zip under their own user profile, not in a folder that other Windows accounts can write to.
 
 ### 5.5 Tests
 
@@ -1074,17 +1179,17 @@ no model, no Docker. It runs in CI on Linux.
 | Boundary | Trusted side | Untrusted side | What enforces it |
 |---|---|---|---|
 | Internet or tailnet to the relay | The relay | Every caller until step E-3 passes | Protocol 5.2. The Tailscale daemon only carries bytes and ends TLS; the relay does not rely on it for any check. |
-| Relay to Codex | The relay | Request content (transcripts, instructions) | Content is embedded as delimited untrusted JSON; shell tool disabled; read-only sandbox; empty temp working folder; model and effort taken only from the relay's own catalogue. |
-| Relay to lab | Both are local | Other local web pages | Loopback-only publish; `Host` and `Origin` rules; fixed model names; fixed script names. |
+| Relay to Codex | The relay | Request content (transcripts, instructions) | Protocol 12.6: content is embedded as delimited untrusted JSON; the process gets an allowlisted environment; the shell tool and every other tool, feature and network switch the installed Codex offers are turned off; an empty per-request working folder; model and effort taken only from the relay's own catalogue. The read-only sandbox is kept but is not relied on for confidentiality. Capabilities the installed Codex cannot switch off are listed in `05-windows-architecture.md` 4.9. |
+| Relay to lab | Both are local | Other local web pages | Loopback-only publish; `Host` rule on every lab route and `Origin` rules (protocol 11.1); fixed model names; launcher scripts that are the relay's own embedded copies. |
 | Desktop to relay | Same process | n/a | No network control surface exists. |
 | Phone to cloud providers | The phone | The provider's responses | Fixed hosts; keys only in the documented place; redirects refused; provider text never shown raw. |
-| LiveContainer guests | n/a | Other guest apps can read this app's files | Secrets go to the Keychain; the pairing file is the one deliberate exception (6.5). |
+| LiveContainer guests | n/a | Other guest apps can read and replace this app's files | Secrets go to the Keychain, and the Keychain item is the authority for the pairing: a replaced pairing file cannot redirect the app while the Keychain holds a pairing (4.10). The readable fallback file is the one deliberate exception (6.5). |
 
 ### 6.2 Secrets
 
 | Secret | Where it lives | How it travels | Never |
 |---|---|---|---|
-| Pairing token | PC: SHA-256 hash and a DPAPI-protected copy in `pairing.json`, bound to the Windows account. Phone: Keychain item and the protected pairing file. | Inside the QR (screen to camera) or pasted text; then as the bearer header over TLS. | Written in plaintext on the PC; logged; put in an event; shown as text by the desktop; put in a URL. |
+| Pairing token | PC: SHA-256 hash and a DPAPI-protected copy in `pairing.json`, bound to the Windows account. Phone: Keychain item (the authority) and a fallback copy in the protected pairing file. | Inside the QR (screen to camera) or pasted text; then as the bearer header over TLS. The QR carries the permanent token: an accepted risk (6.5). | Written in plaintext on the PC; logged; put in an event; shown as text by the desktop; put in a URL. |
 | Meta API key | Phone Keychain only | Inside the first WebSocket message to the fixed Meta endpoint | Sent to the PC, placed in a URL or header, written to a file. |
 | OpenRouter API key | Phone Keychain only | Bearer header to the fixed OpenRouter host | Sent to the PC; sent to the public model-list call. |
 | Codex sign-in | Codex's own store on the PC | Used by the Codex process itself | Read, copied or logged by LiveCue. |
@@ -1102,7 +1207,7 @@ The PC holds **no** speech key and no model API key.
 | What a token holder can do | Everything in protocol section 6 | The same |
 | What is never reachable | The lab port, the desktop's controls, the file system, any other relay path, any other local service | The same |
 | Phone needs | The Tailscale VPN | Ordinary internet |
-| Extra guard | Requests marked by Tailscale as arriving through Funnel are refused (E-1) | none |
+| Extra guard | The relay does not start while a Funnel handler targets its port (3.11, check 6a); requests marked by Tailscale as arriving through Funnel are refused (E-1); the private listener is never on a port that Funnel can use (3.5) | none |
 
 ### 6.4 Threats and answers
 
@@ -1113,11 +1218,13 @@ The PC holds **no** speech key and no model API key.
 | Oversized or slow requests | Body cap enforced while streaming; header, body and route deadlines; minimum data rate; keep-alive limit; connection cap. |
 | Stream abuse by a token holder | Rate limiter, frame size limit, idle and lifetime limits, one lease, socket ceiling. |
 | Steering the PC through request content | Fixed allowlists for speech models; catalogue-only answer models; no phone-supplied path, URL, executable or script; exact route allowlist; request ids of one fixed shape. |
-| Prompt injection in a transcript | Untrusted-data framing, no tools, read-only sandbox, schema-validated output rebuilt from an allowlist. |
+| Prompt injection in a transcript | The containment of protocol 12.6 (allowlisted environment, every available tool switch off, empty working folder), checked against the installed Codex by the opt-in canary run; schema-validated output rebuilt from an allowlist; answers drawn as plain text on the phone. The untrusted-data framing and the sandbox flag are kept but are not counted as controls. |
 | Leaking internals to the phone | Fixed error texts; stubs in tests prove no private text escapes (P2-011). |
 | A lost or shared phone | "Reset pairing" on the desktop revokes the token at once, including open streams. |
 | Changing other software's Tailscale configuration | Rules TS-1 to TS-10. |
-| Mode confusion (believing the relay is private while a public mount remains) | Standing warning in the desktop; Private mode refuses Funnel-marked requests. |
+| Mode confusion (believing the relay is private while a public mount remains) | The exposure report is read from Tailscale's live configuration, not from the ledger, and is shown on the Live page (3.9); in Private mode the relay does not start while a Funnel handler targets its port; Private mode refuses Funnel-marked requests; the private listener cannot be put on a Funnel-capable port. |
+| A web page rebinding its own host name to the lab's loopback port | The lab's `Host`, `Origin` and `Sec-Fetch-Site` rules apply to its HTTP routes as well as to its WebSockets (protocol 11.1). |
+| A replaced pairing file or a hostile QR redirecting the phone to another server | The Keychain item is the authority for the pairing (4.10); replacing a saved PC by another host needs a confirmation that names both hosts (4.9). |
 | Secrets in the public repository | The audit (7.7) on every push and over history. |
 
 ### 6.5 Accepted residual risks
@@ -1125,10 +1232,30 @@ The PC holds **no** speech key and no model API key.
 - One shared token: every paired phone has the same rights, and revoking one revokes all.
 - No lockout or delay on failed tokens; the token's size is the protection.
 - A process running as the same Windows user can read the DPAPI copy and call the loopback relay.
-- Inside LiveContainer, other guest apps can read the pairing file. It is kept because Keychain access there
-  can fail, and a phone that loses its pairing on every Keychain hiccup would be worse.
+- Inside LiveContainer, other guest apps can read the pairing file, and with it the token. It is kept
+  because Keychain access there can fail, and a phone that loses its pairing on every Keychain hiccup would
+  be worse. They cannot redirect the app by replacing the file while the Keychain holds a pairing (4.10);
+  when the Keychain holds none, the file is the only copy and a replaced file would be believed.
+- Inside LiveContainer, other guest apps can also read the stored sessions (the conversation history) and
+  the preferences. Neither is encrypted.
 - The desktop's activity list shows full transcripts and answers to anyone at the PC while the window is
-  open. It is memory only.
+  open. It is memory only. Screen capture is blocked by default (3.5, `hideFromScreenCapture`); a camera
+  pointed at the screen is not.
+- **The QR carries the permanent token** (`01-decisions.md`, review rulings, SEC-02): whoever photographs or
+  otherwise captures the QR once holds the pairing until "Reset pairing". What limits it: the QR is shown
+  only when asked for (and once on the very first start), hides after 120 s, is never copied or logged, is
+  excluded from screen capture by default, and "Reset pairing" is one click away.
+- **A mapping outlives the application.** While LiveCue is closed, its Tailscale mapping keeps forwarding
+  to the relay's loopback port. Another program on the PC that binds that port in the meantime receives the
+  phone's requests, bearer token included. On a single-user PC that needs the owner's own account, which
+  could read the token anyway; on a PC with other Windows accounts it is a real exposure. It is made
+  visible, not closed: the port-in-use text of 3.11 says what may have happened and tells the owner to reset
+  pairing.
+- **Codex is contained by switches, not by the operating system.** The agent runs as the owner. What it can
+  reach is bounded by protocol 12.6 and by whatever the installed Codex version honours; capabilities that
+  version cannot switch off are listed in `05-windows-architecture.md` 4.9, and a Codex update can change
+  the list. The canary run and the version warning (3.7) are how a change is noticed.
+- The lab container is not cut off from the internet (5.1). Its dependencies are pinned by hash.
 - The Voz package contacts its vendor (4.13).
 
 ---
@@ -1140,6 +1267,11 @@ The PC holds **no** speech key and no model API key.
 Free GitHub-hosted standard runners in a public repository. No repository secrets. No job contacts a speech
 or model provider; every test uses fixtures. Toolchains are pinned and printed. Default permission is
 `contents: read`; only the release job may write.
+
+Inputs are pinned too (`06-test-and-ci-plan.md` section 5): every action is referenced by its full commit
+id; NuGet restores are locked (3.1); the Swift package resolution file is committed (4.1); the installed
+XcodeGen version is checked; a release never restores a cache; a release can never be made again under a tag
+that already exists; and the two release archives carry a build provenance attestation.
 
 ### 7.2 Workflows
 
@@ -1168,7 +1300,9 @@ Xcode 26.3 on both):
 Steps of each leg:
 
 1. Check out. Fail if the pinned Xcode folder is missing; print the Xcode version.
-2. `brew install xcodegen`; `xcodegen generate` in `ios/`.
+2. `brew install xcodegen`; fail unless `xcodegen --version` reports the version of 4.1; `xcodegen generate`
+   in `ios/`; copy `ios/Package.resolved` into the generated project, then resolve packages with automatic
+   resolution disabled.
 3. `scripts/ci/select_simulator.py --runtime <version>`: only iPhone devices on exactly that runtime; device
    preference iPhone 17 Pro, iPhone 17, iPhone 16 Pro, iPhone 16, then any iPhone by name; if the runtime
    has no iPhone device, create one; fail with a clear message if the runtime is not installed.
@@ -1209,8 +1343,10 @@ Docker is needed or present.
    arm64. Package `Payload/LiveCueRemake.app` as `LiveCueRemake.ipa` with `ditto`, test the archive, write
    `LiveCueRemake.ipa.sha256`. Upload as an artefact (14 days).
 4. **`windows-publish`** (`windows-latest`): publish as 3.15, zip, checksum, upload (14 days).
-5. **`release`** (`ubuntu-latest`, `contents: write`): create the release for the tag at the built commit, or
-   replace its assets and repoint it if it exists. Title "LiveCue Remake `<tag>`". Notes state that the IPA
+5. **`release`** (`ubuntu-latest`, `contents: write`, and for the attestation `id-token: write` and
+   `attestations: write`): fail if the tag or a release for it already exists (a corrected build is a new
+   version; nothing published is ever replaced); otherwise attest the two archives and create the release
+   for the tag at the built commit. Title "LiveCue Remake `<tag>`". Notes state that the IPA
    is unsigned and for LiveContainer, that tests passed in this run, and the Voz attribution and usage
    statement. Then download every asset again into a clean folder and fail unless each checksum matches, the
    IPA passes an archive test and lists `Payload/LiveCueRemake.app/LiveCueRemake`, and the zip lists
