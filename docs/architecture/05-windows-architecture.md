@@ -138,6 +138,7 @@ the `spike/windows` branch.
 | `Edge/KestrelSetup.cs` | Listener and limits of protocol 5.1 | WP-W01 |
 | `Edge/ConnectionGate.cs` | C-30 over every connection | WP-W01 |
 | `Edge/EdgePipeline.cs` | Steps E-1 to E-8, deadlines, client abort, the last-resort 500 | WP-W01 |
+| `Edge/EdgeRequest.cs` | Per request: whether a body was declared and whether it was read to its end (K-4) | WP-W01 |
 | `Edge/BearerCheck.cs` | E-1 and E-2 as pure functions | WP-W01 |
 | `Edge/RequestGauge.cs` | C-31 | WP-W01 |
 | `Edge/BodyReader.cs` | Protocol 5.4 | WP-W01 |
@@ -3218,7 +3219,7 @@ Every other number is a protocol constant (cited by id) or an architecture value
 | 2 | Canonicalise `AdvertisedEndpoint` (protocol 4.3). The canonical text is what is advertised (P2-148) | `InvalidEndpoint` |
 | 3 | `Port` is 0 or in 1024 to 65535, and is not 47831. `DataDirectory` exists | `StartFailed` |
 | 4 | `Pairing.LoadOrCreateAsync` | `PairingStoreUnreadable` |
-| 5 | Rewrite `schemas\assist.schema.json` and `schemas\summary.schema.json` from the embedded copies. Rewrite `lab\Start-ASR-Lab.ps1`, `lab\Stop-ASR-Lab.ps1` and `lab\LabCommon.ps1` from the embedded copies (`LabScripts.WriteCopies`, protocol 11.5). When `Dependencies.TempRoot` is null: create `work\` and delete everything in it (protocol 12.2); a folder that cannot be deleted is left and reported as a `Diagnostic`, not a fault | `StartFailed` |
+| 5 | Rewrite `schemas\assist.schema.json` and `schemas\summary.schema.json` from the embedded copies. Rewrite `lab\Start-ASR-Lab.ps1`, `lab\Stop-ASR-Lab.ps1` and `lab\LabCommon.ps1` from the embedded copies (`LabScripts.WriteCopies`, protocol 11.5). When `Dependencies.TempRoot` is null: create `work\` and delete everything in it (protocol 12.2); a folder that cannot be deleted is left and reported as a `Diagnostic`, not a fault. A `work` that is a link (a junction or a symbolic link) is not followed: it is the fault, so that "everything in `work\`" can never mean another folder | `StartFailed` |
 | 6 | Build and start the Kestrel application (4.3). An address-in-use error from the listener is recognised by its exception type, not its text | `PortInUse`, otherwise `StartFailed` |
 | 7 | Read `BoundPort`; Status `Running`; publish `RelayStarted`; for an existing pairing publish `Notice(PairingRestored)` | |
 | 8 | When `WarmCatalogOnStart` and a Codex path exists: start one catalogue read and ignore its outcome | |
@@ -3237,6 +3238,16 @@ step one, dispose it, set Status `Stopped`, publish a last `EdgeStatistics` when
 previous one, publish `RelayStopped(Requested)` and complete the event channel.
 The lab container and any running lab script are left alone (architecture 3.8).
 
+How the stop is built. The wait for requests and sockets is the first thing the application's own stop does
+(`KestrelSetup.DrainBeforeStop`, a hosted service whose `StoppingAsync` the host calls before it stops the
+server), so `RelayHost` makes one call, `StopAsync` with the W-02 token. Two clocks bound it: the relay's
+clock (C-58 for the wait, W-02 for the whole), and behind them the host's shutdown time-out, set to W-02 in
+real time, which is what ends a stop when the relay's clock does not move (a test on the manual clock). After
+its token has fired the server core aborts what is still open and waits at most one more second for it. A
+stop runs once per instance: every caller of `StopAsync`, and `DisposeAsync`, awaits the same one; the token
+a caller passes ends that caller's wait, never the stop. `StopAsync` before `StartAsync` does nothing and
+does not use the instance up.
+
 Pause: `SetAcceptingAsync(false)` flips `Access.Accepting`, cancels `Access.WhileAccepting`, then publishes
 `AcceptingChanged`. Open streams end with `RELAY_PAUSED` through that token; an answer run and a model
 operation already in progress continue. Resume issues a fresh `WhileAccepting` token. Pause is not stored.
@@ -3244,6 +3255,14 @@ operation already in progress continue. Resume issues a fresh `WhileAccepting` t
 Runtime fault: an exception that escapes the pipeline's last-resort handler in a way that leaves the listener
 unusable, or the event pump failing, publishes `RelayFaulted(Internal)`, then performs the stop sequence and
 publishes `RelayStopped(Fault)`. The relay never restarts itself.
+
+As built (`RelayHost.FaultAsync`): Status is `Faulted` before `RelayFaulted` is published and stays
+`Faulted`; a `Diagnostic` with the cause's type name comes first. Two things raise it: one of the two periodic
+reports (the `EdgeStatistics` timer, the dropped-event report) failing, and the listener's application
+stopping although the relay did not stop it. **Nothing a request does raises it.** An exception that escapes
+the last-resort handler ends that one connection (aborted, with a `Diagnostic`), and the listener keeps
+serving: on an internet edge a request that could stop the relay would be a remote off switch, and the relay
+does not restart itself.
 
 ### 4.3 Listener (`Edge/KestrelSetup.cs`)
 
@@ -3255,7 +3274,7 @@ no developer exception page. The pipeline is `UseWebSockets` followed by one ter
 | Kestrel setting | Value |
 |---|---|
 | `Listen` | `IPAddress.Loopback` and `Options.Port` only; `ListenOptions.Protocols = Http1` |
-| Listen socket | Created through `SocketTransportOptions.CreateBoundListenSocket` with `ExclusiveAddressUse` true, so no second socket can share the port while the relay runs (protocol 5.1). To confirm on .NET 10 whether Kestrel already sets it; the explicit setting stays either way |
+| Listen socket | Created through `SocketTransportOptions.CreateBoundListenSocket` with `ExclusiveAddressUse` true, so no second socket can be bound to 127.0.0.1 on the relay port while the relay runs (protocol 5.1, K-12). The same function refuses every endpoint but IPv4 loopback. Confirmed on .NET 10: Kestrel's own default socket leaves the option off. (Windows 11 refused a second bind with address reuse beside that default socket as well, by its own rules for sockets of one account; the explicit setting does not depend on them) |
 | Connection middleware | `ConnectionGate` (below) |
 | `AddServerHeader` | false |
 | `Limits.MaxRequestLineSize`, `MaxRequestHeadersTotalSize`, `MaxRequestHeaderCount` | C-19 |
@@ -3275,14 +3294,17 @@ Notes on what Kestrel does and cannot do:
 | Id | Fact | Consequence |
 |---|---|---|
 | K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. Accepted by the orchestrator: protocol 5.3 now reads "besides `Content-Length`, `Date` and the connection headers" |
-| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Accepted by the orchestrator: protocol 10.5 now says "keep-alive frame" and names the unsolicited Pong. Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
+| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval (measured: the bytes `8A 00`, C-57 after the upgrade on a socket nothing else is written to; none once the relay has sent its close frame) | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Accepted by the orchestrator: protocol 10.5 now says "keep-alive frame" and names the unsolicited Pong. Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
 | K-3 | The framework WebSocket has no maximum message size | `PhoneSocket` receives into a buffer of C-20 plus one byte and stops at the first byte beyond C-20 |
-| K-4 | After a response to a request whose body the application did not read, Kestrel reads and discards the rest of the body unless the connection is closing | Every response written before the body was completely read carries `Connection: close`. No relay code and no Kestrel code reads a body before E-3 passes |
-| K-5 | A body below the minimum data rate makes the body read throw `BadHttpRequestException` | `BodyReader` turns it into `408 REQUEST_TIMEOUT` when the response has not started; otherwise Kestrel's bare 408 stands. Both are allowed by protocol 5.1 |
-| K-6 | A request line or header block that breaks C-19 or C-40 never reaches the pipeline | Bare 400, 408, 414 or 431 from the server core, as protocol 5.1 says |
-| K-7 | `IHttpRequestFeature.RawTarget` is the request target exactly as sent | E-4 compares that text and never a decoded path |
+| K-4 | After a response to a request whose body the application did not read, Kestrel reads and discards the rest of the body, **also when the connection is closing** (measured on .NET 10): it waits for the missing bytes for about five seconds, then closes. It parses nothing of what it discards and never answers a second request on that connection | Every response written before the body was completely read carries `Connection: close`, which is what makes Kestrel end the connection after the discarding read instead of reading a next request. No relay code reads a body before E-3 passes. The server core's discarding read after a refusal is the one read there is; it keeps nothing, and it is why a refused caller that declared a body and never sent it holds its connection for those seconds (less than C-40 allows anyway) |
+| K-5 | A body below the minimum data rate makes the body read throw `BadHttpRequestException` (measured: about six seconds after the headers for a body that stalls at once) | `BodyReader` turns it into `408 REQUEST_TIMEOUT` when the response has not started; otherwise Kestrel's bare 408 stands. Both are allowed by protocol 5.1 |
+| K-6 | A request that breaks C-19 or C-40, or that is not well-formed HTTP/1.1, never reaches the pipeline. Measured: 414 for a request line beyond C-19; 431 for a header block beyond C-19 and for more headers than C-19; 408 about a second after C-40 for headers that do not complete; 400 for a request line that is not HTTP, a `Content-Length` that is not a number, is negative or is repeated with different values, a transfer coding that is not chunked, a missing `Host` header, and an absolute-form or authority-form target whose host is not the one of the `Host` header. An HTTP/2 connection preface is answered with the HTTP/2 frame that refuses it (GOAWAY, "HTTP/1.1 required") and a close | Bare 400, 408, 414 or 431 from the server core with `Content-Length: 0`, `Connection: close` and `Date`, as protocol 5.1 says; no presence, no counter, and the listener keeps serving |
+| K-7 | `IHttpRequestFeature.RawTarget` is the request target exactly as sent. An absolute-form target for the listener's own host, `OPTIONS *` and `CONNECT host:port` reach the pipeline with that text | E-4 compares that text and never a decoded path; all of these are `404 NOT_FOUND` |
 | K-8 | A header that is present with an empty value is still a key of the header dictionary | E-1 uses `ContainsKey`; a test sends `Origin:` with no value |
-| K-9 | For a request with both `Content-Length` and `Transfer-Encoding`, Kestrel is expected to let `Transfer-Encoding` win and drop `Content-Length` instead of rejecting (to confirm on .NET 10) | Either outcome is accepted: a bare 400, or chunked framing with the connection closed after the response (test plan ST-21). What must hold is that the request is never framed by `Content-Length`. **No relay code parses framing by hand to "fix" this.** The defence against request smuggling through the proxy's reused loopback connection is K-4, and it has its own test (ST-20) |
+| K-9 | For a request with both `Content-Length` and `Transfer-Encoding`, Kestrel lets `Transfer-Encoding` win, drops `Content-Length` and adds `Connection: close` to the response by itself (measured on .NET 10, in either header order) | The request is framed as chunked and the connection is closed after the response (test plan ST-21); bytes that are a body only by the length are not a chunk, so that request is `400 INVALID_REQUEST` and what follows is never answered. The request is never framed by `Content-Length`. **No relay code parses framing by hand.** The defence against request smuggling through the proxy's reused loopback connection is K-4, and it has its own test (ST-20) |
+| K-10 | Kestrel's own body limit (`MaxRequestBodySize`, the second line behind `BodyReader`) counts the chunk framing of a chunked body together with its bytes | With a declared length the limit is exactly C-10. A chunked body is refused, with the coded `413 PAYLOAD_TOO_LARGE`, once its bytes and its framing together pass C-10: a chunked body of exactly C-10 bytes is 413. The phone's own target C-11 leaves 4,096 bytes for framing. Raising the second line would make C-10 exact for chunked bodies too; that is a change of this table, for the orchestrator to rule on |
+| K-11 | When the server core itself gives up on a body (a declared length above C-10, or a chunked body beyond it), it closes the connection right after the response, without the discarding read of K-4. Windows then resets the connection, and a reset discards what the other side has not read yet | A caller that is still sending such a body can see a reset instead of the 413. A caller whose read is already waiting, as a proxy's is, receives the answer. Accepted: the phone never sends such a body. The tests start their read before they send |
+| K-12 | `ExclusiveAddressUse` on a socket bound to 127.0.0.1 keeps every other socket off that address and port, with or without address reuse. Windows keeps the wildcard address apart: another socket can still be bound to `0.0.0.0` with the same port number | That other socket is not on the relay's address: whatever is sent to 127.0.0.1 reaches the relay (tested with both kinds of socket listening beside it). Protocol 5.1 says "bound to 127.0.0.1 on the relay port" accordingly |
 
 ### 4.4 The request pipeline (`Edge/EdgePipeline.cs`)
 
@@ -3305,7 +3327,14 @@ One method, steps in this order. "Stops" means the step writes its answer and th
 | P-12 | `Finish` | Leaves the gauge; disposes the token sources | |
 
 The three 401 answers come from one pre-built byte array through one code path. A 401, 404, 400 or 429 on a
-request that declared a body carries `Connection: close` (K-4).
+request that declared a body carries `Connection: close` (K-4). For a request that reached its route the same
+rule is kept by `Edge/EdgeRequest.cs`, a feature of the request that knows whether a body was declared and
+whether `BodyReader` read it to its end: every answer written through `IRouteIo`, and every answer the edge
+writes for a handler, carries `Connection: close` until the body has been read completely. That covers what
+a route answers before it reads (`RELAY_PAUSED`, `ASSISTANT_BUSY`, a 413 by declared length) without the
+route knowing about it.
+
+`Active` counts the requests inside the pipeline, speech sockets included; the stop waits on it (4.2).
 
 **Rejected-request counters** (protocol 5.5). Three `long` fields of the pipeline, each changed only with
 `Interlocked.Increment`, on the 401 path and nowhere else: P-2 refusing for `Tailscale-Funnel-Request` in
@@ -3326,6 +3355,13 @@ What P-11 does when the handler does not write a response itself:
 | `OperationCanceledException`, cause `PairingRevoked` | `401 UNAUTHORIZED` |
 | `OperationCanceledException`, cause `DeadlineExceeded` | `504 ASSISTANT_TIMEOUT` on routes 7 and 8, otherwise `504 DEADLINE_EXCEEDED` |
 | Any other exception | `Diagnostic("edge", "A request failed unexpectedly.", exception)`; `500 INTERNAL_ERROR` if no response has started, otherwise the connection is aborted |
+| `OperationCanceledException` that is none of the request's four causes | As any other exception, unless the connection ended under the request: then none |
+| Returns without having written a response | `Diagnostic("edge", "A route ended without an answer.")`; `500 INTERNAL_ERROR` (never the empty 200 the server core would send) |
+| The caller's connection ends under a body read | None, and no `Diagnostic`: there is nobody to answer and nothing failed |
+
+Around all of it stands one guard: whatever escapes (in practice an answer of the edge itself that could not be
+written) ends that connection and nothing else, so the server core never answers with a bare 500 of its own.
+The 401 path publishes nothing even then.
 
 ### 4.5 Bodies and responses (`Edge/BodyReader.cs`, `Edge/ResponseWriter.cs`)
 
@@ -3336,14 +3372,23 @@ What P-11 does when the handler does not write a response itself:
    Count bytes; stop at the first byte beyond C-10: `413`.
 3. When that token fires: if the C-41 timer is the one that fired (checked first, so it also wins a tie with
    the route deadline), `408 REQUEST_TIMEOUT`; otherwise the cancellation escapes and P-11 answers it.
+   The tie is decided without looking at which of two timers happened to fire first: a cancellation whose
+   cause is the route deadline is also 408 when that deadline is not shorter than C-41 (routes 5 and 6,
+   where the two are equal). On route 2 the deadline is shorter, so the deadline answers (504).
    A `BadHttpRequestException` is mapped by its status: 408 and 413 to their coded errors, anything else to
    `400 INVALID_REQUEST`.
-4. Parse with `Utf8JsonReader` options `MaxDepth` 32 (protocol 5.4 rule 4), no comments, no trailing commas.
-   Invalid UTF-8, invalid JSON, an empty body, or a top level that is not an object: `400 INVALID_JSON`.
+4. Check that the bytes are valid UTF-8 (`Utf8.IsValid`: the JSON reader checks structure and leaves the
+   bytes inside a string alone), then parse with `Utf8JsonReader` options `MaxDepth` 32 (protocol 5.4 rule 4),
+   no comments, no trailing commas. Invalid UTF-8, a byte-order mark, invalid JSON, an empty body, or a top
+   level that is not an object: `400 INVALID_JSON`.
 5. Return the bytes, the detached root element and `ReadMs`.
 
+Only after the body was read to its end does the request's `EdgeRequest` stop asking for
+`Connection: close` (4.4): an `INVALID_JSON` answer keeps the connection, a 413 or a 408 does not.
+
 `ResponseWriter.WriteJsonAsync` sets the status, the three headers of protocol 5.3 and `Content-Length`, and
-writes the bytes in one call. It refuses a second write and any status from 300 to 399. JSON is produced with
+writes the bytes in one call. It refuses a second write, any status from 300 to 399 and any status outside
+200 to 599. JSON is produced with
 `Utf8JsonWriter`, not indented, with `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`, so non-ASCII text is
 written as UTF-8.
 

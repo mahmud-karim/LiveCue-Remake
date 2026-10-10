@@ -67,6 +67,30 @@ public sealed class RouteTableTests
         Assert.False(RouteTable.IsRequestIdShape("a.b"));
     }
 
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    [InlineData("\x2028")]
+    [InlineData("\r")]
+    [InlineData("\0")]
+    [InlineData(" ")]
+    public void A_request_id_shape_is_a_whole_text_match(string extra)
+    {
+        // Test plan ST-13: C-03 matches the whole text. A valid id followed by a line feed, a carriage
+        // return and line feed, a line separator or any other extra character is not an id, at either end
+        // and at every length; an end-of-line anchor would have let the first one through.
+        foreach (var id in (string[])["a", "request-0001", new string('a', ProtocolConstants.RequestIdMaxLength - 2)])
+        {
+            Assert.True(RouteTable.IsRequestIdShape(id));
+            Assert.False(RouteTable.IsRequestIdShape(id + extra));
+            Assert.False(RouteTable.IsRequestIdShape(extra + id));
+            Assert.Null(RouteTable.Match("DELETE", "/v1/requests/" + id + extra, out var requestId));
+            Assert.Null(requestId);
+        }
+
+        Assert.False(RouteTable.IsRequestIdShape(extra));
+    }
+
     [Fact]
     public void The_ten_rows_carry_the_flags_and_deadlines_of_the_protocol()
     {

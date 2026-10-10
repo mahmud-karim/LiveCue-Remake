@@ -1,8 +1,8 @@
 namespace LiveCue.Relay.Edge;
 
 /// <summary>
-/// Counts the authenticated HTTP requests in flight (C-31, step E-7). The foundation's pipeline does not
-/// use it yet; work package WP-W01 does.
+/// Counts the authenticated HTTP requests in flight (C-31, step E-7): the requests that passed step P-10
+/// and have not ended. A request leaves exactly once, however it ends.
 /// </summary>
 internal sealed class RequestGauge(int capacity)
 {

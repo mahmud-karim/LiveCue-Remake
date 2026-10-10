@@ -283,13 +283,20 @@ trusted to have applied any of them.
 | Parser limits | C-19. |
 | Timeouts | C-40, C-41, C-42. A request body slower than 240 bytes per second after a 5 s grace period is aborted by the server core. |
 | Connection cap | C-30. |
-| Listen socket | Opened for exclusive use of the address, so that no second socket can share the port while the relay runs. |
+| Listen socket | Opened for exclusive use of the address, so that no second socket can be bound to `127.0.0.1` on the relay port while the relay runs. (Windows keeps the wildcard address apart: a socket bound to it with the same port number receives nothing that is sent to `127.0.0.1`.) |
 | `Server` header | Never sent. |
 
 A request the HTTP layer itself rejects (malformed request line, oversized headers, invalid
-`Content-Length`, a body below the minimum data rate) is answered by the server core with a bare `400`,
+`Content-Length`, a transfer coding other than `chunked`, a missing `Host` header, an absolute target for
+another host, headers that do not complete within C-40) is answered by the server core with a bare `400`,
 `408`, `414` or `431` and `Connection: close`. Such an answer has no body and no `code`. This is the only
-case where an error has no `code`; the phone classifies it by status (13.6).
+case where an error has no `code`; the phone classifies it by status (13.6). A body below the minimum data
+rate is answered `408 REQUEST_TIMEOUT` with its code when no response has started. A TLS hello is a
+malformed request line (bare `400`). An HTTP/2 connection preface gets no HTTP/1.1 answer: the server core
+sends the HTTP/2 frame that refuses it and closes the connection.
+
+A request that carries both `Content-Length` and `Transfer-Encoding` is framed as chunked, never by the
+length, and the connection is closed after its response.
 
 ### 5.2 Order of checks
 
@@ -315,6 +322,11 @@ Consequences that are part of the contract:
   refused it and learns nothing about routes.
 - No work happens before E-3 passes: no body is read, no file is touched, no process is started, and no
   event is raised for the request. The only trace of a refused request is one of the three counters of 5.5.
+- An answer that is written while the request's body has not been read to its end carries
+  `Connection: close`, and the relay never reads another request from that connection: what is left of a
+  body can never be taken for the next request. (After such an answer the HTTP server discards the rest of
+  the declared body, waiting a few seconds for it at most, and then closes. Nothing of it is kept or
+  parsed.)
 - Cookies and every header not named in this file are ignored and never forwarded anywhere.
 
 ### 5.3 Responses
@@ -348,6 +360,12 @@ For routes that read a body (6.1):
 | 4 | The body is valid UTF-8 JSON, nesting depth at most 32, and its top level is an object (not an array, `null` or a scalar). An empty body is not valid. | `400 INVALID_JSON` |
 
 The request `Content-Type` header is not checked.
+
+Two properties of the relay's HTTP server (Kestrel) show at the limit. With a declared `Content-Length`,
+C-10 is exact. With chunked transfer coding the server's own count includes the chunk framing, so a chunked
+body is refused with `413 PAYLOAD_TOO_LARGE` once its bytes and its framing together pass C-10. And after a
+413 the server closes the connection at once: a caller that is still sending the oversized body may see the
+connection reset instead of the answer. The phone stays below C-11 and meets neither.
 
 ### 5.5 Deadlines, aborts and presence
 
@@ -1415,7 +1433,7 @@ untested-contract row the statement carries over.
 | P2-009 | `GET /v1/health` and `DELETE /v1/requests/x` sent with a body are `400 INVALID_REQUEST`. | R | new |
 | P2-010 | With C-31 authenticated requests held in flight, one more is `429 TOO_MANY_REQUESTS`; after one finishes, the next is served. | R | UT-17 |
 | P2-011 | Every response of status 400 or above written by the relay is a JSON object with a string `error` and a string `code` listed in 14.1. With every collaborator stubbed to fail with the text `PRIVATE DIAGNOSTIC`, no response body, speech frame or status object contains `PRIVATE`. | R | AC-RELAY-059, 074 |
-| P2-012 | `POST /v1/assist` with a body of 131,073 bytes is `413 PAYLOAD_TOO_LARGE`, with a truthful `Content-Length` and with chunked encoding. A valid body of exactly 131,072 bytes passes the body step. | R | AC-RELAY-006, 090 |
+| P2-012 | `POST /v1/assist` with a body of 131,073 bytes is `413 PAYLOAD_TOO_LARGE`, with a truthful `Content-Length` and with chunked encoding. A valid body of exactly 131,072 bytes, sent with its `Content-Length`, passes the body step (chunked: 5.4). | R | AC-RELAY-006, 090 |
 | P2-013 | On every body route the bodies `[]`, `null`, `"x"`, `{` and an empty body are `400 INVALID_JSON`. | R | new |
 | P2-014 | A body that does not complete within C-41 is `408 REQUEST_TIMEOUT`, and any slot the request held is free afterwards. | R | new |
 | P2-015 | The relay's only listening endpoint is `127.0.0.1` on its port. | R | AC-SCR-010 |

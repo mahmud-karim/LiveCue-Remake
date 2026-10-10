@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading.Channels;
 using LiveCue.Relay.Core;
 using LiveCue.Relay.Protocol;
@@ -9,14 +10,18 @@ namespace LiveCue.Relay.Diagnostics;
 /// events, the oldest dropped when full and the drops counted, so publishing never blocks a request and
 /// never throws. Order is preserved. It is also the diagnostic sink of architecture 3.10.
 ///
-/// First version (foundation): drops are counted; reporting them once per interval as a Diagnostic is
-/// work package WP-W01.
+/// Drops are reported at most once per interval of W-01, as one <see cref="Relay.Diagnostic"/> that holds
+/// a count and nothing else. The report is itself an event; the one it may push out is not reported again.
 /// </summary>
 internal sealed class EventChannel : IRelayEventSink
 {
+    /// <summary>The <see cref="Relay.Diagnostic.Source"/> of the drop report.</summary>
+    public const string Source = "events";
+
     private readonly TimeProvider _clock;
     private readonly Channel<RelayEvent> _channel;
     private long _dropped;
+    private long _reported;
 
     public EventChannel(TimeProvider clock)
     {
@@ -52,6 +57,32 @@ internal sealed class EventChannel : IRelayEventSink
             source,
             exception is null ? fixedText : $"{fixedText} ({exception.GetType().Name})"));
 
+    /// <summary>
+    /// Called once per interval of W-01 by the relay's timer: publishes one Diagnostic when events were
+    /// dropped since the last report, and nothing otherwise. Returns whether it published.
+    /// </summary>
+    public bool ReportDrops()
+    {
+        var dropped = Dropped;
+        var reported = Interlocked.Read(ref _reported);
+        if (dropped == reported)
+        {
+            return false;
+        }
+
+        Diagnostic(Source, DropText(dropped - reported));
+
+        // Read again: when the channel is still full the report pushed one more event out, and that one
+        // must not cause the next report.
+        Interlocked.Exchange(ref _reported, Dropped);
+        return true;
+    }
+
     /// <summary>No event is accepted afterwards; the reader completes once it has been drained.</summary>
     public void Complete() => _channel.Writer.TryComplete();
+
+    /// <summary>The fixed sentence of the drop report. It carries a count and nothing of any event.</summary>
+    internal static string DropText(long count) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{count} relay events were dropped because the host did not read them in time.");
 }
