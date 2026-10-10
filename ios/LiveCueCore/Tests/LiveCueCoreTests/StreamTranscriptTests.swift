@@ -286,6 +286,33 @@ final class StreamTranscriptTests: XCTestCase {
         XCTAssertEqual(transcript.partialText, "First")
     }
 
+    func testASpeechStartNeverReopensACompletedTurn() throws {
+        var transcript = StreamTranscript()
+        _ = transcript.apply(.speechStart(turn: 1, processedMs: 0))
+        XCTAssertNotNil(transcript.apply(.speechComplete(turn: 1, text: "Done.", processedMs: 900)))
+
+        // The provider starts the same turn again: it stays completed, so it takes no partial and no
+        // second final.
+        XCTAssertNil(transcript.apply(.speechStart(turn: 1, processedMs: 1_000)))
+        _ = transcript.apply(.transcript(turn: 1, text: "Again", processedMs: 1_100))
+        _ = transcript.apply(.transcript(turn: nil, text: "Again", processedMs: 1_100))
+        XCTAssertEqual(transcript.partialText, "")
+        XCTAssertNil(transcript.apply(.speechComplete(turn: 1, text: "Again.", processedMs: 1_200)))
+    }
+
+    func testASecondSpeechStartOfAnOpenTurnRecordsItsStartAgain() throws {
+        var transcript = StreamTranscript()
+        _ = transcript.apply(.speechStart(turn: 1, processedMs: 500))
+        _ = transcript.apply(.transcript(turn: 1, text: "Words", processedMs: 700))
+        _ = transcript.apply(.speechStart(turn: 1, processedMs: 2_000))
+
+        // The partial stays; the segment starts where the turn was last started.
+        XCTAssertEqual(transcript.partialText, "Words")
+        let segment = try XCTUnwrap(transcript.apply(.speechComplete(turn: 1, text: "Words.", processedMs: 3_000)))
+        XCTAssertEqual(segment.startSeconds, 2)
+        XCTAssertEqual(segment.endSeconds, 3)
+    }
+
     // MARK: - Final text and times
 
     func testTheFinalTextIsTrimmedAndTakenVerbatim() throws {
