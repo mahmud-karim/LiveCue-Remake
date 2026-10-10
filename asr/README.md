@@ -32,7 +32,7 @@ Nothing else is installed on the PC. Python and the model libraries live in the 
 | `static/index.html` | The lab test page, served at `/`. |
 | `benchmark.py` | Manual tool that replays a recording through `/stream`. |
 | `Dockerfile`, `requirements/` | One image per model over a shared base, with pinned versions. Dependencies only. |
-| `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1` | Load and unload a model. The relay runs these. |
+| `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1` | Load and unload a model. The relay runs its own copies of these ([below](#how-livecue-runs-them)). |
 | `Build-ASR-Images.ps1`, `Get-ASR-Weights.ps1` | Manual, one-time setup. Each asks before it does anything. |
 | `LabCommon.ps1` | Functions shared by the four scripts. |
 | `weights.json` | Where each model's weights come from: repository, pinned revision, sizes and checksums. |
@@ -82,7 +82,8 @@ Nothing in LiveCue runs these steps for you: not the application, not a test, no
    ```
 
 5. **Tell LiveCue Desktop where this folder is** (Settings, speech lab folder), unless it is the `asr\`
-   folder beside the executable.
+   folder beside the executable. It must be a drive-letter path on a fixed local drive; a network share
+   is treated as "not configured". Keep it where other Windows accounts cannot write.
 
 ### Where the weights come from
 
@@ -109,6 +110,10 @@ CUDA 12.8 from `download.pytorch.org` (about 4 GB), and the pinned Python packag
 10 GB of disk for the Nemotron image and about 15 GB for the Qwen3 image; they share the PyTorch layer,
 so both together need about 17 GB. These sizes are estimates and were not measured for this version.
 
+The `Dockerfile` names the base image by digest, so a build always gets the same image. The requirement
+files pin the version of each package they list. They do not carry package hashes yet, so `pip` is not
+run with `--require-hashes` and the packages those depend on are chosen at build time.
+
 ## Start and stop
 
 LiveCue does this for you when a paired iPhone asks for a PC speech model. By hand:
@@ -125,6 +130,7 @@ LiveCue does this for you when a paired iPhone asks for a PC speech model. By ha
 | `-Port <n>` | Start, Stop | The lab's port on this PC, default `47842`. |
 | `-NoBrowser` | Start | Do not open the lab page. |
 | `-EnsureDocker` | Start | If Docker's engine is down, start Docker Desktop first. Only the genuine program is started: its Authenticode signature must be valid and issued to Docker Inc. |
+| `-LabFolder <folder>` | Start | The lab folder: the one with `private\models\<model>` and the service code. Default: the folder the script is in. |
 
 A first load can take a few minutes. Start waits up to 2 minutes for Docker and up to 8 minutes for the
 model. Both scripts exit with code 0 on success and non-zero on failure.
@@ -139,6 +145,23 @@ What the scripts refuse to do:
 
 Stop leaves the container in place, stopped. Images and weights are never touched.
 
+### How LiveCue runs them
+
+LiveCue does not run the script files in this folder. `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1` and
+`LabCommon.ps1` are built into the relay, which writes its own copies to its data folder, checks them
+against the built-in ones before every run, and starts those:
+
+```text
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File <data folder>\lab\Start-ASR-Lab.ps1 -LabFolder <this folder> -Model <model> -Port <lab port> -NoBrowser -EnsureDocker
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File <data folder>\lab\Stop-ASR-Lab.ps1 -Port <lab port>
+```
+
+So the scripts cannot assume that they lie in the lab folder. Start is told the folder with `-LabFolder`
+and takes only data from it: the weights and the service code, both mounted read-only into the
+container. Stop needs nothing from it. Both load `LabCommon.ps1` from the folder they themselves are in
+and never from `-LabFolder`, and no script in this folder is run. Editing a script here therefore changes
+what you run by hand, not what LiveCue runs.
+
 ### The container
 
 | | |
@@ -147,7 +170,7 @@ Stop leaves the container in place, stopped. Images and weights are never touche
 | Images | `livecue-remake-asr-nemotron:1.0`, `livecue-remake-asr-qwen3:1.0` |
 | Port | `127.0.0.1:<lab port>:8765`. Published on the PC's loopback address only. |
 | Hardening | `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 512`, `--shm-size 1g`, `--gpus all` |
-| Mounts, both read-only | `private\models\<model>` at `/models`; this folder at `/app` |
+| Mounts, both read-only | `<lab folder>\private\models\<model>` at `/models`; `<lab folder>` at `/app` |
 | Environment | `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1`, `GRADIO_ANALYTICS_ENABLED=False`, `ASR_HOST_PORT=<lab port>` |
 
 The image holds the dependencies and nothing else. The code that runs is this folder, mounted read-only,
@@ -156,9 +179,21 @@ from the previous LiveCue's lab on purpose, so the two can sit on one PC without
 
 ## Protocol summary
 
-No authentication. The service is reachable only on the PC's loopback address, and both sockets check
-`Host` and `Origin` so that a web page in a browser cannot reach them. Audio is always raw PCM, signed
-16-bit little-endian, mono, 16,000 Hz.
+No authentication. The service is reachable only on the PC's loopback address, and the rules below keep
+a web page in a browser from reaching it. Audio is always raw PCM, signed 16-bit little-endian, mono,
+16,000 Hz.
+
+**`Host`, on every route.** Every request, HTTP or WebSocket, must carry `Host: 127.0.0.1:<lab port>` or
+`Host: localhost:<lab port>`. Anything else is refused before any handler runs, whatever the path: `403`
+with an empty body over HTTP, close code 1008 on a socket (on the wire, HTTP 403). This is what stops a
+page that points its own host name at `127.0.0.1` (DNS rebinding): its requests are same-origin and
+carry no `Origin`, but they name the page's host.
+
+**`Origin` and `Sec-Fetch-Site`, on HTTP.** `GET /health`, `GET /` and `GET /sample` also answer `403` to
+an `Origin` other than `http://127.0.0.1:<lab port>` or `http://localhost:<lab port>`, and to
+`Sec-Fetch-Site: cross-site`. A request with the lab's own `Host` and no `Origin` is served: that is the
+relay's probe, the launcher's probe and the lab page. The two sockets have their own `Origin` rules,
+below.
 
 ### `GET /health`
 
@@ -212,7 +247,9 @@ the text `{"type":"stop"}` ends the test. The service sends `ready`, then
 - Audio and transcripts exist only in memory. Nothing is written to disk.
 - The service makes no outbound network call. The images set `HF_HUB_OFFLINE=1` and
   `HF_HUB_DISABLE_TELEMETRY=1`; the launcher adds `VLLM_NO_USAGE_STATS=1`, `DO_NOT_TRACK=1` and
-  `GRADIO_ANALYTICS_ENABLED=False`.
+  `GRADIO_ANALYTICS_ENABLED=False`. These switches are requests to the libraries, not a barrier: the
+  container is on Docker's default network and is not cut off from the internet. That is an accepted risk
+  for this version (`docs/architecture/03-system-architecture.md` section 6.5).
 - The log holds status lines only: numbers, model names, exception type names and code locations. It never
   holds audio, transcript text, anything a client sent, or the message of an exception, because library
   exceptions can quote what they were processing. Once the model is warmed up, Python's `logging` module
@@ -245,7 +282,7 @@ python -m venv .venv
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests\Test-LabScripts.ps1
 ```
 
-`tests/test_protocol.py` has one test per lab statement of the conformance checklist (P2-150 to P2-161).
+`tests/test_protocol.py` has one test per lab statement of the conformance checklist (P2-150 to P2-162).
 The other files go into each area: admission, frames, commands, sample-exact windows, turn numbers,
 timing members, timers, queue overflow in both directions, the health document, configuration, the
 privacy of the log, the benchmark tool, and the real entry point behind uvicorn on an ephemeral port.
@@ -260,6 +297,9 @@ $env:ASR_ENGINE = 'fake'; $env:ASR_LISTEN_PORT = '47842'; $env:ASR_HOST_PORT = '
 .\.venv\Scripts\python server.py
 ```
 
+Dial it as `127.0.0.1:47842` or `localhost:47842`. Under any other name, or with a `Host` that names
+another port, every route answers `403`.
+
 ## What is and is not verified
 
 Verified by the automated tests, without a GPU:
@@ -272,6 +312,8 @@ Verified by the automated tests, without a GPU:
   real: downloading with resume and checksum verification (against a loopback server), reading a health
   document, the signature check (against an installed Docker Desktop), and the first two steps of Start
   and Stop with Docker not running;
+- the two launchers started the way the relay starts them: copies in another folder, run by a separate
+  `powershell.exe -File`, with `-LabFolder` pointing at a lab folder whose own scripts must stay unread;
 - the plumbing of the two model adapters against stand-ins for `torch`, `transformers` and `qwen_asr`:
   which calls are made, with which arguments, in which order, on exactly which audio.
 
@@ -323,3 +365,6 @@ above. On the PC itself it needs `requirements/benchmark.txt` plus `numpy` and `
 | Host port | Fixed at 8765. | A `-Port` parameter, default 47842; the `Host` check follows it. |
 | Setup | Not scripted. | `Build-ASR-Images.ps1` and `Get-ASR-Weights.ps1`, with the weight sources recorded here. |
 | Lab page | Hard-coded GPU label. | Removed. |
+| HTTP routes | Only the two sockets checked `Host`; `/health`, `/` and `/sample` answered anyone. | `Host` is checked on every route, and the HTTP routes also refuse a foreign `Origin` and a cross-site fetch. |
+| Where the launchers lie | The scripts took their own folder to be the lab folder. | Start takes `-LabFolder`; the relay runs its own copies from its data folder and never a script from the lab folder. |
+| Base image | Named by tag. | Named by digest. |
