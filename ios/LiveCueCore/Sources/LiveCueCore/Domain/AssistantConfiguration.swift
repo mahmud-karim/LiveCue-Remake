@@ -14,7 +14,6 @@ public struct AssistantConfiguration: Codable, Equatable, Sendable {
 
     /// `provider` absent means `.codex`; it is always written.
     public init(from decoder: any Decoder) throws {
-        // STUB(WP-02)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         model = try container.decode(String.self, forKey: .model)
         reasoningEffort = try container.decode(String.self, forKey: .reasoningEffort)
@@ -23,7 +22,11 @@ public struct AssistantConfiguration: Codable, Equatable, Sendable {
 
     /// codex: gpt-5.6-sol / low. openrouter: "" / default.
     public static func `default`(for provider: AssistantProvider) -> AssistantConfiguration {
-        // STUB(WP-02)
-        AssistantConfiguration(provider: provider)
+        switch provider {
+        case .codex:
+            return AssistantConfiguration()
+        case .openrouter:
+            return AssistantConfiguration(model: "", reasoningEffort: "default", provider: .openrouter)
+        }
     }
 }

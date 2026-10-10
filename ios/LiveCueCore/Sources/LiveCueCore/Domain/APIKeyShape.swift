@@ -6,7 +6,13 @@ public enum APIKeyShape: Equatable, Sendable {
 
     /// `empty` for "", `containsWhitespace` when any character is whitespace or a newline.
     public static func check(_ key: String) -> APIKeyShape {
-        // STUB(WP-02)
-        .valid
+        if key.isEmpty {
+            return .empty
+        }
+        // Scalars, not characters: a space that follows a prepending mark is part of that mark's character.
+        if key.unicodeScalars.contains(where: { $0.properties.isWhitespace }) {
+            return .containsWhitespace
+        }
+        return .valid
     }
 }
