@@ -1,9 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Protocol conformance, relay side, against a real Kestrel listener on a system-chosen port. -->
+  <!--
+    Protocol conformance, relay side (test plan section 1): a real relay on a real Kestrel listener, on a
+    port the system picks, with every seam faked. The shared helpers of tests/Shared are linked in by
+    Directory.Build.props.
+  -->
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LiveCue.Relay\LiveCue.Relay.csproj" />
+    <!-- The child program of the process-runner tests lands beside this assembly (tests/Shared/DotnetHost.cs finds it). -->
+    <ProjectReference Include="..\LiveCue.TestChild\LiveCue.TestChild.csproj" />
   </ItemGroup>
 
 </Project>

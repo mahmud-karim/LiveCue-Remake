@@ -34,6 +34,8 @@
   <SolidColorBrush x:Key="SurfaceScrimBrush" Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" Opacity="0.8" />
   <!-- The QR tile stays black on white whatever the theme, or it stops scanning. -->
   <SolidColorBrush x:Key="SurfaceQrBrush" Color="#FFFFFFFF" />
+  <!-- The pairing code stays black on white under every contrast theme, or it stops scanning. -->
+  <SolidColorBrush x:Key="QrModuleBrush" Color="#FF000000" />
 
   <!-- State overlays -->
   <SolidColorBrush x:Key="StateHoverBrush" Color="#00FFFFFF" />

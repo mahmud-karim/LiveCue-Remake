@@ -10,12 +10,15 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using LiveCue.Desktop.Composition;
+using LiveCue.Desktop.Controls;
 using LiveCue.Desktop.Infrastructure;
 using LiveCue.Desktop.Interop;
+using LiveCue.Desktop.Shell;
 using LiveCue.Desktop.Theming;
-using LiveCue.Desktop.ViewModels;
 using LiveCue.Hosting;
 using LiveCue.Relay;
+using LiveCue.Relay.Protocol;
 using static LiveCue.Desktop.SelfTest.VisualChecks;
 
 namespace LiveCue.Desktop.SelfTest;
@@ -23,19 +26,23 @@ namespace LiveCue.Desktop.SelfTest;
 /// <summary>
 /// <c>LiveCueRemake.exe --self-test [--screenshots &lt;folder&gt;] [--scale 1|1.5]</c> (architecture 3.13).
 ///
-/// Builds the real window on the real view models and the real supervisor, with a scripted relay and
-/// an in-memory settings store. No port is bound, no Tailscale or Codex command runs, nothing is read
-/// from or written to the data folder, and no network is used. It feeds synthetic events, checks what
-/// the window shows, renders each scene to a PNG at the default and at the minimum window size,
-/// prints "Desktop self-test passed" and exits 0. The first failed check prints its name and exits 1.
+/// Builds the real window on the real view models, the real session and the real supervisor, with a
+/// scripted relay and scripted hosting parts. No port is bound, no Tailscale or Codex command runs,
+/// nothing is read from or written to the data folder, and no network is used. It feeds synthetic
+/// events, checks what the window shows, renders each scene to a PNG at the default and at the minimum
+/// window size, prints "Desktop self-test passed" and exits 0. The first failed check prints its name
+/// and exits 1.
 ///
-/// The window is shown off-screen and never takes the focus.
+/// First version (foundation): the spike's run, as far as the foundation's view models carry it: the
+/// stopped window, the four pages, a start, a phone, the contrast theme, the activity log, a stop and
+/// a port-in-use fault, with the look and crisp-text checks on every scene. The fifteen scenes, the
+/// named assertions and the 30 screenshots of W-design 5.13 are work package WP-W11.
 ///
-/// The PNGs come from WPF's own software renderer (RenderTargetBitmap), which draws the same tree
-/// with the same brushes and effects but with greyscale text. They are not a capture of the screen:
-/// WPF presents nothing for a window that is off-screen, or while the display is asleep, and
-/// PrintWindow returns an empty client area for it. So ClearType on the real window is protected by
-/// the crisp-text rule checked on every scene, not by pixels.
+/// The window is shown off-screen and never takes the focus. The PNGs come from WPF's own software
+/// renderer (RenderTargetBitmap), which draws the same tree with the same brushes and effects but
+/// with greyscale text. They are not a capture of the screen: WPF presents nothing for a window that
+/// is off-screen, or while the display is asleep. So ClearType on the real window is protected by the
+/// crisp-text rule checked on every scene, not by pixels.
 /// </summary>
 internal static class SelfTestRunner
 {
@@ -46,22 +53,21 @@ internal static class SelfTestRunner
 
     public const string PassedLine = "Desktop self-test passed";
 
-    private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(120);
-
-    public static async Task<int> RunAsync(App app, AppArguments arguments)
+    public static async Task<int> RunAsync(App app, AppEnvironment environment)
     {
-        var log = new SelfTestLog(arguments.ScreenshotDirectory);
+        var log = new SelfTestLog(environment.ScreenshotDirectory);
 
-        // A self-test that hangs must still end, or a CI job would wait for its own timeout.
+        // A self-test that hangs must still end, or a CI job would wait for its own timeout (W-12).
+        var deadline = ProtocolConstants.SelfTestWatchdog;
         using var watchdog = new Timer(
             _ =>
             {
-                log.Write("Desktop self-test FAILED: no result after " + Deadline.TotalSeconds.ToString(CultureInfo.InvariantCulture) + " s");
+                log.Write("Desktop self-test FAILED: no result after " + deadline.TotalSeconds.ToString(CultureInfo.InvariantCulture) + " s");
                 log.Save();
                 Environment.Exit(ExitTimedOut);
             },
             null,
-            Deadline,
+            deadline,
             Timeout.InfiniteTimeSpan);
 
         Exception? dispatcherFailure = null;
@@ -73,7 +79,7 @@ internal static class SelfTestRunner
 
         try
         {
-            await new SelfTestSession(app, arguments, log).RunAsync();
+            await new SelfTestSession(app, environment, log).RunAsync();
             if (dispatcherFailure is not null)
             {
                 throw new SelfTestFailedException("no exception to reach the dispatcher, but one did: " + dispatcherFailure);
@@ -102,18 +108,17 @@ internal static class SelfTestRunner
 }
 
 /// <summary>One run of the self-test.</summary>
-internal sealed partial class SelfTestSession(App app, AppArguments arguments, SelfTestLog log)
+internal sealed partial class SelfTestSession(App app, AppEnvironment environment, SelfTestLog log)
 {
     private const double OffScreen = -30000;
     private const string TestEndpoint = "https://pc.example.test:11443/";
+    private const string PortInUse =
+        "Port 47841 is already in use. Close the other LiveCue window, or change the relay port in Settings, then start the relay.";
 
     private static readonly Size DefaultSize = new(1240, 660);
     private static readonly Size MinimumSize = new(960, 620);
     private static readonly Size BeyondAnyDesktop = new(4096, 2304);
-
-    /// <summary>A path the self-test hands to the supervisor and then proves nobody created.</summary>
-    private static readonly string UnusedDataDirectory =
-        Path.Combine(Path.GetTempPath(), "LiveCue-self-test-data-folder-that-must-never-exist");
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
     private readonly List<string> _screenshots = [];
 
@@ -124,97 +129,100 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         // Screenshots show Daylight whatever this PC is set to; the contrast look is captured on purpose below.
         themes.Apply(AppTheme.Daylight);
 
-        var realDataFolder = Snapshot(DataFolder.DefaultPath);
         var clock = new ManualClock(new DateTimeOffset(2026, 10, 10, 9, 14, 2, TimeSpan.Zero));
         var script = new RelayScript(clock);
+        var hosting = new ScriptedHosting(clock, script);
+        var clipboard = new RecordingClipboard();
+        var launcher = new RecordingLauncher();
 
         await using var services = AppServices.Create(
-            new WpfUiDispatcher(app.Dispatcher),
-            new InMemorySettingsStore(),
-            UnusedDataDirectory,
-            script.Create,
-            clock);
+            hosting.Services, new WpfUiDispatcher(app.Dispatcher), clock, clipboard, launcher);
 
         var window = ShowWindow(services.Shell);
         try
         {
-            await ExerciseAsync(window, services, script, clock, themes);
+            await ExerciseAsync(window, services, script, themes);
         }
         finally
         {
             window.Close();
         }
 
-        Require(!Directory.Exists(UnusedDataDirectory), "nothing to be written where the data folder would be");
-        Require(Snapshot(DataFolder.DefaultPath) == realDataFolder, "the real data folder to be exactly as it was");
-        log.Write("isolation: scripted relay, in-memory settings, no port bound, data folder untouched");
-        log.Write($"screenshots: {_screenshots.Count}" + (arguments.ScreenshotDirectory is null ? " (none requested)" : string.Empty));
+        Require(hosting.Processes.Calls == 0, "no process to be started");
+        Require(hosting.Files.Touches == 0, "no file to be read or written");
+        Require(hosting.Mappings.Executions == 0, "no Tailscale mapping command to be asked for");
+        Require(clipboard.Texts.Count == 0 && launcher.Opened.Count == 0, "the clipboard and the launcher to be left alone");
+        Require(!Directory.Exists(ScriptedHosting.UnusedDataDirectory), "nothing to be written where the data folder would be");
+        log.Write("isolation: scripted relay and hosting, no port bound, no process, no file touched, no data folder used");
+        log.Write($"screenshots: {_screenshots.Count}" + (environment.ScreenshotDirectory is null ? " (none requested)" : string.Empty));
     }
 
-    private async Task ExerciseAsync(MainWindow window, AppServices services, RelayScript script, ManualClock clock, ThemeManager themes)
+    private async Task ExerciseAsync(MainWindow window, AppServices services, RelayScript script, ThemeManager themes)
     {
         var shell = services.Shell;
-        var relay = shell.Relay;
+        var session = services.Session;
         var root = (FrameworkElement)window.Content;
 
         await SettleAsync(window);
         var dpi = VisualTreeHelper.GetDpi(window);
-        log.Write($"window: dpi scale {dpi.DpiScaleX:0.##}, output scale {arguments.Scale.ToString(CultureInfo.InvariantCulture)}, text family \"{DescribeTextFont(window)}\"");
+        log.Write($"window: dpi scale {dpi.DpiScaleX:0.##}, output scale {environment.Scale.ToString(CultureInfo.InvariantCulture)}, text family \"{DescribeTextFont(window)}\"");
 
-        // Stopped: what the window shows at launch.
-        Require(shell.SelectedPage.Id == PageId.Live, "the Live view to be selected at launch");
-        Require(Text(root, "RelayStatusText") == "Stopped", "the relay status to read \"Stopped\" at launch");
-        Require(Text(root, "SidebarRelayStatus") == "Stopped", "the sidebar to read \"Stopped\" at launch");
-        Require(Text(root, "PhoneStatusText") == "iPhone not connected", "the phone status to read \"iPhone not connected\" at launch");
-        Require(Text(root, "PcAddressText") == "Shown when the relay is running", "the PC address placeholder before the first start");
-        Require(Button(root, "StartRelayButton") is { IsVisible: true, IsEnabled: true }, "Start relay to be offered while stopped");
-        Require(Button(root, "StopRelayButton") is { IsVisible: false }, "Stop relay to be hidden while stopped");
-        Require(Text(root, "TranscriptText") == "Your next question will appear here.", "the transcript placeholder");
+        // Stopped: what the window shows at launch. Nothing has been started.
+        Require(shell.SelectedPage == AppPage.Live, "the Live view to be selected at launch");
+        Require(Text(root, AutomationIds.RelayStatusText) == "Stopped", "the relay status to read \"Stopped\" at launch");
+        Require(Text(root, AutomationIds.SidebarRelayStatus) == "Stopped", "the sidebar to read \"Stopped\" at launch");
+        Require(Text(root, AutomationIds.PhoneStatusText) == "iPhone not connected", "the phone status to read \"iPhone not connected\" at launch");
+        Require(Text(root, AutomationIds.PcAddressText) == "Shown when the relay is running", "the PC address placeholder before the first start");
+        Require(Button(root, AutomationIds.StartRelayButton) is { IsVisible: true, IsEnabled: true }, "Start relay to be offered while stopped");
+        Require(Button(root, AutomationIds.PauseRelayButton) is { IsVisible: false }, "Pause relay to be hidden while stopped");
+        Require(Button(root, AutomationIds.StopRelayButton) is { IsVisible: false }, "Stop relay to be hidden while stopped");
+        Require(Text(root, AutomationIds.TranscriptText) == "Your next question will appear here.", "the transcript placeholder");
+        Require(script.Created == 0, "no relay to exist before Start relay");
         var stopped = await CaptureAsync(window, root, "live-stopped");
         CheckGroundAndGlass(window, root, stopped);
         await CheckReferenceCompositesAsync(window, root);
         await CheckLayoutBeyondDesktopAsync(window, root);
 
-        await ShowAsync(window, shell, PageId.Pairing);
-        Require(Button(root, "ShowQrButton") is { IsEnabled: false }, "Show QR to be disabled until the relay is ready");
-        Require(Button(root, "ResetPairingButton") is { IsEnabled: false }, "Reset pairing to be disabled while the relay is not running");
+        await ShowAsync(window, shell, AppPage.Pairing);
+        Require(Button(root, AutomationIds.ShowQrButton) is { IsEnabled: false }, "Show QR to be disabled until the relay is ready");
+        Require(VisibleTexts(root).Contains("Start the relay to show the QR"), "the QR tile's placeholder while the relay is stopped");
         await CaptureAsync(window, root, "pairing-empty");
 
-        await ShowAsync(window, shell, PageId.Activity);
-        Require(Button(root, "ClearActivityButton") is { IsEnabled: false }, "Clear activity to be disabled while the log is empty");
+        await ShowAsync(window, shell, AppPage.Activity);
+        Require(Button(root, AutomationIds.ClearActivityButton) is { IsEnabled: false }, "Clear activity to be disabled while the log is empty");
         Require(VisibleTexts(root).Contains("No activity yet"), "the empty state of the activity view");
         await CaptureAsync(window, root, "activity-empty");
 
-        await ShowAsync(window, shell, PageId.Settings);
+        await ShowAsync(window, shell, AppPage.Settings);
         Require(VisibleTexts(root).Contains("Private tailnet"), "the settings view to show the Private tailnet mode");
         Require(VisibleTexts(root).Contains("47841"), "the settings view to show relay port 47841");
         await CaptureAsync(window, root, "settings-private");
 
-        // Started: a synthetic RelayStarted with an endpoint on a reserved test domain, then a phone.
-        await ShowAsync(window, shell, PageId.Live);
-        await relay.StartCommand.ExecuteAsync(null);
-        await SettleAsync(window);
-        Require(script.Current is not null && services.Supervisor.IsRunning, "the supervisor to be running the scripted relay");
-        Require(relay.State == RelayState.Ready, "the relay state to be Ready after the started event");
-        Require(Text(root, "RelayStatusText") == "Ready", "the relay status to read \"Ready\"");
-        Require(Text(root, "SidebarRelayStatus") == "Ready", "the sidebar to read \"Ready\"");
-        Require(Text(root, "PcAddressText") == TestEndpoint, "the PC address to be the advertised endpoint");
-        Require(Button(root, "StartRelayButton") is { IsVisible: false }, "Start relay to be replaced while the relay runs");
-        Require(Button(root, "StopRelayButton") is { IsVisible: true, IsEnabled: true }, "Stop relay to be offered while the relay runs");
+        // Started: the scripted checks pass, the scripted relay starts, then a phone is seen.
+        await ShowAsync(window, shell, AppPage.Live);
+        Press(root, AutomationIds.StartRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Ready, "the relay state to become Ready after Start relay");
+        Require(script.Current is not null && services.Hosting.Supervisor.State == SupervisorState.Running, "the supervisor to be running the scripted relay");
+        Require(Text(root, AutomationIds.RelayStatusText) == "Ready", "the relay status to read \"Ready\"");
+        Require(Text(root, AutomationIds.SidebarRelayStatus) == "Ready", "the sidebar to read \"Ready\"");
+        Require(Text(root, AutomationIds.PcAddressText) == TestEndpoint, "the PC address to be the advertised endpoint");
+        Require(Button(root, AutomationIds.StartRelayButton) is { IsVisible: false }, "Start relay to be replaced while the relay runs");
+        Require(Button(root, AutomationIds.PauseRelayButton) is { IsVisible: true, Content: "Pause relay" }, "Pause relay to be offered while the relay runs");
+        Require(Button(root, AutomationIds.StopRelayButton) is { IsVisible: true, IsEnabled: true }, "Stop relay to be offered while the relay runs");
 
         script.PhoneSeen();
-        await DeliverAsync(window, services);
-        Require(Text(root, "PhoneStatusText") == "iPhone connected", "a phone-seen event to show \"iPhone connected\"");
-        Require(Text(root, "SidebarPhoneStatus") == "iPhone connected", "the sidebar to show \"iPhone connected\"");
+        await WaitForAsync(window, () => session.Presence == PhonePresence.Connected, "a phone-seen event to reach the session");
+        Require(Text(root, AutomationIds.PhoneStatusText) == "iPhone connected", "a phone-seen event to show \"iPhone connected\"");
+        Require(Text(root, AutomationIds.SidebarPhoneStatus) == "iPhone connected", "the sidebar to show \"iPhone connected\"");
         await CaptureAsync(window, root, "live-ready");
 
-        // Presence: connected for 15 s after the last request, then idle; it never falls back to "not connected".
-        clock.Advance(RelayViewModel.ConnectedWindow + TimeSpan.FromSeconds(1));
-        await SettleAsync(window);
-        Require(Text(root, "PhoneStatusText") == "iPhone idle", "the phone to read \"iPhone idle\" 16 s after its last request");
-        script.PhoneSeen();
-        await DeliverAsync(window, services);
-        Require(Text(root, "PhoneStatusText") == "iPhone connected", "a new request to make the phone connected again");
+        // Pause and resume go through the relay and come back as events.
+        Press(root, AutomationIds.PauseRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Paused, "Pause relay to pause the relay");
+        Require(Text(root, AutomationIds.RelayStatusText) == "Paused", "the relay status to read \"Paused\"");
+        Require(Button(root, AutomationIds.PauseRelayButton) is { Content: "Resume relay" }, "the button to read \"Resume relay\" while paused");
+        Press(root, AutomationIds.PauseRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Ready, "Resume relay to resume the relay");
 
         // The contrast-theme dictionary, forced (system colours stay whatever this PC uses).
         themes.Apply(AppTheme.HighContrast);
@@ -225,55 +233,52 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         await SettleAsync(window);
         Require(CountEffects(root) > 0, "shadows to return with Daylight");
 
-        await ShowAsync(window, shell, PageId.Pairing);
-        Require(Button(root, "ShowQrButton") is { IsEnabled: true }, "Show QR to be enabled once the relay is ready");
+        // The mapping is present in this script, so the connection is ready and Show QR is offered.
+        await ShowAsync(window, shell, AppPage.Pairing);
+        Require(session.IsConnectionReady, "the connection to be ready once the scripted mapping was inspected");
+        Require(Button(root, AutomationIds.ShowQrButton) is { IsEnabled: true }, "Show QR to be enabled once the connection is ready");
 
         // Activity: the log has the start line; a diagnostic is shown with its prefix; Clear empties it.
         script.Diagnostic("An event handler failed (InvalidOperationException).");
-        await DeliverAsync(window, services);
-        await ShowAsync(window, shell, PageId.Activity);
+        await WaitForAsync(window, () => shell.Activity.Entries.Count == 2, "the diagnostic to reach the activity log");
+        await ShowAsync(window, shell, AppPage.Activity);
         var activity = VisibleTexts(root);
         Require(activity.Any(text => text.Contains("Relay started. Waiting for your iPhone.", StringComparison.Ordinal)), "the activity log to record the start");
         Require(activity.Any(text => text.Contains("Relay diagnostic: ", StringComparison.Ordinal)), "the activity log to prefix a diagnostic");
         Require(activity.Any(text => text.Contains("09:14:02", StringComparison.Ordinal)), "each activity entry to start with its time");
         Require(VisibleTexts(root).Contains("2 entries"), "the footer to count the entries");
         await CaptureAsync(window, root, "activity-filled");
-        var clear = Button(root, "ClearActivityButton");
-        Require(clear is { IsEnabled: true }, "Clear activity to be enabled while the log has entries");
-        clear!.Command.Execute(null);
+        Press(root, AutomationIds.ClearActivityButton);
         await SettleAsync(window);
-        Require(services.Activity.Entries.Count == 0 && VisibleTexts(root).Contains("No activity yet"), "Clear activity to empty the log");
+        Require(shell.Activity.IsEmpty && VisibleTexts(root).Contains("No activity yet"), "Clear activity to empty the log");
 
         // Stop: the stopped layout. The PC address is kept; the phone goes back to "not connected".
-        await ShowAsync(window, shell, PageId.Live);
-        await relay.StopCommand.ExecuteAsync(null);
-        await SettleAsync(window);
-        Require(Text(root, "RelayStatusText") == "Stopped", "the relay status to read \"Stopped\" after Stop relay");
-        Require(Text(root, "PhoneStatusText") == "iPhone not connected", "the phone to reset when the relay stops");
-        Require(Text(root, "PcAddressText") == TestEndpoint, "the PC address to stay after Stop relay");
-        Require(Button(root, "StartRelayButton") is { IsVisible: true, IsEnabled: true }, "Start relay to be offered again");
-        Require(!services.Supervisor.IsRunning, "the supervisor to have stopped the relay");
+        await ShowAsync(window, shell, AppPage.Live);
+        Press(root, AutomationIds.StopRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Stopped, "Stop relay to stop the relay");
+        Require(Text(root, AutomationIds.RelayStatusText) == "Stopped", "the relay status to read \"Stopped\" after Stop relay");
+        Require(Text(root, AutomationIds.PhoneStatusText) == "iPhone not connected", "the phone to reset when the relay stops");
+        Require(Text(root, AutomationIds.PcAddressText) == TestEndpoint, "the PC address to stay after Stop relay");
+        Require(Button(root, AutomationIds.StartRelayButton) is { IsVisible: true, IsEnabled: true }, "Start relay to be offered again");
+        Require(services.Hosting.Supervisor.State == SupervisorState.Stopped, "the supervisor to have stopped the relay");
 
-        // A port-in-use fault: the stopped layout, and the fault text stays.
+        // A port-in-use fault: the stopped layout, and the fault text, with the port, stays.
         script.NextStartFault = RelayFaultCode.PortInUse;
-        await relay.StartCommand.ExecuteAsync(null);
-        await SettleAsync(window);
-        const string portInUse = "The relay port is already in use. Close the other LiveCue relay, then click Start relay.";
-        Require(relay.State == RelayState.Faulted, "a port-in-use fault to leave the relay faulted");
-        Require(Text(root, "RelayStatusText") == portInUse, "the fault to show its text as the status");
-        Require(Text(root, "SidebarRelayStatus") == "Cannot start yet", "the sidebar to read \"Cannot start yet\" after a failed start");
-        Require(Button(root, "StartRelayButton") is { IsVisible: true, IsEnabled: true }, "a fault to return the stopped layout with Start relay");
-        Require(services.Activity.Entries.Any(entry => entry.Message == portInUse), "the fault to be recorded in the activity log");
+        Press(root, AutomationIds.StartRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Faulted, "a port-in-use fault to leave the relay faulted");
+        Require(Text(root, AutomationIds.RelayStatusText) == PortInUse, "the fault to show its text, with the port, as the status");
+        Require(Text(root, AutomationIds.SidebarRelayStatus) == "Relay stopped", "the sidebar to read \"Relay stopped\" after a failed start");
+        Require(Button(root, AutomationIds.StartRelayButton) is { IsVisible: true, IsEnabled: true }, "a fault to return the stopped layout with Start relay");
+        Require(shell.Activity.Entries.Any(entry => entry.Message == PortInUse), "the fault to be recorded in the activity log");
         await CaptureAsync(window, root, "fault-port-in-use");
 
         // A new start is a new relay instance, and a successful one clears the fault text.
-        await relay.StartCommand.ExecuteAsync(null);
-        await SettleAsync(window);
-        Require(Text(root, "RelayStatusText") == "Ready", "the next start to succeed and clear the fault text");
+        Press(root, AutomationIds.StartRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Ready, "the next start to succeed");
+        Require(Text(root, AutomationIds.RelayStatusText) == "Ready", "the next start to clear the fault text");
         Require(script.Created == 3, "every start to create a new relay instance");
-        await relay.StopCommand.ExecuteAsync(null);
-        await SettleAsync(window);
-        Require(relay.State == RelayState.Stopped, "the relay to be stopped at the end");
+        Press(root, AutomationIds.StopRelayButton);
+        await WaitForAsync(window, () => session.State == RelayUiState.Stopped, "the relay to be stopped at the end");
     }
 
     /// <summary>
@@ -291,6 +296,7 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
             ShowActivated = false,
             ShowInTaskbar = false,
             KeepActiveAppearance = true,
+            DrivesRelay = false,
         };
         window.SourceInitialized += (_, _) =>
             HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.AddHook(AllowSizesBeyondTheDesktop);
@@ -331,17 +337,35 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         return IntPtr.Zero;
     }
 
-    private static async Task ShowAsync(MainWindow window, ShellViewModel shell, PageId page)
+    private static async Task ShowAsync(MainWindow window, ShellViewModel shell, AppPage page)
     {
         shell.Navigate(page);
         await SettleAsync(window);
-        Require(shell.SelectedPage.Id == page, $"the {page} view to be selected");
+        Require(shell.SelectedPage == page, $"the {page} view to be selected");
     }
 
-    /// <summary>Waits until the supervisor has handed every raised event to the view model and the window has shown it.</summary>
-    private static async Task DeliverAsync(MainWindow window, AppServices services)
+    /// <summary>Clicks the button with that automation id the way a user would: through its command.</summary>
+    private static void Press(FrameworkElement root, string automationId)
     {
-        await services.Supervisor.WhenIdleAsync();
+        var button = Button(root, automationId);
+        Require(button is { IsVisible: true, IsEnabled: true }, $"{automationId} to be there to press");
+        Require(button!.Command is not null && button.Command.CanExecute(button.CommandParameter), $"{automationId} to be able to run");
+        button.Command!.Execute(button.CommandParameter);
+    }
+
+    /// <summary>
+    /// Waits until the supervisor's events have reached the session and the window shows them. Events
+    /// travel from a thread-pool task to the dispatcher, so there is nothing to await but the result.
+    /// </summary>
+    private static async Task WaitForAsync(MainWindow window, Func<bool> condition, string expectation)
+    {
+        var until = DateTime.UtcNow + Patience;
+        while (!condition())
+        {
+            Require(DateTime.UtcNow < until, expectation);
+            await Task.Delay(TimeSpan.FromMilliseconds(20));
+        }
+
         await SettleAsync(window);
     }
 
@@ -379,7 +403,7 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
 
             var frame = Render(root, 1);
             first ??= frame;
-            var fileName = Save(Math.Abs(arguments.Scale - 1) < 0.001 ? frame : Render(root, arguments.Scale), scene, size);
+            var fileName = Save(Math.Abs(environment.Scale - 1) < 0.001 ? frame : Render(root, environment.Scale), scene, size);
             log.Write($"scene: {fileName} ({texts} text blocks crisp, {casters} shadow casters)");
         }
 
@@ -402,11 +426,11 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
 
     private string Save(BitmapSource bitmap, string scene, Size size)
     {
-        var scaleSuffix = Math.Abs(arguments.Scale - 1) < 0.001
+        var scaleSuffix = Math.Abs(environment.Scale - 1) < 0.001
             ? string.Empty
-            : "@" + arguments.Scale.ToString(CultureInfo.InvariantCulture) + "x";
+            : "@" + environment.Scale.ToString(CultureInfo.InvariantCulture) + "x";
         var fileName = $"{scene}-{size.Width}x{size.Height}{scaleSuffix}.png";
-        if (arguments.ScreenshotDirectory is { } directory)
+        if (environment.ScreenshotDirectory is { } directory)
         {
             Directory.CreateDirectory(directory);
             var encoder = new PngBitmapEncoder();
@@ -508,8 +532,13 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         Descendants(root).OfType<FrameworkElement>()
             .FirstOrDefault(element => AutomationProperties.GetAutomationId(element) == automationId);
 
-    private static string? Text(FrameworkElement root, string automationId) =>
-        Find(root, automationId) is TextBlock { IsVisible: true } text ? text.Text : null;
+    /// <summary>The text a visible element with that automation id shows; null when there is none.</summary>
+    private static string? Text(FrameworkElement root, string automationId) => Find(root, automationId) switch
+    {
+        TextBlock { IsVisible: true } text => text.Text,
+        StatusIndicatorView { IsVisible: true } indicator => indicator.Text,
+        _ => null,
+    };
 
     private static ButtonBase? Button(FrameworkElement root, string automationId) => Find(root, automationId) as ButtonBase;
 
@@ -534,16 +563,6 @@ internal sealed partial class SelfTestSession(App app, AppArguments arguments, S
         var face = glyphs.Win32FaceNames.Values.FirstOrDefault() ?? "unknown";
         return $"{family} {face}, simulations {glyphs.StyleSimulations}";
     }
-
-    /// <summary>What exists at a path, and when it last changed: enough to tell that nothing touched it.</summary>
-    private static string Snapshot(string directory) =>
-        !Directory.Exists(directory)
-            ? "absent"
-            : string.Join(
-                "|",
-                new DirectoryInfo(directory).EnumerateFileSystemInfos("*", SearchOption.AllDirectories)
-                    .OrderBy(entry => entry.FullName, StringComparer.Ordinal)
-                    .Select(entry => $"{entry.FullName}:{entry.LastWriteTimeUtc.Ticks}"));
 
     [GeneratedRegex("[A-Za-z0-9_-]{43}")]
     private static partial Regex TokenShape();

@@ -1,7 +1,7 @@
 namespace LiveCue.Hosting;
 
 /// <summary>
-/// The folder that holds settings.json and, later, pairing.json (architecture 3.5). It is
+/// The folder that holds settings.json, pairing.json and schemas\ (architecture 3.5). It is
 /// <c>%LOCALAPPDATA%\LiveCueRemake\</c>; the previous LiveCue's <c>%LOCALAPPDATA%\LiveCue\</c> is
 /// never read or written.
 /// </summary>

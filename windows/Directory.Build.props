@@ -53,6 +53,8 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <Using Include="Xunit" />
+    <!-- The helpers every test project shares: the manual clock, the temporary folder, the dotnet host, LiveFact. -->
+    <Compile Include="$(MSBuildThisFileDirectory)tests\Shared\*.cs" LinkBase="Shared" />
   </ItemGroup>
 
 </Project>

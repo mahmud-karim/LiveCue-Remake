@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A console program that process-runner tests start as a real child process:
+
+      dotnet LiveCue.TestChild.dll <mode> [arguments]
+
+    It is never published and never shipped. Tests find the dotnet host through tests/Shared/DotnetHost.cs
+    and this program beside their own assembly (the test project references it).
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>LiveCue.TestChild</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

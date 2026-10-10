@@ -36,3 +36,24 @@ public sealed class BooleanToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// Null and the empty string become Collapsed, anything else Visible; pass "Invert" as the parameter
+/// to swap them. For parts that exist only while a view model has something to show.
+/// </summary>
+public sealed class NullToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var visible = value is not null and not "";
+        if (parameter is "Invert")
+        {
+            visible = !visible;
+        }
+
+        return visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

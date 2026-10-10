@@ -10,12 +10,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- For the pairing QR matrix and the DPAPI-protected pairing file. Referenced now so restore and publish are proven; first used when pairing is built. -->
+    <!-- The pairing QR matrix, and DPAPI for the protected copy of the pairing token. -->
     <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The two output schemas of protocol 12.5, rewritten into the data folder at each start. -->
+    <EmbeddedResource Include="Answers\Schemas\assist.schema.json" LogicalName="LiveCue.Relay.Answers.Schemas.assist.schema.json" />
+    <EmbeddedResource Include="Answers\Schemas\summary.schema.json" LogicalName="LiveCue.Relay.Answers.Schemas.summary.schema.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The seams are internal and reach the tests through this. -->
     <InternalsVisibleTo Include="LiveCue.Relay.Tests" />
   </ItemGroup>
 

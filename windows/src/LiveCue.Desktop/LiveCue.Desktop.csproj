@@ -6,6 +6,7 @@
     <AssemblyName>LiveCueRemake</AssemblyName>
     <RootNamespace>LiveCue.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\LiveCue.ico</ApplicationIcon>
     <Description>LiveCueRemake.exe: the LiveCue window for Windows, which hosts the relay in its own process.</Description>
     <!-- English only: keeps a dozen satellite-resource folders out of the publish output. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -19,6 +20,11 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The window icon is read from the assembly's resources; the file icon comes from ApplicationIcon. -->
+    <Resource Include="Assets\LiveCue.ico" />
   </ItemGroup>
 
   <ItemGroup>

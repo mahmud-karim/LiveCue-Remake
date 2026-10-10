@@ -4,7 +4,7 @@ using System.Windows.Controls;
 namespace LiveCue.Desktop.Controls;
 
 /// <summary>
-/// The five states a status can be shown in (design system 2.7 and 4.12). Each has its own colour
+/// The five states a status can be drawn in (design system 2.7 and 4.12). Each has its own colour
 /// and its own mark shape, and is always shown with a label in words.
 /// </summary>
 public enum StatusKind
@@ -25,11 +25,14 @@ public enum StatusKind
     Danger,
 }
 
-/// <summary>The small mark that goes with a status label: a dot, a ring or an alert glyph.</summary>
-public sealed class StatusMark : Control
+/// <summary>
+/// The small mark that goes with a status label: a dot, a ring or an alert glyph. (The contract's
+/// <see cref="StatusMark"/> enum names the mark of an indicator; this control draws one.)
+/// </summary>
+public sealed class StatusMarkView : Control
 {
     public static readonly DependencyProperty KindProperty = DependencyProperty.Register(
-        nameof(Kind), typeof(StatusKind), typeof(StatusMark), new PropertyMetadata(StatusKind.Neutral));
+        nameof(Kind), typeof(StatusKind), typeof(StatusMarkView), new PropertyMetadata(StatusKind.Neutral));
 
     public StatusKind Kind
     {

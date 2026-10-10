@@ -1,0 +1,37 @@
+<UserControl x:Class="LiveCue.Desktop.Settings.MappingDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="clr-namespace:LiveCue.Desktop.Controls"
+             Focusable="False">
+
+  <!--
+    The set-up and remove confirmation of a Tailscale mapping (docs/design/03-windows-screens.md, 6.2).
+    The command shown is exactly the one that runs if the dialog is confirmed (rule TS-9). First
+    version: the texts, the command, the failure banner and the two buttons. The automation id
+    (SetUpMappingDialog or RemoveMappingDialog, by action) and the destructive look of "Remove" arrive
+    with the dialog.
+  -->
+  <StackPanel>
+    <TextBlock Text="{Binding Title}" Style="{DynamicResource Type.Title}" TextWrapping="Wrap" TextTrimming="None" />
+    <TextBlock Text="{Binding Intro}" Style="{DynamicResource Type.Body}" Margin="0,8,0,6" />
+    <ContentControl Style="{DynamicResource Field.ReadOnly}" Padding="14,10">
+      <TextBlock Text="{Binding CommandText}" Style="{DynamicResource Type.Mono}" TextWrapping="Wrap" TextTrimming="None" />
+    </ContentControl>
+    <TextBlock Text="{Binding EffectText}"
+               Style="{DynamicResource Type.Body}"
+               TextWrapping="Wrap"
+               TextTrimming="None"
+               Margin="0,12,0,0" />
+    <ui:Banner Model="{Binding Failure}" Margin="0,12,0,0" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+      <Button Style="{DynamicResource Button.Secondary}"
+              Content="Cancel"
+              IsCancel="True"
+              Command="{Binding CancelCommand}" />
+      <Button Style="{DynamicResource Button.Primary}"
+              Margin="8,0,0,0"
+              Content="{Binding ConfirmLabel}"
+              Command="{Binding ConfirmCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A developer tool, run by hand when the brand mark changes: it draws the mark from the design system's
+    numbers (section 8.2) and writes the Windows .ico and the iPhone 1024 px PNG. A normal build never
+    runs it, and it is never published.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>LiveCue.IconTool</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

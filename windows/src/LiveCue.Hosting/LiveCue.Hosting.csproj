@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>What a host needs around the LiveCue relay: the data folder, settings.json, endpoint resolution and the relay supervisor. No WPF.</Description>
+    <Description>What a host needs around the LiveCue relay: the data folder, settings.json, prerequisite checks, Codex discovery, Tailscale status and the mapping manager, endpoint resolution and the relay supervisor. No WPF.</Description>
   </PropertyGroup>
 
   <ItemGroup>

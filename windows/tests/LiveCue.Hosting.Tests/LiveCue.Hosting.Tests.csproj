@@ -1,9 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Settings validation, endpoint resolution and the relay supervisor, with a fake relay where a real one is not the point. -->
+  <!--
+    The hosting library and the console host (test plan sections 2.1 to 2.5): settings, Codex discovery,
+    prerequisites, endpoint resolution, the supervisor, the Tailscale CLI and the mapping manager, all
+    over fakes. No test runs Codex, Tailscale, PowerShell or Docker. The shared helpers of tests/Shared
+    are linked in by Directory.Build.props.
+  -->
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LiveCue.Hosting\LiveCue.Hosting.csproj" />
+    <!-- The console host's tests call HostProgram.RunAsync directly (test plan 2.4). -->
+    <ProjectReference Include="..\..\src\LiveCue.Relay.Host\LiveCue.Relay.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One fake process runner for both test projects: it uses public types only. -->
+    <Compile Include="..\LiveCue.Relay.Tests\Support\Fakes\FakeProcessRunner.cs" Link="Support\FakeProcessRunner.cs" />
   </ItemGroup>
 
 </Project>

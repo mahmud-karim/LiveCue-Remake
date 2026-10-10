@@ -1,113 +1,192 @@
-using LiveCue.Relay.Pairing;
+using System.Globalization;
+using System.Net.WebSockets;
+using LiveCue.Relay.Core;
 using LiveCue.Relay.Protocol;
-using LiveCue.Relay.Routes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.Extensions.Primitives;
 
 namespace LiveCue.Relay.Edge;
 
 /// <summary>
-/// The checks every request passes, in the order protocol 5.2 fixes. The first failing step answers.
+/// The checks every request passes, in the order protocol 5.2 fixes (W-design 4.4, steps P-1 to P-12).
+/// The first failing step answers. The three 401 answers come from one pre-built byte array through one
+/// code path, so a caller without the token cannot tell which step refused it. No work happens before
+/// E-3 passes: no body is read, no file is touched, no event reaches the desktop.
 ///
-/// <list type="table">
-/// <item><term>E-1</term><description>no Origin, no Sec-Fetch-Site; in Private mode no Tailscale-Funnel-Request: 401</description></item>
-/// <item><term>E-2</term><description>exactly one Authorization header, "Bearer " plus 43 base64url characters: 401</description></item>
-/// <item><term>E-3</term><description>the token's hash is the accepted hash: 401. Then the presence event fires.</description></item>
-/// <item><term>E-4</term><description>method and raw request target equal a route exactly: 404</description></item>
-/// <item><term>E-5</term><description>X-LiveCue-Protocol is exactly "2": 400</description></item>
-/// <item><term>E-6</term><description>GET and DELETE declare no body: 400</description></item>
-/// </list>
-///
-/// The three 401 answers are byte-identical, so a caller without the token cannot tell which step
-/// refused it and learns nothing about routes. No work happens before E-3 passes.
-///
-/// Not built yet: E-7 (the cap on requests in flight), body reading (5.4) and route deadlines (5.5).
+/// First version (foundation): P-1 to P-9, P-11 and P-12 without the route deadline. The connection gate
+/// (P-0), the request gauge (P-10, C-31) and the deadlines of protocol 5.5 are work package WP-W01.
 /// </summary>
-internal sealed class EdgePipeline(
-    ConnectionMode mode,
-    ITokenVerifier tokens,
-    RouteTable routes,
-    Action onAuthenticated)
+internal sealed class EdgePipeline : IRouteIo
 {
-    private const string BearerPrefix = "Bearer ";
     private const string ProtocolHeader = "X-LiveCue-Protocol";
-    private const string FunnelHeader = "Tailscale-Funnel-Request";
-    private const string SecFetchSiteHeader = "Sec-Fetch-Site";
+    private const string SelfCheckHeader = "X-LiveCue-Self-Check";
 
     private static readonly string ExpectedProtocol =
-        ProtocolConstants.ProtocolVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ProtocolConstants.ProtocolVersion.ToString(CultureInfo.InvariantCulture);
 
-    public Task HandleAsync(HttpContext context)
+    private readonly RelayContext _context;
+    private readonly RelayServices _services;
+
+    public EdgePipeline(RelayContext context, RelayServices services)
     {
-        var request = context.Request;
+        _context = context;
+        _services = services;
+    }
+
+    public async Task InvokeAsync(HttpContext http)
+    {
+        // P-1.
+        var arrival = _context.Clock.GetTimestamp();
+        var request = http.Request;
         var headers = request.Headers;
+        var declaresBody = request.ContentLength is > 0 || headers.ContainsKey("Transfer-Encoding");
 
-        // E-1. A header counts as carried whatever its value, even empty.
-        if (headers.ContainsKey("Origin")
-            || headers.ContainsKey(SecFetchSiteHeader)
-            || (mode == ConnectionMode.Private && headers.ContainsKey(FunnelHeader)))
+        // P-2 (E-1), P-3 (E-2), P-4 (E-3).
+        if (BearerCheck.CarriesRefusedHeader(headers, _context.Options.Mode)
+            || !BearerCheck.TryReadToken(headers.Authorization, out var token)
+            || !_services.Pairing.Verify(token))
         {
-            return EdgeResponses.WriteErrorAsync(context, WireError.Unauthorized);
+            await RefuseAsync(http, RelayErrors.Unauthorized, declaresBody).ConfigureAwait(false);
+            return;
         }
 
-        // E-2 and E-3.
-        if (!TryReadToken(headers.Authorization, out var token) || !tokens.IsAccepted(token))
+        var revoked = _services.Pairing.CurrentRevocation;
+
+        // P-5. The self-check request carrying the current nonce is the one request that is not a phone.
+        var selfCheck = headers[SelfCheckHeader];
+        if (selfCheck.Count == 1 && _services.Pairing.IsSelfCheckNonce(selfCheck[0]))
         {
-            return EdgeResponses.WriteErrorAsync(context, WireError.Unauthorized);
+            _services.Pairing.NoteSelfCheckArrival(headers.ContainsKey(BearerCheck.FunnelHeader));
+        }
+        else
+        {
+            _context.Events.Publish(new PhoneSeen(_context.Events.Now));
         }
 
-        // Presence: every authenticated request, whatever its route and outcome.
-        onAuthenticated();
-
-        // E-4. The raw target is the text on the request line, before any decoding.
-        var target = context.Features.Get<IHttpRequestFeature>()?.RawTarget ?? string.Empty;
-        if (!routes.TryFind(request.Method, target, out var route))
+        // P-6 (E-4). The raw target is the text on the request line, before any decoding (K-7).
+        var target = http.Features.Get<IHttpRequestFeature>()?.RawTarget ?? string.Empty;
+        var route = RouteTable.Match(request.Method, target, out var requestId);
+        if (route is null || (route.Id == RouteId.Speech && !http.WebSockets.IsWebSocketRequest))
         {
-            return EdgeResponses.WriteErrorAsync(context, WireError.NotFound);
+            await RefuseAsync(http, RelayErrors.NotFound, declaresBody).ConfigureAwait(false);
+            return;
         }
 
-        // E-5.
-        var protocol = headers[ProtocolHeader];
-        if (protocol.Count != 1 || !string.Equals(protocol[0], ExpectedProtocol, StringComparison.Ordinal))
+        if (route.Id != RouteId.Speech)
         {
-            return EdgeResponses.WriteErrorAsync(context, WireError.ProtocolMismatch);
+            // P-8 (E-5).
+            var protocol = headers[ProtocolHeader];
+            if (protocol.Count != 1 || !string.Equals(protocol[0], ExpectedProtocol, StringComparison.Ordinal))
+            {
+                await RefuseAsync(http, RelayErrors.ProtocolMismatch, declaresBody).ConfigureAwait(false);
+                return;
+            }
+
+            // P-9 (E-6).
+            if (!route.ReadsBody && declaresBody)
+            {
+                await RefuseAsync(http, RelayErrors.InvalidRequest, declaresBody).ConfigureAwait(false);
+                return;
+            }
         }
 
-        // E-6.
-        if (!route.ReadsBody && DeclaresBody(request))
+        // P-7 and P-11.
+        using var work = CancellationTokenSource.CreateLinkedTokenSource(
+            http.RequestAborted, _context.Access.Stopping, revoked);
+        var routeContext = new RouteContext
         {
-            return EdgeResponses.WriteErrorAsync(context, WireError.InvalidRequest);
-        }
+            Http = http,
+            Route = route,
+            RequestId = requestId,
+            ArrivalTimestamp = arrival,
+            Work = work.Token,
+            ClientAborted = http.RequestAborted,
+            PairingRevoked = revoked,
+            RelayStopping = _context.Access.Stopping,
+            Io = this,
+        };
 
-        return route.Handler(context);
+        try
+        {
+            await _services.Routes[route.Id].HandleAsync(routeContext).ConfigureAwait(false);
+        }
+        catch (RelayException exception)
+        {
+            await AnswerAsync(http, exception.Error).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            switch (routeContext.Cancellation)
+            {
+                case RouteCancellation.PairingRevoked:
+                    await AnswerAsync(http, RelayErrors.Unauthorized).ConfigureAwait(false);
+                    break;
+
+                case RouteCancellation.DeadlineExceeded:
+                    await AnswerAsync(
+                        http,
+                        route.Id is RouteId.Assist or RouteId.SessionSummary
+                            ? RelayErrors.AssistantTimeout
+                            : RelayErrors.DeadlineExceeded).ConfigureAwait(false);
+                    break;
+
+                case RouteCancellation.RelayStopping:
+                    http.Abort();
+                    break;
+
+                default:
+                    // The client went away: there is nobody to answer.
+                    break;
+            }
+        }
+#pragma warning disable CA1031 // The last-resort handler: nothing may escape to the server core.
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            _context.Events.Diagnostic("edge", "A request failed unexpectedly.", exception);
+            if (http.Response.HasStarted)
+            {
+                http.Abort();
+            }
+            else
+            {
+                await AnswerAsync(http, RelayErrors.InternalError).ConfigureAwait(false);
+            }
+        }
     }
 
-    /// <summary>E-2: exactly one header, case-sensitive scheme, one space, a token of the right shape.</summary>
-    private static bool TryReadToken(StringValues authorization, out ReadOnlySpan<char> token)
+    public Task<BodyResult> ReadJsonBodyAsync(RouteContext context) => BodyReader.ReadAsync(context, _context.Clock);
+
+    public Task WriteJsonAsync(RouteContext context, int status, ReadOnlyMemory<byte> utf8Json) =>
+        ResponseWriter.WriteJsonAsync(context.Http, status, utf8Json);
+
+    public Task<WebSocket> AcceptWebSocketAsync(RouteContext context) =>
+        context.Http.WebSockets.AcceptWebSocketAsync(new WebSocketAcceptContext
+        {
+            SubProtocol = null,
+            DangerousEnableCompression = false,
+        });
+
+    /// <summary>An answer of the edge itself, before any body was read.</summary>
+    private static Task RefuseAsync(HttpContext http, RelayError error, bool declaresBody) =>
+        ResponseWriter.WriteJsonAsync(http, error.Status, RelayErrors.Body(error), closeConnection: declaresBody);
+
+    /// <summary>The answer for a handler that ended without writing one. Nothing is written twice.</summary>
+    private static async Task AnswerAsync(HttpContext http, RelayError error)
     {
-        token = default;
-        if (authorization.Count != 1)
+        if (http.Response.HasStarted)
         {
-            return false;
+            http.Abort();
+            return;
         }
 
-        var value = authorization[0].AsSpan();
-        if (!value.StartsWith(BearerPrefix, StringComparison.Ordinal))
+        try
         {
-            return false;
+            await ResponseWriter.WriteJsonAsync(http, error.Status, RelayErrors.Body(error)).ConfigureAwait(false);
         }
-
-        var candidate = value[BearerPrefix.Length..];
-        if (!PairingToken.HasValidShape(candidate))
+        catch (OperationCanceledException)
         {
-            return false;
+            // The client went away while the answer was written.
         }
-
-        token = candidate;
-        return true;
     }
-
-    private static bool DeclaresBody(HttpRequest request) =>
-        request.Headers.ContainsKey("Transfer-Encoding") || request.ContentLength is > 0;
 }
