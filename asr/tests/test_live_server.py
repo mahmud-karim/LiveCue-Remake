@@ -153,7 +153,10 @@ def test_a_client_that_drops_the_tcp_connection_frees_the_model(port):
     ws = connect(f"ws://127.0.0.1:{port}/relay")
     ws.recv(timeout=5)
     assert get_json(port)["busy"] is True
-    ws.socket.close()  # no closing handshake at all
+    # No closing handshake at all. shutdown() ends the TCP connection at once
+    # on every platform; a bare close() can wait for the client's reader thread.
+    ws.socket.shutdown(socket.SHUT_RDWR)
+    ws.socket.close()
     wait_until(lambda: get_json(port)["busy"] is False)
 
 
