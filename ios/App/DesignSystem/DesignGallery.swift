@@ -23,7 +23,7 @@ enum DesignGallery {
 
     /// A set to show without the launch argument. A screenshot run on CI sets it for one commit, because
     /// the existing UI test cannot pass an argument; it is nil in every other commit.
-    static let forcedSet: Int? = 3
+    static let forcedSet: Int? = 4
 
     /// The set to show, or nil when the gallery was not asked for.
     static let activeSet: Int? = {
