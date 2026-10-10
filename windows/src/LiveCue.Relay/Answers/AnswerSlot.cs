@@ -1,8 +1,8 @@
 namespace LiveCue.Relay.Answers;
 
 /// <summary>
-/// The one slot assist and summary requests share (C-33): an interlocked flag. The foundation's
-/// coordinator does not use it yet; work package WP-W03 does.
+/// The one slot assist and summary requests share (C-33): an interlocked flag. It is taken at step R-2
+/// and left when the request ends for any reason.
 /// </summary>
 internal sealed class AnswerSlot
 {
