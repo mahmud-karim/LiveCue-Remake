@@ -31,9 +31,11 @@ struct SessionStartControl: View {
                 } else {
                     LCGlyph(systemImage, size: .large)
                 }
+                // Two lines at most, a little smaller if that is what it takes to stay inside the capsule.
                 Text(verbatim: title)
                     .font(TextRole.headline.font)
                     .lineLimit(2)
+                    .minimumScaleFactor(theme.component.sessionControlLabelShrink)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

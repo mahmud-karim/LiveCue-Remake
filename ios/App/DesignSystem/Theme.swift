@@ -161,6 +161,8 @@ extension Theme {
         var sessionControlGap: CGFloat
         var sessionControlMinWidth: CGFloat
         var sessionControlMaxWidth: CGFloat
+        /// How far the label of a session control may shrink to stay inside its fixed height.
+        var sessionControlLabelShrink: CGFloat
 
         // Chips
         var chipInset: CGFloat

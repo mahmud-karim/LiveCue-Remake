@@ -167,6 +167,7 @@ extension Theme.Component {
         sessionControlGap: 10,
         sessionControlMinWidth: 200,
         sessionControlMaxWidth: 420,
+        sessionControlLabelShrink: 0.7,
         chipInset: 10,
         chipGap: 6,
         chipDot: 8,

@@ -106,6 +106,7 @@ struct LCGlassButton<Label: View>: View {
     private let label: Label
 
     @Environment(\.theme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
 
     /// `shape` has a default that keeps the call sites without it compiling.
     init(
@@ -123,7 +124,9 @@ struct LCGlassButton<Label: View>: View {
     var body: some View {
         if #available(iOS 26.0, *) {
             if isProminent {
-                Button(action: action) { label.foregroundStyle(theme.ink.onAccent) }
+                // The system takes the tint away from a disabled prominent button and leaves pale glass,
+                // on which a white label cannot be read. Its label is ink then, and the system dims it.
+                Button(action: action) { label.foregroundStyle(isEnabled ? theme.ink.onAccent : theme.ink.primary) }
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(borderShape)
                     .controlSize(.large)
