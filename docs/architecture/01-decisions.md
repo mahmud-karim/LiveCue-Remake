@@ -33,7 +33,7 @@ decision cannot be met in full. In every case the safer reading was taken.
 | 7 | **D-22 says Codex is found through `PATH`.** On Windows a `PATH` entry for Codex is often a `.cmd` shim, and starting a shim means a command interpreter parses the arguments. | Only a real `codex.exe` is accepted, from the explicit setting, from `PATH`, or from the per-user Codex folder (architecture 3.7). An install that offers only a shim needs the explicit path setting. |
 | 8 | **D-23 asks for the lab's "same hardening" and "same protocol", and D-03 and D-21 ask for side-by-side operation with the old install.** The old lab's container name, image names and port 8765 are fixed values that the old relay and scripts also use. | The protocol messages are unchanged. The container name, label, image names and the default host port (47842) are new, and the lab's `Host` check follows the configured port (architecture 5.1, protocol 11.1). |
 | 9 | **D-16 says to fix the catalogue's pagination failure, and D-01 says the Codex catalogue exchange is preserved exactly.** The name of the cursor parameter could not be confirmed from a primary source. | The relay no longer treats a cursor as failure; it uses the first page (100 entries) and sends no unverified request (protocol 12.1). |
-| 10 | **The design system document describes things the brief excludes**: a tray icon, a device row and a "devices" page, a QR tile with "Expired" and "New code" states, and sample button labels that differ from spec strings. | The brief wins: none of those is built. The QR is the same token every time and its states are empty, shown and hidden (architecture 3.12). Spec strings win over the design document's sample labels. The design system does win over old AC-WIN-002 on window size (D-04). |
+| 10 | **The design system document describes things the brief excludes**: a tray icon, a device row and a "devices" page, a QR tile with "Expired" and "New code" states, and sample button labels that differ from spec strings. | The brief wins: none of those is built. The QR is the same token every time and its states are empty, shown and hidden (architecture 3.12). Spec strings win over the design document's sample labels. The window size is the design system's and the Windows screen design's (default 1240 x 660, minimum 960 x 620), which is what old AC-WIN-002 asserted. Every other disagreement between the Windows screen design and this register is ruled on in `05-windows-architecture.md` section 1. |
 | 11 | **The platform research recommends keeping the tunnel adapter as a Node module.** D-18 removes it. | D-18 wins. There is no Node.js anywhere. |
 
 ---
@@ -115,7 +115,7 @@ Each follows from D-01 and D-02 unless a reason is given.
 | A-14 | The relay validates Codex output against the schema itself and rebuilds the reply from an allowlist. The two schema files are unchanged. | Fixes relay B10; the phone ignores the model-written marker (D-11). |
 | A-15 | Windows has four shipped projects (`LiveCue.Relay`, `LiveCue.Hosting`, `LiveCue.Relay.Host`, `LiveCue.Desktop`) and a developer icon tool. Both executables are published self-contained into one folder; no single-file bundle. | A testable host layer without WPF; one copy of the runtime; no self-extraction to the temp folder. |
 | A-16 | The pairing payload text is available only from the console host's `--show-pairing`. The desktop never holds it. | Fixes relay B7 and keeps a source for the phone's paste path. |
-| A-17 | Start-up prerequisites stay blocking, in the order Codex found, Codex signed in, Tailscale installed, Tailscale online with a DNS name. | Old behaviour (AC-WIN-003) without the Node.js checks. |
+| A-17 | Start-up prerequisites stay blocking, in the order Codex found, Codex signed in, Tailscale installed, Tailscale online with a DNS name. Every check that can run is evaluated so that the window can list all results; the status line shows the first failure in that order. | Old behaviour (AC-WIN-003) without the Node.js checks; the list is the screen design's. |
 | A-18 | The session has explicit states; a failure of any provider leads to Paused; on-device providers finalise first so recognised text is kept. | D-08 (B4, B5) in one rule. |
 | A-19 | The relay client on the phone uses a private ephemeral session and never follows redirects, like the other two network paths. | Invisible; the old app used the shared session for relay HTTP only. |
 | A-20 | CI: no test-reuse gate; a release runs the whole CI in the same run and only from `main`; the audit is a Python script that runs on every push and over history. | The old gate only ever accepted one repair; the old audit could not run in CI. |
@@ -293,7 +293,7 @@ two public vendor API hosts is acceptable under the public-repository rule.
 | WIN-11 | Window frozen during start | Fix | Checks run off the UI thread. | `Prerequisites`, desktop | A |
 | WIN-12 | Status preserved by keyword matching | Fix | An explicit state machine; a fault text stays until the next start. | desktop | A |
 | WIN-13 | Diagnostics race on process exit | Moot | No output pipe. | none | B |
-| WIN-14 | Stale UI after stop or exit | Fix | Stop resets the pause flag, the hints and the timing tooltip. "Clear activity" restores the placeholders. | desktop | A |
+| WIN-14 | Stale UI after stop or exit | Fix | Stop resets the pause flag, the hints and the timing caption (the old tooltip is now a visible caption). "Clear activity" restores the placeholders. | desktop | A |
 | WIN-15 | Phone status never returns to "not connected" | Keep | Connected, then idle with the age in the tooltip; reset when the relay stops. | desktop | A |
 | WIN-16 | Start re-applies a root mapping and nothing removes it | Fix | The mapping manager and its rules (architecture 3.9). | `MappingManager` | B |
 | WIN-17 | Port literal in several places | Fix | One setting. | `SettingsStore` | B |
@@ -366,8 +366,9 @@ carries over unchanged, read with the remake's names (bundle, executable, artefa
 
 | Id | Outcome |
 |---|---|
-| AC-WIN-002 | Changed: the minimum window size is 900 x 600 and the default 1120 x 760 (design system section 10). |
-| AC-WIN-003 | Changed: the checks are Codex found, Codex signed in, Tailscale installed, Tailscale online with a DNS name. No Node.js or dependency checks. |
+| AC-WIN-002 | Holds unchanged: the minimum window size is 960 x 620; the default is 1240 x 660 (design system section 10, Windows screens 1.2). The self-test screenshots of architecture 3.13 are taken at those two sizes. |
+| AC-WIN-003 | Changed: the checks are Codex found, Codex signed in, Tailscale installed, Tailscale online with a DNS name. No Node.js or dependency checks. The first failing check's message is still the relay status; the window also lists every check with its result. |
+| AC-WIN-019 | Changed: there is one way to the pairing view, the Pairing navigation row. The QR is requested with "Show QR", which is enabled when the relay runs and the connection is set up. |
 | AC-WIN-006 | Changed: only "Relay started. Waiting for your iPhone." There are no speech-key lines. |
 | AC-WIN-007 | Changed: the Public-mode line is shown; Tailscale configuration changes only on an explicit action. |
 | AC-WIN-008 | Retired. Replaced by the "connection not set up" state and rules TS-1 to TS-10. |
@@ -446,9 +447,23 @@ Every string of the specs is kept verbatim except the ones below. A designer may
 | Activity on start, speech key | "Meta Muse is configured. …" / "Meta cloud key not configured. …" | Removed |
 | Activity on start, internet mode | "Funnel enabled: your iPhone needs internet, not the Tailscale VPN. Pair using this PC address." | "Public mode: your iPhone needs internet, not the Tailscale VPN. Pair using this PC address." |
 | Connection not set up (new) | none | "Connection not set up. Choose Set up connection to let your iPhone reach this PC." |
-| Pairing placeholder | "Generate a QR to get started" | "Show the QR to pair" |
-| Pairing, reset (new) | none | Button "Reset pairing"; confirmation "Every paired iPhone stops working until it scans the new QR. Reset pairing?" |
+| Pairing placeholder | "Generate a QR to get started" | "Show the QR to pair an iPhone"; while the relay is stopped "Start the relay to show the QR"; while the connection is not set up "Set up the connection first." |
+| Pairing, reset (new) | none | Button "Reset pairing…"; dialog title "Reset pairing?", body "This replaces the pairing code. Every iPhone paired with this PC must scan the new QR and pair again. The relay keeps running." (the last sentence only while it runs) |
 | Failed request, cancelled by the phone | "Assistant request failed or timed out. Check Codex sign-in and retry." | "Cancelled by the iPhone." |
+| Punctuation of status texts | "Checking Codex and Tailscale...", "Thinking..." | "Checking Codex and Tailscale…", "Thinking…" (one ellipsis character) |
+| Request failed, status | "Request failed - ready to retry" | "Request failed. Ready to retry." |
+| Request failed, reply hint | "Not sent - try Assist again" | "Not sent. Try Assist again." The reply card adds the title "Nothing was sent to the iPhone" |
+| Relay stopped by a fault | "Relay stopped - click Start relay to reconnect" | "Relay stopped. Click Start relay to reconnect." |
+| Reply hint | "`<model>` / `<reasoningEffort>` / `<s>` s Codex", or "Sent to iPhone  /  `<s>` s" | "Sent to iPhone · `<model>` · `<effort>` · `<s>` s Codex". The form without execution data is not built: every reply carries it |
+| Relay total time | Tooltip "PC relay total: `<s>` s. Codex includes startup and cloud processing." | The same text as a visible caption under the reply |
+| Card captions | "FROM IPHONE", "ASSISTANT" | "From iPhone", "Assistant" (sentence case) |
+| Closing notice | "Closing LiveCue stops its relay." (activity overlay) | "Closing this window stops the relay." (sidebar, always visible) |
+| Activity footer | "Activity stays in memory on this PC" | "Activity stays in memory on this PC. It is cleared when LiveCue closes and is never written to disk." |
+| Pairing footnote | "Pairing codes are private. Codes hide after 2 minutes." | "Pairing codes are private. Codes hide after 2 minutes. Showing the QR again keeps existing pairings valid." |
+| Prerequisite failures | One message per check | The same message as the relay status, and in the check list split into a title and a fix (Windows screens 2.6) |
+| Desktop startup failure box | "LiveCue could not finish startup. Run the diagnostic PowerShell launcher for details." | "LiveCue could not finish startup." and the name of the error type |
+| "Desktop connection interrupted. Stop and restart the relay." | shown when the window could not read relay output | Removed: there is no output pipe (WIN-10, WIN-13) |
+| Pairing text for a phone that cannot scan | Printed by the terminal launcher at every start | Not shown or copied by the desktop (A-16); printed only by `LiveCueRelayHost.exe --show-pairing` |
 | Unreadable pairing file (new) | relay did not start, no guidance | "The saved pairing could not be read. Reset pairing to create a new one." |
 | PC model status texts | two of them ended "No audio was sent to Meta." | That sentence is removed (protocol 9.4) |
 | "Tailscale HTTPS setup failed. Check that Tailscale is connected." | shown at start | Shown when "Set up connection" fails |
