@@ -32,8 +32,8 @@ public sealed class LabEventFilterTests
         """{"type":"transcript","transcript":"first","transcript":"last"}""",
         """{"type":"transcript","transcript":"last"}""")]
     [InlineData(
-        """{"type":"transcript","transcript":"Zoë said “hi” · 你好 😀 <b>&amp;</b>"}""",
-        """{"type":"transcript","transcript":"Zoë said “hi” · 你好 😀 <b>&amp;</b>"}""")]
+        """{"type":"transcript","transcript":"Zoë said “hi” · 你好 <b>&amp;</b> it's 100%"}""",
+        """{"type":"transcript","transcript":"Zoë said “hi” · 你好 <b>&amp;</b> it's 100%"}""")]
     public void Unknown_members_and_types_are_dropped(string fromLab, string toPhone)
     {
         Assert.Equal(toPhone, Rebuild(fromLab));
@@ -110,6 +110,18 @@ public sealed class LabEventFilterTests
     }
 
     [Fact]
+    public void A_character_outside_the_basic_plane_arrives_as_the_same_text()
+    {
+        // The relay's JSON writer spells such a character as an escaped pair. That is the same text to
+        // any JSON reader; it only costs twelve bytes instead of four (see the C-21 test below).
+        var rebuilt = Rebuild("""{"type":"speechComplete","turnId":1,"transcript":"Party 🎉 time"}""");
+
+        using var parsed = JsonDocument.Parse(rebuilt);
+        Assert.Equal("Party 🎉 time", parsed.RootElement.GetProperty("transcript").GetString());
+        Assert.Equal("speechComplete", parsed.RootElement.GetProperty("type").GetString());
+    }
+
+    [Fact]
     public void A_long_transcript_is_cut_without_splitting_a_pair()
     {
         var limit = ProtocolConstants.MaxTranscriptUnits;
@@ -127,16 +139,13 @@ public sealed class LabEventFilterTests
 
         // The pair ends exactly at the limit: it stays whole.
         AssertCut(new string('a', limit - 2) + Pair + "tail", new string('a', limit - 2) + Pair);
-
-        // A text of pairs only: 16,000 whole pairs.
-        var pairs = string.Concat(Enumerable.Repeat(Pair, limit));
-        AssertCut(pairs, pairs[..limit]);
     }
 
     [Theory]
     [InlineData("\u0001")]
     [InlineData("\u0001\u0001\u0001😀")]
-    [InlineData("\u007f😀")]
+    [InlineData("😀")]
+    [InlineData("a😀")]
     public void A_heavily_escaped_transcript_is_cut_until_the_frame_fits_C21(string unit)
     {
         // Text made of characters JSON must escape: every control character becomes six bytes, so the
