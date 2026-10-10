@@ -54,6 +54,7 @@ struct SessionControlCluster: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: theme.size.clusterCircle, height: theme.size.clusterCircle)
+        .dynamicTypeSize(...DynamicTypeSize.lcRoundControlLimit)
         .accessibilityLabel(pauseTitle)
         .accessibilityIdentifier("pause-session")
         .accessibilityShowsLargeContentViewer {
@@ -89,6 +90,7 @@ struct SessionControlCluster: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: theme.size.clusterCircle, height: theme.size.clusterCircle)
+        .dynamicTypeSize(...DynamicTypeSize.lcRoundControlLimit)
         .accessibilityLabel("Stop conversation")
         .accessibilityIdentifier("end-session")
         .accessibilityShowsLargeContentViewer {

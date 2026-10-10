@@ -42,7 +42,7 @@ struct IconButton: View {
             .frame(width: theme.size.minimumTarget, height: theme.size.minimumTarget)
             .accessibilityLabel(label)
             // Chrome keeps its size, so its glyph stops growing and offers the Large Content Viewer.
-            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            .dynamicTypeSize(...DynamicTypeSize.lcRoundControlLimit)
             .accessibilityShowsLargeContentViewer {
                 Label(label, systemImage: systemImage)
             }
