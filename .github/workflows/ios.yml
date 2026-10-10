@@ -117,8 +117,9 @@ jobs:
         timeout-minutes: 10
         run: python3 scripts/ci/boot_simulator.py "${{ steps.simulator.outputs.udid }}"
 
-      # Signing is off in the project. Tests switch ad hoc signing on so that the simulator build
-      # carries the entitlements of ios/Support/Simulator.entitlements and Keychain calls work.
+      # Signing is off in the project, and a simulator build made that way has no entitlements:
+      # Keychain calls then fail with -34018. The three signing arguments switch ad hoc signing on
+      # for the test run, which is what makes the Keychain work.
       - name: Run unit and UI tests
         timeout-minutes: 30
         run: |
@@ -195,6 +196,9 @@ jobs:
         timeout-minutes: 10
         run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
+      # The scheme gathers coverage for tests, and xcodebuild then instruments plain builds of the
+      # scheme as well, packages included. The two coverage switches keep that out of the shipped
+      # app; validate_ipa.py fails the job if it comes back.
       - name: Build the Release app for devices, unsigned
         timeout-minutes: 25
         run: |
@@ -202,6 +206,7 @@ jobs:
             -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
             -sdk iphoneos -destination "generic/platform=iOS" \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -enableCodeCoverage NO CLANG_ENABLE_CODE_COVERAGE=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 
       - name: Package the IPA

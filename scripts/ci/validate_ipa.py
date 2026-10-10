@@ -12,7 +12,9 @@ Checks, all of which must pass:
 - the main executable exists, is marked executable, and is a Mach-O program with an arm64 slice
   built for iOS devices (not for the simulator) that is not encrypted;
 - the app does not use the debug-dylib layout (a stub executable next to `<Name>.debug.dylib`),
-  which LiveContainer cannot patch.
+  which LiveContainer cannot patch;
+- the executable is not instrumented for code coverage, which a scheme that gathers coverage
+  turns on for plain builds too.
 
 Needs nothing outside the Python standard library, so it runs on macOS, Linux and Windows.
 """
@@ -41,8 +43,12 @@ DYLIB_COMMANDS = {
     0x23 | LC_REQ_DYLD,  # LC_LOAD_UPWARD_DYLIB
 }
 ENCRYPTION_COMMANDS = {0x21, 0x2C}  # LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64
+LC_SEGMENT_64 = 0x19
 LC_VERSION_MIN_IPHONEOS = 0x25
 LC_BUILD_VERSION = 0x32
+
+# Sections the compilers add when a build is instrumented for code coverage.
+COVERAGE_SECTION_PREFIXES = ("__llvm_prf", "__llvm_cov")
 
 PLATFORM_NAMES = {1: "macOS", 2: "iOS", 6: "Mac Catalyst", 7: "iOS simulator"}
 PLATFORM_IOS = 2
@@ -60,6 +66,7 @@ class MachOSlice:
     cpu_type: int
     file_type: int
     dylibs: list[str] = field(default_factory=list)
+    sections: list[str] = field(default_factory=list)
     crypt_id: int | None = None
     platform: int | None = None
     minimum_os: str | None = None
@@ -87,6 +94,14 @@ def _parse_thin(data: bytes) -> MachOSlice:
             name_offset = struct.unpack_from("<I", data, offset + 8)[0]
             name = data[offset + name_offset : offset + size].split(b"\0", 1)[0]
             result.dylibs.append(name.decode("utf-8", "replace"))
+        elif command == LC_SEGMENT_64:
+            # A 72-byte segment header, then one 80-byte record per section that starts with its name.
+            section_count = struct.unpack_from("<I", data, offset + 64)[0]
+            if 72 + section_count * 80 > size:
+                raise MachOError("malformed segment command")
+            for index in range(section_count):
+                start = offset + 72 + index * 80
+                result.sections.append(data[start : start + 16].split(b"\0", 1)[0].decode("ascii", "replace"))
         elif command in ENCRYPTION_COMMANDS:
             result.crypt_id = struct.unpack_from("<I", data, offset + 16)[0]
         elif command == LC_BUILD_VERSION:
@@ -226,6 +241,13 @@ def validate(path: str, expected: argparse.Namespace, report: Report) -> None:
     report.check(binary.crypt_id in (None, 0), "not encrypted", f"encrypted (cryptid {binary.crypt_id})")
     stub_links = [name for name in binary.dylibs if name.endswith(DEBUG_DYLIB_SUFFIX)]
     report.check(not stub_links, "executable is not a debug-dylib stub", f"executable is a stub that loads {', '.join(stub_links)}")
+    instrumented = sorted({name for name in binary.sections if name.startswith(COVERAGE_SECTION_PREFIXES)})
+    report.check(
+        not instrumented,
+        "not instrumented for code coverage",
+        f"instrumented for code coverage (sections {', '.join(instrumented)}); "
+        "build with CLANG_ENABLE_CODE_COVERAGE=NO, because the scheme gathers coverage",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

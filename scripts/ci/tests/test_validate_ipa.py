@@ -27,8 +27,27 @@ def dylib(path):
     return load_command(0x0C, struct.pack("<4I", 24, 0, 0, 0) + path.encode() + b"\0")
 
 
-def macho(cpu_type=ARM64, file_type=2, platform=IOS, dylibs=("/usr/lib/libSystem.B.dylib",), crypt_id=None):
-    commands = [load_command(0x32, struct.pack("<4I", platform, 18 << 16, 26 << 16 | 2 << 8, 0))]
+def segment(name, sections):
+    header = name.encode().ljust(16, b"\0") + struct.pack("<4Q4I", 0, 0, 0, 0, 7, 5, len(sections), 0)
+    records = b"".join(
+        section.encode().ljust(16, b"\0") + name.encode().ljust(16, b"\0") + b"\0" * 48 for section in sections
+    )
+    return load_command(0x19, header + records)
+
+
+def macho(
+    cpu_type=ARM64,
+    file_type=2,
+    platform=IOS,
+    dylibs=("/usr/lib/libSystem.B.dylib",),
+    crypt_id=None,
+    data_sections=("__data", "__bss"),
+):
+    commands = [
+        segment("__TEXT", ["__text", "__cstring"]),
+        segment("__DATA", list(data_sections)),
+        load_command(0x32, struct.pack("<4I", platform, 18 << 16, 26 << 16 | 2 << 8, 0)),
+    ]
     commands += [dylib(path) for path in dylibs]
     if crypt_id is not None:
         commands.append(load_command(0x2C, struct.pack("<4I", 0x4000, 0x1000, crypt_id, 0)))
@@ -134,6 +153,13 @@ class ValidateIPATests(unittest.TestCase):
         self.assertIn("debug-dylib layout: Payload/App.app/App.debug.dylib", output)
         self.assertIn("stub that loads @rpath/App.debug.dylib", output)
 
+    def test_rejects_a_build_instrumented_for_code_coverage(self):
+        instrumented = macho(data_sections=("__data", "__llvm_prf_cnts", "__llvm_prf_data"))
+        self.assert_rejected(
+            self.make_ipa(executable=instrumented),
+            "instrumented for code coverage (sections __llvm_prf_cnts, __llvm_prf_data)",
+        )
+
     def test_rejects_a_missing_or_unreadable_executable(self):
         self.assert_rejected(self.make_ipa(info=dict(DEFAULT_INFO, CFBundleExecutable="Other")), "is missing")
         self.assert_rejected(self.make_ipa(executable=b"#!/bin/sh\necho not Mach-O, but long enough to parse\n"), "not Mach-O")
@@ -157,6 +183,7 @@ class MachOParserTests(unittest.TestCase):
         self.assertEqual(parsed.platform, IOS)
         self.assertEqual(parsed.minimum_os, "18.0.0")
         self.assertEqual(parsed.dylibs, ["/usr/lib/a.dylib", "@rpath/b.dylib"])
+        self.assertEqual(parsed.sections, ["__text", "__cstring", "__data", "__bss"])
         self.assertIsNone(parsed.crypt_id)
 
     def test_rejects_truncated_load_commands(self):
