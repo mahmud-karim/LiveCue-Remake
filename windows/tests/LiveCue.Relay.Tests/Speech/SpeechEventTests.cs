@@ -65,6 +65,8 @@ public sealed class SpeechEventTests
         await rig.Events.WaitForAsync<SpeechStreamChanged>(changed => changed.Phase == SpeechStreamPhase.Failed);
 
         // A new stream proves the first one is completely over; it added no second ending for the first.
+        // (The second is held while it loads and then leaves, so its own events are "loading", "stopped".)
+        rig.Model.PrepareGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using (var next = await rig.OpenAdmittedAsync())
         {
         }
