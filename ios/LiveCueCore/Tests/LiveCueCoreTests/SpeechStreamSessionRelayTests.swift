@@ -755,6 +755,68 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         XCTAssertEqual(describe(events).last, "usage finish completed=false")
     }
 
+    // MARK: - The texts the user sees (protocol 14; these need `RelayMessages`, WP-03)
+
+    func testAnErrorFrameShowsThatCodesPhoneText() async throws {
+        // Before `ready`: the start fails with the code's text (P2-214).
+        let refusing = FakeWebSocketTransport()
+        let refused = makeSession(refusing)
+        await refusing.deliver(.text(errorFrame("SPEECH_BUSY")))
+        let refusal = await startFailure(of: refused)
+        XCTAssertEqual(
+            refusal?.message,
+            "Your PC is already transcribing another conversation. End that one first, then retry."
+        )
+
+        // After `ready`: the stream ends with the code's text. The relay's own text is never shown for a known code.
+        let transport = FakeWebSocketTransport()
+        let session = try await startedSession(transport)
+        await transport.deliver(.text(errorFrame("LAB_DISCONNECTED")))
+        let events = await allEvents(of: session)
+        XCTAssertEqual(failureMessage(events), "Local model disconnected. Resume to reconnect.")
+
+        // A code this build does not know shows the relay's text.
+        let newer = FakeWebSocketTransport()
+        let newerSession = try await startedSession(newer)
+        await newer.deliver(.text(#"{"type":"error","code":"SOMETHING_NEW","message":"A newer relay said this."}"#))
+        let newerEvents = await allEvents(of: newerSession)
+        XCTAssertEqual(failureMessage(newerEvents), "A newer relay said this.")
+    }
+
+    func testStreamConditionsShowTheirPhoneTexts() async throws {
+        // A close with a known code as its reason and no frame.
+        let closing = FakeWebSocketTransport()
+        let closed = try await startedSession(closing)
+        await closing.deliver(.closed(code: 1011, reason: "AUDIO_IDLE_TIMEOUT"))
+        let closedEvents = await allEvents(of: closed)
+        XCTAssertEqual(failureMessage(closedEvents), "Audio stream timed out. Resume to reconnect.")
+
+        // A drop with neither.
+        let dropping = FakeWebSocketTransport()
+        let dropped = try await startedSession(dropping)
+        await dropping.drop()
+        let droppedEvents = await allEvents(of: dropped)
+        XCTAssertEqual(failureMessage(droppedEvents), "The connection to your PC dropped. Resume to reconnect.")
+
+        // The local conditions of protocol 13.7.
+        let texts: [(condition: RelayLocalCondition, text: String)] = [
+            (.timeout, "Your PC did not answer in time. Check that LiveCue Desktop is running, then retry."),
+            (.speechNotConfirmed, "PC did not confirm the selected speech model. Update/restart LiveCue Desktop and its tunnel."),
+            (.unexpectedFrame, "PC transcription is not ready."),
+            (.streamDropped, "The connection to your PC dropped. Resume to reconnect.")
+        ]
+        for row in texts {
+            let failure = SpeechStreamFailure(.relay(RelayFailure.local(row.condition, origin: .stream)))
+            XCTAssertEqual(failure.message, row.text, row.condition.rawValue)
+        }
+
+        // A refused upgrade.
+        let unauthorized = SpeechStreamFailure(.relay(RelaySpeechNegotiation.failure(forUpgradeStatus: 401)))
+        XCTAssertEqual(unauthorized.message, "The PC no longer recognizes this pairing. Scan its pairing QR once to reconnect.")
+        let noRelay = SpeechStreamFailure(.relay(RelaySpeechNegotiation.failure(forUpgradeStatus: 503)))
+        XCTAssertEqual(noRelay.message, "Your PC answered, but the LiveCue relay is not running. Open LiveCue Desktop and start the relay.")
+    }
+
     func testNoFailureTextContainsTheToken() async throws {
         let failures: [RelayFailure] = [
             RelaySpeechNegotiation.failure(forUpgradeStatus: 401),
