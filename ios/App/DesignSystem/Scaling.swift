@@ -6,9 +6,10 @@ extension DynamicTypeSize {
     /// width goes to the words (design system 6.1).
     static let lcTileLimit = DynamicTypeSize.accessibility1
 
-    /// The glyph of a round chrome control stops growing here: the circle keeps its size at every text
-    /// size, like the items of a system bar, and offers the Large Content Viewer instead.
-    static let lcRoundControlLimit = DynamicTypeSize.xxxLarge
+    /// The glyph of a round chrome control does not grow past the default text size: the circle keeps
+    /// its size at every text size, like the items of a system bar, and offers the Large Content Viewer
+    /// instead.
+    static let lcRoundControlLimit = DynamicTypeSize.large
 
     /// `length` scaled the way body text is scaled at this text size: the same at the default size, larger
     /// at larger sizes. For the fixed dimensions that sit beside text (status dots, spinners), so that
