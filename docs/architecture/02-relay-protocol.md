@@ -48,6 +48,12 @@ JSON rules for both directions:
   know. Member order carries no meaning, except in the pairing payload (4.2).
 - "Absent" and `null` are different. A member documented as "always present" is never omitted.
 
+Shapes: a shape written `^…$` in this file (C-02, C-03, C-06, the prefix and hash patterns of
+`03-system-architecture.md` 3.5) matches the **whole** text. A text with a trailing line feed, a carriage
+return and line feed, or any other extra character does not match. Both sides implement every shape with a
+character loop or with an end-of-text anchor (`\z`), never with an end-of-line anchor: in several
+regular-expression engines `$` also matches before a final line feed.
+
 The protocol version is the integer **2**. There is no negotiation. A version mismatch is an error (5.2 step
 E-5, 10.2 step S-1, 13.3).
 
@@ -68,7 +74,7 @@ Each number is defined once, here. Other sections refer to it by id. "Side" says
 | C-03 | Request id shape | `^[A-Za-z0-9_-]{1,80}$` | both |
 | C-04 | PC speech models | exactly `nemotron`, `qwen3` | both |
 | C-05 | Reasoning efforts | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | relay |
-| C-06 | Answer model id shape | `^gpt-[a-z0-9.-]+$` | relay |
+| C-06 | Answer model id shape | `^gpt-[a-z0-9.-]+$`, and at most 64 characters in all (the id ends up on a command line) | relay |
 | C-07 | Models that always offer `none` | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` | relay |
 
 ### 2.2 Sizes
@@ -226,7 +232,7 @@ The result is `{endpoint: <canonical form>, token}`.
 
 Manual entry on the phone: trim surrounding whitespace from the address; if it begins with `https://` in any
 letter case, lower-case those eight characters; then apply V-3 and canonicalise. The token is used exactly as
-typed and must pass V-4.
+typed and must pass V-4: a token with a trailing line break or space fails (section 1, shapes).
 
 The relay validates its own advertised endpoint with the same grammar before it starts. An endpoint that
 fails is a start-up fault, not a QR.
@@ -239,7 +245,7 @@ fails is a start-up fault, not a QR.
 | Later starts | Loads the file. The protected copy must decrypt and hash to the stored hash. The same token keeps working. | Reconnects with its saved pairing. |
 | Pairing file unreadable (corrupt, cannot be decrypted, hash mismatch) | **Does not start and does not re-pair by itself.** The desktop offers "Reset pairing" as the recovery. | |
 | "Show QR" | Decrypts the saved token and shows the QR for the **same** token. The file is unchanged. A self-check runs (4.5). | |
-| Pair | | Reads the payload (4.3), then on the explicit "Verify and pair" calls `POST /v1/pair/verify`. On `200` it saves endpoint and token together. Nothing is saved before that. |
+| Pair | | Reads the payload (4.3), then on the explicit "Verify and pair" calls `POST /v1/pair/verify`. On `200` it saves endpoint and token together. Nothing is saved and nothing is sent before that. When a pairing is already saved and the new endpoint names another host, the phone first asks the user to confirm the replacement, naming both hosts; without that confirmation no request is made. |
 | Normal use | Every request is checked against the current hash (5.2). | Sends the token on every request. |
 | "Reset pairing" (explicit, confirmed, destructive desktop action) | Generates a new token and replaces the file atomically. From that instant the old token is rejected with 401. An in-flight assist or summary made with the old token is cancelled and answered `401 UNAUTHORIZED`. An open speech stream ends with `PAIRING_CHANGED` within C-56. The new QR is shown. | Its next request gets 401; it shows "pairing needs attention" and must scan the new QR. |
 
@@ -277,6 +283,7 @@ trusted to have applied any of them.
 | Parser limits | C-19. |
 | Timeouts | C-40, C-41, C-42. A request body slower than 240 bytes per second after a 5 s grace period is aborted by the server core. |
 | Connection cap | C-30. |
+| Listen socket | Opened for exclusive use of the address, so that no second socket can share the port while the relay runs. |
 | `Server` header | Never sent. |
 
 A request the HTTP layer itself rejects (malformed request line, oversized headers, invalid
@@ -302,18 +309,22 @@ Every request, including every Upgrade request, passes these steps in order. The
 
 Consequences that are part of the contract:
 
-- The three 401 answers of E-1 to E-3 are byte-identical apart from the `Date` header, which follows the
-  clock and never the failing step. A caller without the token cannot tell which step
+- The three 401 answers of E-1 to E-3 are identical in every byte the relay writes: the status line, the
+  headers of 5.3 and the body. Only the `Date` header, which the HTTP server adds (5.3), differs, and only
+  with the clock, never with the step that refused. A caller without the token cannot tell which step
   refused it and learns nothing about routes.
-- No work happens before E-3 passes: no body is read, no file is touched, no process is started, no event
-  reaches the desktop.
+- No work happens before E-3 passes: no body is read, no file is touched, no process is started, and no
+  event is raised for the request. The only trace of a refused request is one of the three counters of 5.5.
 - Cookies and every header not named in this file are ignored and never forwarded anywhere.
 
 ### 5.3 Responses
 
-Every response written by relay code has exactly these headers besides `Content-Length`, `Date` and the connection
-headers: `Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`,
+Every response written by relay code has exactly these headers besides `Content-Length`, `Date` and the
+connection headers: `Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff`. No CORS header, no `Set-Cookie`, never a 3xx status.
+
+`Date` is not written by relay code: the relay's HTTP server (Kestrel) adds it to every response and has no
+switch to leave it out. It carries the time of the response and nothing else.
 
 Error body, for every status of 400 or above:
 
@@ -346,6 +357,13 @@ The request `Content-Type` header is not checked.
   once (an answer process is killed) and frees its slot.
 - **Presence**: every request that passes E-3, whatever its route and outcome, tells the desktop "a phone was
   seen now". The self-check request (4.5) is the one exception. An authenticated speech upgrade counts.
+- **Rejected-request counters**: the relay keeps three totals since it started, each incremented without
+  allocating and without any other work: requests refused at E-1 for `Origin` or `Sec-Fetch-Site` or at E-2
+  ("malformed"); requests refused at E-3 ("well formed, token not accepted"); requests refused at E-1 in
+  Private mode because they carried `Tailscale-Funnel-Request` ("through Funnel in Private mode"). A refused
+  request is counted once: as "through Funnel in Private mode" when that applies, otherwise by the step
+  that refused it. The totals are told to the desktop in one statistics event, at most once per 60 s and only when a total
+  changed since the last one. There is no event per refused request, no lockout, no delay and no alert.
 
 ---
 
@@ -835,9 +853,10 @@ There is never a fallback from one speech model to another, or to any cloud serv
 | The stream's token stops being accepted | within C-56 | `PAIRING_CHANGED` |
 | The relay is stopping | at once | `RELAY_STOPPING` |
 
-The relay sends a WebSocket keep-alive frame every C-57: a Ping, or an unsolicited Pong (RFC 6455 section
-5.5.3). Neither needs an answer. The phone writes no code for it and must not treat an unsolicited Pong as
-an error.
+The relay sends a WebSocket keep-alive frame every C-57. The frame is an unsolicited Pong (RFC 6455 section
+5.5.3), which is what the relay's WebSocket implementation sends when no reply is demanded; it is not a Ping.
+The phone ignores it and owes no answer: the relay never closes a stream because a keep-alive frame went
+unanswered.
 
 ### 10.6 Errors and close codes
 
@@ -884,6 +903,15 @@ from the old lab except where this section says so.
 | Authentication | None. Protection is the loopback publish plus the Host and Origin rules below. |
 
 The container is told its host port (environment variable `ASR_HOST_PORT`) so it can check `Host`.
+
+**Host rule, every route.** Every request to the lab, HTTP or WebSocket, must carry `Host:
+127.0.0.1:<lab port>` or `Host: localhost:<lab port>`. Any other `Host` is refused before any handler runs:
+`403` with an empty body on the HTTP routes (`GET /health`, `GET /`, `GET /sample`), close code 1008 on the
+two WebSockets (11.3, 11.4). The HTTP routes also answer `403` to a request whose `Origin` is anything but
+`http://127.0.0.1:<lab port>` or `http://localhost:<lab port>`, and to a request whose `Sec-Fetch-Site` is
+`cross-site`. A request with the lab's own `Host` and no `Origin` (the relay's probe, the lab page) is
+served. This closes the DNS-rebinding path by which a web page on the PC could otherwise read `/sample` and
+`/health`.
 
 ### 11.2 `GET /health`
 
@@ -936,6 +964,7 @@ Changes from the old lab, all on the lab side:
 | Outbound overflow | When the outbound queue overflows, the lab cancels the session **and writes one `error` message straight to the socket** (best effort, 2 s limit) before closing. The old lab closed silently. |
 | Logging | Both `/relay` and `/stream` log only the exception type name of an inference failure. |
 | Host port | The `Host` allowlist uses the configured host port instead of a fixed number. |
+| HTTP routes | The `Host` rule, the `Origin` rule and the `Sec-Fetch-Site` rule of 11.1 apply to `GET /health`, `GET /` and `GET /sample`. The old lab checked `Host` on its two WebSockets only. |
 
 ### 11.4 Lab page endpoints (not used by the relay)
 
@@ -958,8 +987,18 @@ absent) and WebSocket `/stream`:
 
 | Operation | Command | Limit |
 |---|---|---|
-| Start | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <lab folder>\Start-ASR-Lab.ps1 -Model <model> -Port <lab port> -NoBrowser -EnsureDocker` | C-46 (660 s) |
-| Stop | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <lab folder>\Stop-ASR-Lab.ps1 -Port <lab port>` | C-46 (45 s) |
+| Start | `<powershell> -NoProfile -ExecutionPolicy Bypass -File <data folder>\lab\Start-ASR-Lab.ps1 -LabFolder <lab folder> -Model <model> -Port <lab port> -NoBrowser -EnsureDocker` | C-46 (660 s) |
+| Stop | `<powershell> -NoProfile -ExecutionPolicy Bypass -File <data folder>\lab\Stop-ASR-Lab.ps1 -Port <lab port>` | C-46 (45 s) |
+
+**The relay runs only its own copies of the launcher scripts**: `Start-ASR-Lab.ps1`, `Stop-ASR-Lab.ps1` and
+`LabCommon.ps1`, the shared script that both load from their own folder. The three files are embedded in
+the relay, rewritten into `<data folder>\lab\` at every start exactly as the schema files are, and compared
+with the embedded bytes again immediately before each run (a copy that differs is rewritten first). The
+relay never runs, and its copies never load, a script from the configured lab folder. That folder supplies data only: the weights and the Python service, both
+mounted read-only into the container. It reaches the start script as `-LabFolder`, and it must be a
+drive-letter path on a fixed local volume (`03-system-architecture.md` 3.5); a network share or a
+device-namespace path is "not configured". `<powershell>` is `WindowsPowerShell\v1.0\powershell.exe` under
+the system directory that the operating-system API reports, never a path built from an environment variable.
 
 Hidden window, no shell, arguments passed as a list. `<model>` is one of C-04 and never comes from anywhere
 but the validated request. The child gets only these environment variables (names compared without regard to
@@ -974,11 +1013,12 @@ including the limit, is failure. Output is discarded. What the scripts do is spe
 
 Codex is the only answer backend and the only source of the catalogue. The relay needs no API key; Codex
 uses its own sign-in. The relay is given the absolute path of a `codex.exe` (how it is found is in
-`03-system-architecture.md` 3.7). The exchange below is preserved exactly from the old relay.
+`03-system-architecture.md` 3.7). The exchange below is preserved from the old relay; what the security
+review added is the containment of 12.6 (the environment, the further tool switches and the working folder).
 
-Common process rules: no shell, hidden window, arguments passed as a list, the relay's environment minus
-every variable whose name starts with `LIVECUE_`, standard error discarded, the whole process tree killed
-when the relay gives up.
+Common process rules: no shell, hidden window, arguments passed as a list, the allowlisted environment of
+12.6 (never the relay's own environment), standard error discarded, the whole process tree killed when the
+relay gives up.
 
 ### 12.1 Catalogue: `codex app-server`
 
@@ -1009,20 +1049,22 @@ One process per assist or summary request. Arguments, in this order:
 ```
 <codex> exec --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check
         --sandbox read-only --disable shell_tool
+        <containment arguments>
         -m <model>
         -c model_reasoning_effort="<effort>"
         -c service_tier="default"
         --output-schema <absolute path of the schema file>
-        -o <temp dir>\output.json
-        -C <temp dir>
+        -o <work dir>\output.json
+        -C <work dir>
         -
 ```
 
 | Aspect | Rule |
 |---|---|
+| Containment arguments | Zero or more further switches, each one turning off a tool, a feature or a network capability of the installed Codex (12.6). The list is fixed in the build and recorded in `05-windows-architecture.md` 4.9; it never depends on the request. |
 | `-c` values | The text after `=` is the value as a JSON string, so the literal arguments are `model_reasoning_effort="low"` and `service_tier="default"`, quotes included. |
 | Prompt | Written to standard input as UTF-8, then standard input is closed. The final `-` argument makes Codex read it. |
-| Working directory | A fresh directory `livecue-remake-XXXXXX` under the OS temp folder, also passed with `-C`. Removed (recursively) when the request ends, on success or failure. |
+| Working directory | A fresh directory `<data folder>\work\<32 lower-case hex characters from the OS cryptographic random source>`, created with "fail if it exists" and empty when Codex starts; also passed with `-C`. Removed (recursively) when the request ends, on success or failure. At every relay start everything under `work\` is deleted first, so an output file left by a crash or a kill does not outlive the next start. Nothing of a request is written under the OS temp folder. |
 | Schema file | `assist.schema.json` or `summary.schema.json` (12.5), written by the relay into its data folder at start. |
 | Output | After exit code 0 the relay reads `output.json` (at most C-24), parses it and validates it against the schema itself: every required member present with the right type. Unknown members are dropped. In an assist reply `memory.throughSegmentId` is then written as `null`, whatever the output held (8.3). Any failure is `ASSISTANT_FAILED`. |
 | Limit | C-43 for the whole request. On expiry the process tree is killed. |
@@ -1057,7 +1099,9 @@ END_UNTRUSTED_INPUT_JSON
 
 The phone can never choose an executable, a script, an upstream address or an arbitrary model string. Speech
 models are the fixed list C-04. Answer models must come from the catalogue the relay itself offered. Request
-content reaches Codex only as delimited untrusted data, with the shell tool disabled and a read-only sandbox.
+content reaches Codex only as delimited untrusted data, in a process that has the allowlisted environment,
+the tool switches and the empty working folder of 12.6. The sandbox flag is kept but is not relied on for
+confidentiality, and the framing of 12.3 is advice to the model, not a control.
 
 ### 12.5 Output schemas
 
@@ -1106,6 +1150,22 @@ Both files declare JSON Schema draft 2020-12. They are unchanged from the old re
   }
 }
 ```
+
+### 12.6 Containment of the Codex processes
+
+Behind the token is a coding agent that runs as the owner, fed with text that a token holder, or a speaker
+in a transcribed conversation, controls. These rules bound what that text can reach. They apply to every
+Codex process the relay or its host starts (catalogue, sign-in check, version read, answer run) unless a row
+says "answer run".
+
+| Control | Rule |
+|---|---|
+| Environment | An allowlist, names compared without regard to case: the thirteen names of 11.5 (`SystemRoot`, `windir`, `Path`, `PathExt`, `TEMP`, `TMP`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ProgramData`, `ProgramFiles`, `ProgramFiles(x86)`, `ComSpec`), plus `HOMEDRIVE`, `HOMEPATH` and `CODEX_HOME` (so that Codex finds its own sign-in), plus `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` and `NO_PROXY` when the parent has them. Nothing else reaches Codex: no `LIVECUE_` variable, and no key or token the owner keeps in the environment. If the installed Codex proves to need another variable, the builder reports it; the list is not widened locally. |
+| Tool switches (answer run) | `--disable shell_tool` is the minimum. The builder of the answer runner reads the help output of the Codex installed on the build PC (`codex --help`, `codex exec --help`, and the feature list they name) and adds an explicit argument for **every** switch that turns off a tool, a feature or a network capability: at least patch application, image viewing by local path, web search, configured tool servers and project instruction files, wherever that version has a switch. These are the `<containment arguments>` of 12.2. A capability that the installed version cannot switch off is recorded beside the list, in `05-windows-architecture.md` 4.9, with the Codex version it was read from. |
+| Sandbox (answer run) | `--sandbox read-only` stays. It limits writing and network access of commands the agent spawns. It gives no confidentiality: a read-only sandbox may read every file the Windows account can read. |
+| Working folder (answer run) | The empty per-request folder of 12.2. Tools take absolute paths, so it limits nothing by itself; it guarantees that a run starts with no file of the owner beside it and leaves none behind. |
+| Live containment check | Opt-in, on the build PC (`06-test-and-ci-plan.md` section 3, L-4): a canary file and a transcript that tells the model to read it; the reply must not contain the canary value. It is run again whenever the installed Codex version changes. |
+| Version shown | The desktop shows the version text of the Codex in use and warns when it differs from the version of the last containment check (`03-system-architecture.md` 3.7). There is no per-binary hash check, and answers are never refused because of the Codex version, in either mode. |
 
 ---
 
@@ -1362,6 +1422,7 @@ untested-contract row the statement carries over.
 | P2-016 | In Private mode a request with valid credentials and `Tailscale-Funnel-Request: ?1` is answered with the same 401. In Public mode the same request is served. | R | new |
 | P2-017 | Each authenticated HTTP request (including one answered 404) and each authenticated speech upgrade produces exactly one presence event. The self-check request carrying the current nonce produces none. A request carrying a wrong nonce produces one. | R | AC-WIN-016 |
 | P2-018 | A route whose work outlasts its relay deadline is answered `504 DEADLINE_EXCEEDED`. | R | new |
+| P2-019 | After N requests refused for a browser header or a malformed `Authorization`, M requests with a well-formed token that is not accepted, and, in Private mode, K requests with a valid token and `Tailscale-Funnel-Request`, the three counters of 5.5 read exactly N, M and K. On the injected clock at most one statistics event is raised per 60 s, none while no counter changed, and none per request. | R | new |
 
 ### 15.2 Health and pairing verification
 
@@ -1410,7 +1471,7 @@ Fixture `L`: a catalogue source result with one entry: id `gpt-6-luna`, not hidd
 | P2-061 | `POST /v1/session-summary` with a backend stub returning a valid summary object is `200` with `title`, `summary`, `keyPoints`, `actionItems` and `execution`. | R | UT-07 |
 | P2-062 | Closing the client connection during a run kills the run and frees the slot within 1 s. | R | new |
 | P2-063 | Check order: paused and slot busy gives `RELAY_PAUSED`; slot busy and invalid JSON gives `ASSISTANT_BUSY`; invalid `requestId` and invalid `assistant` gives `INVALID_REQUEST_ID`; malformed `assistant` and failing catalogue gives `INVALID_ASSISTANT`. | R | new |
-| P2-064 | The Codex argument list for a run equals 12.2 item by item; the child environment has no variable starting with `LIVECUE_`; the prompt equals 12.3 around the compact body; the temp directory is gone after success and after failure. | R | UT-10 |
+| P2-064 | The Codex argument list for a run equals 12.2 item by item, with the containment arguments recorded in `05-windows-architecture.md` 4.9 in their place; the child environment holds only names of the allowlist of 12.6 (a parent variable starting with `LIVECUE_`, a parent variable named like a secret and a parent model API key are all absent); the prompt equals 12.3 around the compact body; the working directory is under `<data folder>\work\`, did not exist before the run, and is gone after success and after failure. | R | UT-10 |
 | P2-065 | For backend output whose `memory.throughSegmentId` is a UUID string, the text `not-a-uuid`, or `null`, the assist reply's `memory.throughSegmentId` is JSON `null`. | R | new |
 
 ### 15.5 PC speech model control
@@ -1435,7 +1496,7 @@ calls; start waits on a gate, then marks the model loaded.
 | P2-092 | After that socket closes, stop `nemotron` is `202`; once complete the state is `stopped` and the stop count is 1. | R | AC-RELAY-068 |
 | P2-093 | Start of a model that is already usable is `200` with `ready`, and the start count does not change. | R | new |
 | P2-094 | With no lab folder configured, `GET /v1/local-model` reports `stopped` with MSG-2, and routes 5 and 6 are `503 LAB_NOT_CONFIGURED`. | R | new |
-| P2-095 | The start and stop scripts are run with the argument lists and the environment allowlist of 11.5; a non-zero exit and the time limit are both failures. | R | UT-22 |
+| P2-095 | The start and stop scripts are run with the argument lists and the environment allowlist of 11.5; the script file is the relay's own copy under `<data folder>\lab\`, never a file of the lab folder; a non-zero exit and the time limit are both failures. | R | UT-22 |
 
 ### 15.6 Speech stream
 
@@ -1500,6 +1561,7 @@ with `{"type":"speechComplete","transcript":"Local words","turnId":1,"audioProce
 | P2-159 | When the outbound queue of a `/relay` session overflows, the client receives an `error` message before the socket closes. | L | new |
 | P2-160 | `GET /health` returns every member of 11.2 with the documented types, and `relayProtocol` is 1. | L | UT-24 |
 | P2-161 | An inference failure on `/relay` and on `/stream` logs the exception type name and never its text. | L | new |
+| P2-162 | `GET /health`, `GET /` and `GET /sample` with `Host: evil.example:<lab port>`, with `Origin: https://evil.example`, or with `Sec-Fetch-Site: cross-site` are each answered `403`. With the lab's own `Host` and no `Origin` they are served. | L | new |
 
 ### 15.9 Phone client
 
@@ -1507,7 +1569,7 @@ with `{"type":"speechComplete","transcript":"Local words","turnId":1,"audioProce
 |---|---|---|---|
 | P2-200 | For `E` = `https://pc.example.test:11443/` and for `E` = `https://pc.example.test:10000/livecue/`, the URL of every route equals `E` + the route without its leading slash, and the speech URL is the same with scheme `wss`. No URL has a query or fragment. | P | new |
 | P2-201 | Every relay request carries `Authorization: Bearer <token>` and `X-LiveCue-Protocol: 2`; body requests carry `Content-Type: application/json`; the speech upgrade carries `X-LiveCue-Speech-Model`. No request carries `Origin` or `Cookie`. | P | new |
-| P2-202 | Payload parsing accepts `{"endpoint":"https://pc.example.test/","token":"<43 valid characters>"}` and the two endpoints of P2-200. It rejects: `http://`; `HTTPS://` inside a payload; a user name; a query; a fragment; `%`; an empty segment; `..`; five segments; port `0`, `65536` and `0443`; a token of 42 or 44 characters or containing `+`; a text longer than C-18; a text that is not a JSON object. Unknown members are ignored. | P | AC-CORE-004 to 008 |
+| P2-202 | Payload parsing accepts `{"endpoint":"https://pc.example.test/","token":"<43 valid characters>"}` and the two endpoints of P2-200. It rejects: `http://`; `HTTPS://` inside a payload; a user name; a query; a fragment; `%`; an empty segment; `..`; five segments; port `0`, `65536` and `0443`; a token of 42 or 44 characters or containing `+`; a 43-character token followed by a line feed; a text longer than C-18; a text that is not a JSON object. Unknown members are ignored. | P | AC-CORE-004 to 008 |
 | P2-203 | `https://PC.Example.Test` canonicalises to `https://pc.example.test/`; `https://pc.example.test:10000/livecue` to `…/livecue/`. Manual entry of ` HTTPS://pc.example.test:11443 ` is accepted and canonicalised. | P | new |
 | P2-204 | A health reply of `{"ok":true,"protocol":2,"relayVersion":"1.0.0"}` means online. A reply with `protocol` 3, or without `protocol`, means not online with the `PROTOCOL_MISMATCH` text. | P | new |
 | P2-205 | Each row of 13.6 is classified as stated, tested with a fake transport. | P | new |
