@@ -296,6 +296,30 @@ final class RelayClientAssistTests: XCTestCase {
         XCTAssertEqual(JSONValue.parse(sent)?["transcriptTruncated"]?.boolValue, true)
     }
 
+    func testABodyThatCannotBeMadeToFitIsNotSent() async throws {
+        // Only a selection of more than 100,000 bytes does this; a relay model id is at most 64 characters.
+        let selection = AssistantConfiguration(model: String(repeating: "m", count: 200_000), reasoningEffort: "low")
+        var assist = Self.assistRequest()
+        assist.assistant = selection
+        var summary = Self.summaryRequest()
+        summary.assistant = selection
+        let transport = FakeHTTPTransport(replies: [Self.reply(200, CoreFixtures.assistReplyJSON)])
+        let client = RelayClient(transport: transport)
+        let pairing = CoreFixtures.pairing()
+
+        let assistError = await Self.caught { _ = try await client.assist(assist, pairing: pairing) }
+        let summaryError = await Self.caught { _ = try await client.summarize(summary, pairing: pairing) }
+
+        XCTAssertEqual(assistError as? RelayFailure, RelayFailure.wire(.payloadTooLarge))
+        XCTAssertEqual(summaryError as? RelayFailure, RelayFailure.wire(.payloadTooLarge))
+        XCTAssertEqual(
+            (assistError as? RelayFailure).map { RelayMessages.text(for: $0) },
+            "This request was too large for your PC. Retry after a shorter stretch of conversation."
+        )
+        let count = await transport.requests.count
+        XCTAssertEqual(count, 0)
+    }
+
     // MARK: - P2-212: the one cancel
 
     func testOneDeleteIsSentWhenThePhoneTimeoutOfAssistPasses() async throws {

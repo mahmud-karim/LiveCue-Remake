@@ -67,12 +67,14 @@ public struct RelayClient: Sendable {
         guard let assistant = request.assistant else {
             throw RelayFailure.wire(.invalidAssistant)
         }
+        // `fitted` returns only a body of at most C-11 bytes. It throws for one that cannot be made that
+        // small, which a selection from a relay catalogue never causes; such a body is not sent.
         let body: Data
         do {
             let fitted = try WireBudget.fitted(request)
             body = try WireBudget.encodedBody(fitted)
         } catch {
-            throw RelayFailure.wire(.invalidRequest)
+            throw RelayFailure.wire(.payloadTooLarge)
         }
 
         let reply = try await sendAnswerRequest(.assist, requestId: request.requestId, pairing: pairing, body: body)
@@ -95,7 +97,7 @@ public struct RelayClient: Sendable {
             let fitted = try WireBudget.fitted(request)
             body = try WireBudget.encodedBody(fitted)
         } catch {
-            throw RelayFailure.wire(.invalidRequest)
+            throw RelayFailure.wire(.payloadTooLarge)
         }
         let reply = try await sendAnswerRequest(
             .sessionSummary,
