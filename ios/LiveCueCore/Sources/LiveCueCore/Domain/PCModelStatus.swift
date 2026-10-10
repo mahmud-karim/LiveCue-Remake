@@ -20,26 +20,38 @@ public struct PCModelStatus: Codable, Equatable, Sendable {
         self.message = message
     }
 
+    /// A start or a stop is running.
     public var isChanging: Bool {
-        // STUB(WP-02)
-        false
+        state == "starting" || state == "stopping"
     }
 
     /// State "ready" and model == provider id; `busy` is not considered.
     public func isReady(for provider: SpeechProvider) -> Bool {
-        // STUB(WP-02)
-        false
+        state == "ready" && model == provider.rawValue
     }
 
     /// The seven rows of spec 02 section 8.2.
     public func homeLabel(for provider: SpeechProvider) -> String {
-        // STUB(WP-02)
-        ""
+        if otherLoadedModel(than: provider) != nil {
+            return "Different model loaded"
+        }
+        switch state {
+        case "starting":
+            return "Loading · \(elapsedSeconds)s"
+        case "stopping":
+            return "Stopping · \(elapsedSeconds)s"
+        case "ready":
+            return busy ? "In use" : "Ready"
+        case "error":
+            return "Error · open Settings"
+        default:
+            return "Stopped · open Settings"
+        }
     }
 
     /// The loaded model's id when it is not `provider` and the state is not "stopped".
     public func otherLoadedModel(than provider: SpeechProvider) -> String? {
-        // STUB(WP-02)
-        nil
+        guard let model, model != provider.rawValue, state != "stopped" else { return nil }
+        return model
     }
 }

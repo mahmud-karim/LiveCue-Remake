@@ -759,6 +759,11 @@ public struct TranscriptionUsage: Codable, Equatable, Sendable {
 }
 ```
 
+As built by WP-02: `apply(_:)` ignores a `firstText` or `finalization` time that is negative, NaN or
+infinite, as `update` ignores such a position (JSON has no such number, so the session could not be saved).
+A stream whose stored `state` is none of the three is costed like a finished one. The derived seconds
+saturate at `Int.max` instead of trapping on a stored value out of range.
+
 #### 3.1.3 Coding
 
 ```swift
@@ -802,6 +807,16 @@ comma after the last member of an object or an array. Nothing relies on such tex
 integer arithmetic on the days-since-epoch count (the civil-date algorithm), not a formatter, so they behave
 the same on Linux and need no shared mutable object. Encoders and decoders are created per call.
 
+What the declarations leave open, as built by WP-02 and held by `LiveCueJSONTests`:
+
+- `date(from:)` accepts exactly `YYYY-MM-DDTHH:MM:SS`, then nothing or a `.` with one to nine digits, then
+  `Z` (capital `T` and `Z`), and only for a date that exists: no 30 February, no hour 24, no second 60.
+- Digits beyond the third are rounded to the nearest millisecond, so every date that is read is written
+  back unchanged.
+- The text has a four-digit year. A date outside the years 0000 to 9999 is written, and rounded by
+  `roundedToMilliseconds`, as the nearest end of that range.
+- `Session.closedAfterInterruption(at:)` rounds its date as the initialisers do.
+
 #### 3.1.4 Context builder and wire budget (protocol 13.4)
 
 ```swift
@@ -841,6 +856,16 @@ public enum WireBudget {
 
 "Character" is a Swift `Character`. Sizes are UTF-8 bytes of the raw string. `fitted` finds each cut by
 binary search over the kept length, encoding the candidate body each time.
+
+What the declarations leave open, as built by WP-02 and held by `WireBudgetTests`:
+
+- A member that step 3 empties stays in the body as `""` or `[]`, except `partialTranscript` and
+  `instruction`, which become absent as step 1 leaves them.
+- The two lists are shrunk one after the other: the oldest facts go first, and an open question is dropped
+  only when no fact is left. Items are dropped whole.
+- `fitted` returns only a request that fits. It throws what the encoder throws, and
+  `EncodingError.invalidValue` for a body that is over C-11 with all of those members empty. That needs an
+  assistant selection of more than 100,000 bytes; a relay model id is at most 64 characters (C-06).
 
 #### 3.1.5 Relay: constants, endpoint, failures, messages, client
 

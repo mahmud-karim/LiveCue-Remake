@@ -27,15 +27,18 @@ public struct AssistantModelOption: Codable, Equatable, Sendable, Identifiable {
 
     /// The effort to use after selecting this option: `current` when listed, else the first listed, else "low".
     public func effort(keeping current: String) -> String {
-        // STUB(WP-02)
-        current
+        if reasoningEfforts.contains(current) {
+            return current
+        }
+        return reasoningEfforts.first ?? "low"
     }
 }
 
 extension Array where Element == AssistantModelOption {
     /// True when an option has this id and lists this effort. The model check of every Assist.
     public func supports(_ configuration: AssistantConfiguration) -> Bool {
-        // STUB(WP-02)
-        false
+        contains { option in
+            option.id == configuration.model && option.reasoningEfforts.contains(configuration.reasoningEffort)
+        }
     }
 }
