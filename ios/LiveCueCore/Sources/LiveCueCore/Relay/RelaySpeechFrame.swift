@@ -16,7 +16,48 @@ public enum RelaySpeechFrame: Equatable, Sendable {
     /// read as absent. `ready` and `error` with a missing member parse as `.unknown`. `loading` with a
     /// missing member is still `loading`, with 0 or "" in its place.
     public static func parse(_ text: String) -> RelaySpeechFrame? {
-        // STUB(WP-04)
-        nil
+        guard let members = JSONValue.parse(text)?.objectValue,
+              let type = members["type"]?.stringValue
+        else { return nil }
+
+        // Read through the strict accessors: a boolean is never a number, a number with a fraction is
+        // never a turn, and a member the frame does not list is never looked at (P2-218).
+        let turnId = members["turnId"]?.intValue
+        let audioProcessedMs = members["audioProcessedMs"]?.numberValue
+        let transcript = members["transcript"]?.stringValue
+
+        switch type {
+        case "loading":
+            // The frame only keeps the wait going, so a missing member must not end the wait (A-14).
+            return .loading(
+                provider: members["provider"]?.stringValue ?? "",
+                elapsedSeconds: members["elapsedSeconds"]?.intValue ?? 0,
+                message: members["message"]?.stringValue ?? ""
+            )
+        case "ready":
+            guard let provider = members["provider"]?.stringValue,
+                  let sampleRate = members["sampleRate"]?.intValue,
+                  let handshakeMs = members["handshakeMs"]?.numberValue
+            else { return .unknown }
+            return .ready(provider: provider, sampleRate: sampleRate, handshakeMs: handshakeMs)
+        case "speechStart":
+            return .speechStart(turnId: turnId, audioProcessedMs: audioProcessedMs)
+        case "transcript":
+            return .transcript(turnId: turnId, audioProcessedMs: audioProcessedMs, transcript: transcript)
+        case "speechComplete":
+            return .speechComplete(turnId: turnId, audioProcessedMs: audioProcessedMs, transcript: transcript)
+        case "streamComplete":
+            return .streamComplete(
+                audioProcessedMs: audioProcessedMs,
+                finalizationMs: members["finalizationMs"]?.numberValue
+            )
+        case "error":
+            guard let code = members["code"]?.stringValue,
+                  let message = members["message"]?.stringValue
+            else { return .unknown }
+            return .error(code: code, message: message)
+        default:
+            return .unknown
+        }
     }
 }
