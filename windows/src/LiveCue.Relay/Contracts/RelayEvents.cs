@@ -108,5 +108,19 @@ public sealed record SpeechStreamChanged(
 /// <summary>The text of one speechComplete frame, cut like the frame (C-22).</summary>
 public sealed record SpeechText(DateTimeOffset At, string Text) : RelayEvent(At);
 
+/// <summary>
+/// The rejected-request counters of protocol 5.5: totals since this instance started. Published at most
+/// once per W-13 and only when a total changed, and once more before RelayStopped when a total changed
+/// since the last one. Never published per request.
+/// </summary>
+/// <param name="Malformed">Refused at E-1 for Origin or Sec-Fetch-Site, or at E-2.</param>
+/// <param name="TokenNotAccepted">Refused at E-3: a well-formed token that is not the accepted one.</param>
+/// <param name="FunnelInPrivateMode">Refused at E-1 in Private mode for Tailscale-Funnel-Request.</param>
+public sealed record EdgeStatistics(
+    DateTimeOffset At,
+    long Malformed,
+    long TokenNotAccepted,
+    long FunnelInPrivateMode) : RelayEvent(At);
+
 /// <summary>An internal problem: an exception type name and a fixed description, never exception text.</summary>
 public sealed record Diagnostic(DateTimeOffset At, string Source, string Message) : RelayEvent(At);

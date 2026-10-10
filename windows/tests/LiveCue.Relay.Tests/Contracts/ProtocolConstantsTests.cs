@@ -20,6 +20,7 @@ public sealed class ProtocolConstantsTests
         Assert.Equal(
             ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
             ProtocolConstants.ReasoningEfforts);                                              // C-05
+        Assert.Equal(64, ProtocolConstants.ModelIdMaxLength);                                 // C-06
         Assert.Equal(
             ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
             ProtocolConstants.AlwaysNoneModels);                                              // C-07
@@ -108,6 +109,7 @@ public sealed class ProtocolConstantsTests
         Assert.Equal(TimeSpan.FromSeconds(1), ProtocolConstants.DesktopTick);                 // W-10
         Assert.Equal(TimeSpan.FromSeconds(3.5), ProtocolConstants.WindowCloseWait);           // W-11
         Assert.Equal(TimeSpan.FromSeconds(120), ProtocolConstants.SelfTestWatchdog);          // W-12
+        Assert.Equal(TimeSpan.FromSeconds(60), ProtocolConstants.EdgeStatisticsInterval);     // W-13
     }
 
     [Fact]

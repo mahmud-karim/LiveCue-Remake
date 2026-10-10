@@ -64,6 +64,8 @@ internal sealed class LiveViewModel : ObservableObject, ILiveViewModel
 
     public BannerModel? ConnectionBanner => null;
 
+    public BannerModel? ExposureBanner => null;
+
     public bool IsStartVisible => !_session.IsRelayRunning;
 
     public bool IsStartBusy => _session.State is RelayUiState.Checking or RelayUiState.Starting;

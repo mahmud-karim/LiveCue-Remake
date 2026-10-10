@@ -19,7 +19,8 @@ public sealed class RelayDependencies
     /// <summary>Runs Codex and the lab scripts.</summary>
     public IProcessRunner? Processes { get; init; }
 
-    /// <summary>Parent of the per-request Codex folders. Null means the OS temp folder.</summary>
+    /// <summary>Parent of the per-request Codex folders. Null means DataDirectory\work (protocol 12.2),
+    /// which the relay empties at each start. A folder given here is never emptied by the relay.</summary>
     public string? TempRoot { get; init; }
 
     internal IPairingProtector? PairingProtector { get; init; }

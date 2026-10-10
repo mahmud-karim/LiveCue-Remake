@@ -19,6 +19,7 @@ internal static class SettingsText
 
     public const string NotReportedYet = "Not reported yet";
     public const string NotChecked = "Not checked";
+    public const string CodexVersionUnknown = "Unknown";
     public const string Automatic = "Automatic";
 
     public const string SetUpTitle = "Set up the Tailscale mapping?";

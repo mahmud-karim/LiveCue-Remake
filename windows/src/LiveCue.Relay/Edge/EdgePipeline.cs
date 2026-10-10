@@ -44,13 +44,11 @@ internal sealed class EdgePipeline : IRouteIo
         // P-2 (E-1), P-3 (E-2), P-4 (E-3).
         if (BearerCheck.CarriesRefusedHeader(headers, _context.Options.Mode)
             || !BearerCheck.TryReadToken(headers.Authorization, out var token)
-            || !_services.Pairing.Verify(token))
+            || !_services.Pairing.TryVerify(token, out var revoked))
         {
             await RefuseAsync(http, RelayErrors.Unauthorized, declaresBody).ConfigureAwait(false);
             return;
         }
-
-        var revoked = _services.Pairing.CurrentRevocation;
 
         // P-5. The self-check request carrying the current nonce is the one request that is not a phone.
         var selfCheck = headers[SelfCheckHeader];

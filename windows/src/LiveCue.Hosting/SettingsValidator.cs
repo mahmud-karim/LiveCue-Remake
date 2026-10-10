@@ -26,6 +26,8 @@ internal sealed class SettingsValidator : ISettingsValidator
 
     public IReadOnlyList<SettingsProblem> ValidateStructure(RelaySettings settings) => Run(settings, askFileSystem: false);
 
+    public bool IsValidLedgerEntry(OwnedMapping entry) => IsWellFormed(entry);
+
     /// <summary>The prefix rule of architecture 3.5: "/", then 1 to 32 of [a-z0-9-], not starting with "-".</summary>
     internal static bool IsPathPrefix(string? prefix)
     {

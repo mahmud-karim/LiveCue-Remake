@@ -8,6 +8,14 @@ public interface IHostFileSystem
     /// <summary>The folder of the running executable (AppContext.BaseDirectory).</summary>
     string BaseDirectory { get; }
 
+    /// <summary>The Program Files folder from the known-folder API
+    /// (Environment.GetFolderPath(SpecialFolder.ProgramFiles)), never from an environment variable.</summary>
+    string ProgramFilesDirectory { get; }
+
+    /// <summary>True when <paramref name="path"/> starts with a drive letter, a colon and a backslash and
+    /// that drive is a fixed local volume (DriveType.Fixed). False for every other form and on any error.</summary>
+    bool IsOnFixedLocalDrive(string path);
+
     string? GetEnvironmentVariable(string name);
 
     bool FileExists(string path);

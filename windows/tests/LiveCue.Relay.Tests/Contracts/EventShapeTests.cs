@@ -18,7 +18,7 @@ public sealed class EventShapeTests
             .Where(type => type.IsSubclassOf(typeof(RelayEvent)) && !type.IsAbstract)
             .ToList();
 
-        Assert.Equal(16, events.Count);
+        Assert.Equal(17, events.Count);
         foreach (var type in events)
         {
             foreach (var name in MemberNames(type, []))

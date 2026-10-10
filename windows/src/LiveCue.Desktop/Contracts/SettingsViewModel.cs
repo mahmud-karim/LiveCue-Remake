@@ -8,6 +8,11 @@ namespace LiveCue.Desktop;
 /// <summary>One stale mapping of ours and the sentence that describes it.</summary>
 public sealed record StaleMappingRow(OwnedMapping Entry, string Text);
 
+/// <summary>One row of the exposure report that is not in the ledger: the sentence that describes it and
+/// the removal command as text for the owner to run. LiveCue never runs it. CommandText is empty when no
+/// command can be shown safely (4.15).</summary>
+public sealed record UnownedExposureRow(ExposedHandler Handler, string Text, string CommandText);
+
 /// <summary>The Settings page (screens section 5). Field properties are two-way and hold the text as
 /// typed; nothing is saved until SaveCommand.</summary>
 public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorInfo
@@ -50,6 +55,14 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     /// each with a "Remove…" button.</summary>
     IReadOnlyList<StaleMappingRow> StaleMappings { get; }
 
+    /// <summary>One standing warning per handler that forwards to the relay port and is not in the ledger,
+    /// each with its removal command as selectable text and no button but "Check again".</summary>
+    IReadOnlyList<UnownedExposureRow> UnownedExposures { get; }
+
+    /// <summary>"Tailscale's configuration could not be read, so LiveCue cannot tell what is exposed.", or
+    /// null when the last inspection read the serve status.</summary>
+    string? ExposureUnknownText { get; }
+
     /// <summary>"The relay is still using the previous connection settings…", or null.</summary>
     BannerModel? RestartNotice { get; }
 
@@ -67,6 +80,17 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     /// <summary>CodexLoginStatus.</summary>
     StatusIndicator CodexLoginStatus { get; }
 
+    /// <summary>CodexVersionStatus: the version text of the Codex in use, or "Unknown" (architecture 3.7).
+    /// Success tone when the containment check was run for this version, warning tone otherwise.</summary>
+    StatusIndicator CodexVersionStatus { get; }
+
+    /// <summary>The containment warning of architecture 3.7, or "Containment check run for this
+    /// version."; null when no Codex was found.</summary>
+    string? CodexVersionDetail { get; }
+
+    /// <summary>True when a version was read and it is not the recorded one.</summary>
+    bool CanMarkContainmentChecked { get; }
+
     bool IsCheckingAssistant { get; }
 
     /// <summary>Blank means automatic.</summary>
@@ -81,6 +105,10 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     StatusIndicator LoadedModelStatus { get; }
 
     string SpeechCaption { get; }
+
+    /// <summary>HideFromCaptureToggle: two-way, part of the form like every field; takes effect on the
+    /// window when the settings are saved.</summary>
+    bool HideFromScreenCapture { get; set; }
 
     string Version { get; }
 
@@ -101,6 +129,10 @@ public interface ISettingsViewModel : INotifyPropertyChanged, INotifyDataErrorIn
     ICommand CheckMappingCommand { get; }
 
     ICommand CheckAssistantCommand { get; }
+
+    /// <summary>"Mark as checked": saves the settings with CodexContainmentCheckedVersion set to the
+    /// version in use. It changes nothing else, and unsaved form changes are not saved with it.</summary>
+    ICommand MarkContainmentCheckedCommand { get; }
 
     ICommand CopyAddressCommand { get; }
 

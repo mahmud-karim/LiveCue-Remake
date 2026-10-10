@@ -14,6 +14,15 @@ internal sealed class FakeHostFileSystem : IHostFileSystem
     /// <summary>The folder of the "running executable".</summary>
     public string BaseDirectory { get; set; } = @"C:\LiveCue-tests\app";
 
+    /// <summary>The "Program Files" folder of the known-folder API.</summary>
+    public string ProgramFilesDirectory { get; set; } = @"C:\Program Files";
+
+    /// <summary>The answer of <see cref="IsOnFixedLocalDrive"/>. A test replaces it to play a network or
+    /// removable drive. By default every path that starts with a drive letter, a colon and a backslash is
+    /// on a fixed local volume.</summary>
+    public Func<string, bool> FixedLocalDrive { get; set; } = static path =>
+        path is { Length: >= 3 } && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] == '\\';
+
     /// <summary>True: creating a folder throws, as for a data folder that cannot be opened.</summary>
     public bool CreateDirectoryFails { get; set; }
 
@@ -76,6 +85,8 @@ internal sealed class FakeHostFileSystem : IHostFileSystem
 
         return this;
     }
+
+    public bool IsOnFixedLocalDrive(string path) => FixedLocalDrive(path);
 
     public string? GetEnvironmentVariable(string name)
     {

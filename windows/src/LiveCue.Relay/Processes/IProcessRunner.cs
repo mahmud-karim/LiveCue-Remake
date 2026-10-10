@@ -6,9 +6,11 @@ public enum EnvironmentPolicy
     /// <summary>The parent's environment unchanged. Used for the Tailscale CLI.</summary>
     Inherit,
 
-    /// <summary>The parent's environment minus every variable whose name starts with LIVECUE_, compared
-    /// without regard to case (protocol section 12). Used for every Codex process.</summary>
-    WithoutLiveCueVariables,
+    /// <summary>Only the names of protocol 12.6, compared without regard to case: the thirteen names of
+    /// protocol 11.5, plus HOMEDRIVE, HOMEPATH and CODEX_HOME, plus HTTPS_PROXY, HTTP_PROXY, ALL_PROXY and
+    /// NO_PROXY when the parent has them. Used for every Codex process: catalogue, sign-in check, version
+    /// read and answer run. (Before the review this member was WithoutLiveCueVariables.)</summary>
+    CodexAllowlist,
 
     /// <summary>Only the thirteen names of protocol 11.5, compared without regard to case. Used for the
     /// lab launcher scripts.</summary>

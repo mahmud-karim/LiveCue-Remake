@@ -28,7 +28,9 @@ public enum RelayStatus
 /// <param name="AdvertisedEndpoint">Protocol 4.3. Canonicalised at start; a text that fails the grammar is the
 /// fault <see cref="RelayFaultCode.InvalidEndpoint"/>.</param>
 /// <param name="Mode">Protocol E-1.</param>
-/// <param name="DataDirectory">Existing folder. Holds <c>pairing.json</c> and <c>schemas\</c>.</param>
+/// <param name="DataDirectory">Existing folder. Holds <c>pairing.json</c>, <c>schemas\</c>, the relay's own
+/// launcher-script copies in <c>lab\</c> and the per-request Codex folders in <c>work\</c>
+/// (architecture 3.5).</param>
 /// <param name="CodexExecutablePath">Absolute path of <c>codex.exe</c>, or null when none was found. With null,
 /// the catalogue is unavailable and every answer run fails; the relay still starts.</param>
 /// <param name="LabFolder">Folder with the two launcher scripts, or null: PC speech is "not configured".</param>

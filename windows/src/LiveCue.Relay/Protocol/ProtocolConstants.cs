@@ -18,6 +18,9 @@ public static class ProtocolConstants
     /// <summary>C-03. A request id is 1 to this many characters of [A-Za-z0-9_-].</summary>
     public const int RequestIdMaxLength = 80;
 
+    /// <summary>C-06. An answer model id is "gpt-" and what follows it, at most this many characters in all.</summary>
+    public const int ModelIdMaxLength = 64;
+
     /// <summary>C-04. The PC speech models, exactly.</summary>
     public static IReadOnlyList<string> SpeechModels { get; } = ["nemotron", "qwen3"];
 
@@ -249,4 +252,7 @@ public static class ProtocolConstants
 
     /// <summary>W-12. Watchdog of the desktop self-test.</summary>
     public static readonly TimeSpan SelfTestWatchdog = TimeSpan.FromSeconds(120);
+
+    /// <summary>W-13. Shortest gap between two EdgeStatistics events (protocol 5.5).</summary>
+    public static readonly TimeSpan EdgeStatisticsInterval = TimeSpan.FromSeconds(60);
 }

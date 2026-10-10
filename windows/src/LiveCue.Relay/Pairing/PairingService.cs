@@ -8,18 +8,16 @@ namespace LiveCue.Relay.Pairing;
 ///
 /// First version (foundation): a stand-in with no storage. It creates a token in memory at start,
 /// verifies it, exports the payload, returns a fixed 21 x 21 matrix that is not a readable code, and on
-/// reset replaces the token and cancels the revocation token. No self-check runs: every show reports
-/// "not verified". The pairing file, DPAPI, the real matrix and the self-check are work package WP-W02.
+/// reset replaces the token and cancels the revocation token. The accepted hash and its revocation source
+/// are one object, swapped as a whole, as W-design 4.7 says for the real service. No self-check runs:
+/// every show reports "not verified". The pairing file, DPAPI, the real matrix and the self-check are
+/// work package WP-W02.
 /// </summary>
-#pragma warning disable CA1001 // The revocation source lives as long as the relay; a reset cancels and disposes the old one.
 internal sealed class PairingService : IPairingService
-#pragma warning restore CA1001
 {
     private readonly RelayContext _context;
     private readonly Lock _gate = new();
-    private string? _token;
-    private byte[] _acceptedHash = [];
-    private CancellationTokenSource _revocation = new();
+    private AcceptedPairing? _accepted;
 
     public PairingService(RelayContext context)
     {
@@ -27,25 +25,31 @@ internal sealed class PairingService : IPairingService
         _context = context;
     }
 
-    public CancellationToken CurrentRevocation
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _revocation.Token;
-            }
-        }
-    }
-
     public Task<bool> LoadOrCreateAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        Accept(PairingToken.Create());
+        lock (_gate)
+        {
+            // A start is not a reset: the revocation source of an earlier start stays the same one.
+            Volatile.Write(ref _accepted, AcceptedPairing.Create(_accepted?.Source));
+        }
+
         return Task.FromResult(true);
     }
 
-    public bool Verify(ReadOnlySpan<char> token) => PairingToken.Matches(token, Volatile.Read(ref _acceptedHash));
+    public bool TryVerify(ReadOnlySpan<char> token, out CancellationToken revoked)
+    {
+        // One read: the hash and the revocation token belong to the same pairing.
+        var accepted = Volatile.Read(ref _accepted);
+        if (accepted is not null && PairingToken.Matches(token, accepted.Hash))
+        {
+            revoked = accepted.Revoked;
+            return true;
+        }
+
+        revoked = CancellationToken.None;
+        return false;
+    }
 
     public bool IsSelfCheckNonce(ReadOnlySpan<char> headerValue) => false;
 
@@ -63,17 +67,20 @@ internal sealed class PairingService : IPairingService
     {
         ct.ThrowIfCancellationRequested();
 
-        CancellationTokenSource revoked;
+        AcceptedPairing? previous;
         lock (_gate)
         {
-            Accept(PairingToken.Create());
-            revoked = _revocation;
-            _revocation = new CancellationTokenSource();
+            previous = _accepted;
+            Volatile.Write(ref _accepted, AcceptedPairing.Create(source: null));
         }
 
-        // In-flight answers and open streams of the old token end through this.
-        revoked.Cancel();
-        revoked.Dispose();
+        // First the swap, then the cancellation: in-flight answers and open streams of the old token end
+        // through this, and a request verified against the old pairing holds exactly this token.
+        if (previous is not null)
+        {
+            previous.Source.Cancel();
+            previous.Source.Dispose();
+        }
 
         _context.Events.Publish(new Notice(_context.Events.Now, NoticeKind.PairingReset, FixedTexts.PairingReset));
         return Task.FromResult(Show());
@@ -82,14 +89,8 @@ internal sealed class PairingService : IPairingService
     public Task<string> GetPayloadAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var token = Volatile.Read(ref _token) ?? throw new InvalidOperationException("No pairing exists yet.");
-        return Task.FromResult(PairingPayload.Build(_context.AdvertisedEndpoint, token));
-    }
-
-    private void Accept(string token)
-    {
-        Volatile.Write(ref _acceptedHash, PairingToken.Hash(token));
-        Volatile.Write(ref _token, token);
+        var accepted = Volatile.Read(ref _accepted) ?? throw new InvalidOperationException("No pairing exists yet.");
+        return Task.FromResult(PairingPayload.Build(_context.AdvertisedEndpoint, accepted.Token));
     }
 
     private PairingQr Show()
@@ -98,5 +99,29 @@ internal sealed class PairingService : IPairingService
         events.Publish(new PairingShown(events.Now, _context.AdvertisedEndpoint));
         events.Publish(new SelfCheckCompleted(events.Now, SelfCheckResult.NotVerified));
         return new PairingQr(_context.AdvertisedEndpoint, QrMatrix.Placeholder());
+    }
+
+    /// <summary>The pairing accepted right now: its token, its hash and its revocation, never read apart.
+    /// The revocation token is taken once, so it stays usable after a reset disposed the source.</summary>
+    private sealed class AcceptedPairing
+    {
+        private AcceptedPairing(string token, CancellationTokenSource source)
+        {
+            Token = token;
+            Hash = PairingToken.Hash(token);
+            Source = source;
+            Revoked = source.Token;
+        }
+
+        public string Token { get; }
+
+        public byte[] Hash { get; }
+
+        public CancellationTokenSource Source { get; }
+
+        public CancellationToken Revoked { get; }
+
+        public static AcceptedPairing Create(CancellationTokenSource? source) =>
+            new(PairingToken.Create(), source ?? new CancellationTokenSource());
     }
 }

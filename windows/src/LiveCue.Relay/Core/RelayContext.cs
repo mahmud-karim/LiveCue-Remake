@@ -37,6 +37,6 @@ internal sealed class RelayContext
     /// <summary>Options.AdvertisedEndpoint in canonical form.</summary>
     public string AdvertisedEndpoint { get; }
 
-    /// <summary>Dependencies.TempRoot, or the OS temp folder.</summary>
-    public string TempRoot => Dependencies.TempRoot ?? Path.GetTempPath();
+    /// <summary>Dependencies.TempRoot, or DataDirectory\work. Never the OS temp folder.</summary>
+    public string TempRoot => Dependencies.TempRoot ?? Path.Combine(Options.DataDirectory, "work");
 }

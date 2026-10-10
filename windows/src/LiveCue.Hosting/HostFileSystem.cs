@@ -5,6 +5,25 @@ internal sealed class HostFileSystem : IHostFileSystem
 {
     public string BaseDirectory => AppContext.BaseDirectory;
 
+    public string ProgramFilesDirectory => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+
+    public bool IsOnFixedLocalDrive(string path)
+    {
+        if (path is null || path.Length < 3 || !char.IsAsciiLetter(path[0]) || path[1] != ':' || path[2] != '\\')
+        {
+            return false;
+        }
+
+        try
+        {
+            return new DriveInfo(path[..1]).DriveType == DriveType.Fixed;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     public string? GetEnvironmentVariable(string name) => Environment.GetEnvironmentVariable(name);
 
     public bool FileExists(string path) => File.Exists(path);

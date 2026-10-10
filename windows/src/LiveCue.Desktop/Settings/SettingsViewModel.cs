@@ -23,7 +23,11 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
     private static readonly StatusIndicator NotReported =
         new(StatusMark.Ring, StatusTone.Offline, SettingsText.NotReportedYet);
 
+    private static readonly StatusIndicator VersionUnknown =
+        new(StatusMark.Ring, StatusTone.Offline, SettingsText.CodexVersionUnknown);
+
     private readonly IDesktopSession _session;
+    private bool _hideFromScreenCapture;
     private ConnectionMode _mode;
     private string _relayPortText;
     private string _privateHttpsPortText;
@@ -58,6 +62,7 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
         _publicPathPrefix = saved.PublicPathPrefix;
         _codexPathText = saved.CodexExecutablePath ?? string.Empty;
         _labFolderText = saved.AsrLabFolder ?? string.Empty;
+        _hideFromScreenCapture = saved.HideFromScreenCapture;
 
         SaveCommand = new RelayCommand(static () => { }, static () => false);
         DiscardCommand = new RelayCommand(static () => { }, static () => false);
@@ -77,6 +82,7 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
         });
         CheckMappingCommand = new AsyncRelayCommand(session.CheckAgainAsync);
         CheckAssistantCommand = new AsyncRelayCommand(session.CheckAgainAsync);
+        MarkContainmentCheckedCommand = new RelayCommand(static () => { }, static () => false);
         CopyAddressCommand = new RelayCommand(() =>
         {
             if (session.AdvertisedEndpoint is { } endpoint && clipboard.TrySetText(endpoint))
@@ -152,6 +158,10 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
 
     public IReadOnlyList<StaleMappingRow> StaleMappings { get; } = [];
 
+    public IReadOnlyList<UnownedExposureRow> UnownedExposures { get; } = [];
+
+    public string? ExposureUnknownText => null;
+
     public BannerModel? RestartNotice => null;
 
     public BannerModel? SettingsFileNotice => null;
@@ -167,6 +177,12 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
     public string? CodexPathDetail => null;
 
     public StatusIndicator CodexLoginStatus => NotReported;
+
+    public StatusIndicator CodexVersionStatus => VersionUnknown;
+
+    public string? CodexVersionDetail => null;
+
+    public bool CanMarkContainmentChecked => false;
 
     public bool IsCheckingAssistant => false;
 
@@ -184,6 +200,12 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
 
     public string SpeechCaption => string.Empty;
 
+    public bool HideFromScreenCapture
+    {
+        get => _hideFromScreenCapture;
+        set => SetProperty(ref _hideFromScreenCapture, value);
+    }
+
     public string Version => AppEnvironment.Version;
 
     public bool HasChanges => false;
@@ -199,6 +221,8 @@ internal sealed class SettingsViewModel : ObservableObject, ISettingsViewModel
     public ICommand CheckMappingCommand { get; }
 
     public ICommand CheckAssistantCommand { get; }
+
+    public ICommand MarkContainmentCheckedCommand { get; }
 
     public ICommand CopyAddressCommand { get; }
 

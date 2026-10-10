@@ -23,5 +23,14 @@ public interface IActivityViewModel : INotifyPropertyChanged
     /// <summary>The whole log as text, as it would be copied: for tests and the self-test.</summary>
     string Text { get; }
 
+    /// <summary>The three totals of the latest EdgeStatistics event (protocol 5.5), shown as plain numbers
+    /// with fixed captions. 0 until the first event and again from each relay start. They are not log
+    /// entries, are not cleared by "Clear activity" and raise no alert.</summary>
+    long RejectedMalformed { get; }
+
+    long RejectedTokenNotAccepted { get; }
+
+    long RejectedFunnelInPrivateMode { get; }
+
     ICommand ClearActivityCommand { get; }
 }

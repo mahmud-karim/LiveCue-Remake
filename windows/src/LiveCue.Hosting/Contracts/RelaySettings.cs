@@ -43,9 +43,16 @@ public sealed record RelaySettings
 
     public string? CodexExecutablePath { get; init; }
 
+    /// <summary>The Codex version text (architecture 3.7) for which the owner last confirmed the live
+    /// containment check, or null. Written only by "Mark as checked" in the Assistant settings.</summary>
+    public string? CodexContainmentCheckedVersion { get; init; }
+
     public string? AsrLabFolder { get; init; }
 
     public int AsrLabPort { get; init; } = 47842;
+
+    /// <summary>True: the desktop window is excluded from screen capture (architecture 3.5).</summary>
+    public bool HideFromScreenCapture { get; init; } = true;
 
     public IReadOnlyList<OwnedMapping> OwnedMappings { get; init; } = [];
 
