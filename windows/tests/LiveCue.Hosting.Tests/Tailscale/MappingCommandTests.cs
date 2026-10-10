@@ -68,6 +68,30 @@ public sealed class MappingCommandTests
     [InlineData(443)]
     [InlineData(8443)]
     [InlineData(10000)]
+    public void Apply_private_refuses_a_funnel_port(int port)
+    {
+        // A tailnet-only listener is never created on a port on which Funnel can be switched on.
+        Assert.ThrowsAny<ArgumentException>(() => MappingCommand.ApplyPrivate(port, 47841));
+
+        // Removing is always allowed.
+        Assert.Equal(MappingCommandKind.RemovePrivate, MappingCommand.RemovePrivate(port).Kind);
+    }
+
+    [Theory]
+    [InlineData("/livecue\n")]
+    [InlineData("/livecue\r\n")]
+    [InlineData("\n/livecue")]
+    public void Factories_throw_for_a_prefix_that_ends_in_a_line_feed(string prefix)
+    {
+        // The prefix is a whole-text match: "$" would also match before a final line feed.
+        Assert.ThrowsAny<ArgumentException>(() => MappingCommand.ApplyPublic(10000, prefix, 47841));
+        Assert.ThrowsAny<ArgumentException>(() => MappingCommand.RemovePublic(10000, prefix));
+    }
+
+    [Theory]
+    [InlineData(443)]
+    [InlineData(8443)]
+    [InlineData(10000)]
     public void No_command_form_holds_a_forbidden_word(int publicPort)
     {
         MappingCommand[] commands =

@@ -42,7 +42,8 @@ internal sealed class MappingManager : IMappingManager
             new MappingInspection(ConnectionMode.Public, MappingState.Unknown, refusal, InLedger: false, settings.PublicHttpsPort, settings.PublicPathPrefix),
             StaleOwned: [],
             _tailscale.ExecutablePath is null ? TailscaleReadFailure.NotInstalled : TailscaleReadFailure.Failed,
-            _clock.GetUtcNow()));
+            _clock.GetUtcNow(),
+            Exposure: []));
     }
 
     public MappingPlan? PlanApply(ConnectionMode mode, RelaySettings settings, string? dnsName, out MappingRefusal refusal)

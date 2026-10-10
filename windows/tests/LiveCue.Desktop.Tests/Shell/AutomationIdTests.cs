@@ -16,7 +16,21 @@ public sealed class AutomationIdTests
         // Each constant is named exactly like its value, so two cannot share a value.
         Assert.All(constants, constant => Assert.Equal(constant.Key, constant.Value));
         Assert.Equal(constants.Count, constants.Values.Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(58, constants.Count);
+        Assert.Equal(64, constants.Count);
+    }
+
+    // The six elements the security review added (W-design 3.9 and 7.4). Screens section 9 does not list
+    // them yet, so their ids are taken from AutomationIds.
+    [Theory]
+    [InlineData(AutomationIds.ExposureBanner, "ExposureBanner")]
+    [InlineData(AutomationIds.ActivityRejectedCounts, "ActivityRejectedCounts")]
+    [InlineData(AutomationIds.UnownedExposureList, "UnownedExposureList")]
+    [InlineData(AutomationIds.CodexVersionStatus, "CodexVersionStatus")]
+    [InlineData(AutomationIds.MarkContainmentCheckedButton, "MarkContainmentCheckedButton")]
+    [InlineData(AutomationIds.HideFromCaptureToggle, "HideFromCaptureToggle")]
+    public void An_id_added_by_the_review_is_a_constant(string constant, string id)
+    {
+        Assert.Equal(id, constant);
     }
 
     [Theory]

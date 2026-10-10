@@ -32,16 +32,29 @@ public sealed record PrerequisiteOptions(
     bool SkipTailscale = false);
 
 /// <summary>All six results, always in id order.</summary>
+/// <param name="CodexVersion">The version text of the Codex that was found (ICodexSignInCheck.ReadVersionAsync),
+/// or null when no Codex was found or its version could not be read.</param>
 public sealed record PrerequisiteReport(
     IReadOnlyList<PrerequisiteResult> Results,
     SettingsLoadResult SettingsLoad,
     string? CodexExecutablePath,
-    string? DnsName)
+    string? DnsName,
+    string? CodexVersion = null)
 {
     /// <summary>The first failed check in id order, or null.</summary>
     public PrerequisiteResult? FirstFailure => Results.FirstOrDefault(r => r.State == PrerequisiteState.Failed);
 
     public bool Passed => FirstFailure is null;
+
+    /// <summary>
+    /// True when a Codex was found and its version is unknown or is not the version of the last
+    /// containment check (settings, CodexContainmentCheckedVersion; ordinal comparison). A warning only:
+    /// it never makes a check fail and nothing is refused because of it (architecture 3.7).
+    /// </summary>
+    public bool ContainmentCheckIsStale =>
+        CodexExecutablePath is not null
+        && (CodexVersion is null
+            || !string.Equals(CodexVersion, SettingsLoad.Settings.CodexContainmentCheckedVersion, StringComparison.Ordinal));
 }
 
 /// <summary>

@@ -67,6 +67,13 @@ internal sealed class ActivityViewModel : ObservableObject, IActivityViewModel
             ? $"{entry.TimeText} {entry.Message}"
             : $"{entry.TimeText} {entry.Message}{Environment.NewLine}{entry.Payload}"));
 
+    // First version (foundation): the three counters stay at zero; WP-W09 follows EdgeStatistics.
+    public long RejectedMalformed => 0;
+
+    public long RejectedTokenNotAccepted => 0;
+
+    public long RejectedFunnelInPrivateMode => 0;
+
     public ICommand ClearActivityCommand => _clear;
 
     private void OnRelayEvent(object? sender, RelayEvent relayEvent)

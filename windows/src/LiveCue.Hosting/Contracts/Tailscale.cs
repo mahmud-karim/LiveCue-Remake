@@ -73,7 +73,7 @@ public sealed partial class MappingCommand
 
     public static MappingCommand ApplyPrivate(int privateHttpsPort, int relayPort)
     {
-        RequirePort(privateHttpsPort, 1);
+        RequirePrivatePort(privateHttpsPort);
         RequireRelayPort(relayPort);
         return new(MappingCommandKind.ApplyPrivate, privateHttpsPort, "/", relayPort,
             ["serve", "--bg", "--https=" + Text(privateHttpsPort), TargetFor(relayPort)]);
@@ -103,7 +103,9 @@ public sealed partial class MappingCommand
             ["funnel", "--https=" + Text(publicHttpsPort), "--set-path=" + prefix, "off"]);
     }
 
-    [GeneratedRegex("^/[a-z0-9][a-z0-9-]{0,31}$", RegexOptions.CultureInvariant)]
+    // \A and \z, not ^ and $: "$" also matches before a final line feed, which would let a prefix that ends
+    // in a line break reach the command line and the confirmation dialog (protocol section 1, shapes).
+    [GeneratedRegex(@"\A/[a-z0-9][a-z0-9-]{0,31}\z", RegexOptions.CultureInvariant)]
     private static partial Regex PrefixPattern();
 
     private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);
@@ -112,6 +114,17 @@ public sealed partial class MappingCommand
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(port, minimum);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
+    }
+
+    // A tailnet-only listener is never created on a port on which Funnel can be switched on
+    // (architecture 3.5 and TS-4). RemovePrivate keeps RequirePort: removing is always allowed.
+    private static void RequirePrivatePort(int port)
+    {
+        RequirePort(port, 1);
+        if (port is 443 or 8443 or 10000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(port));
+        }
     }
 
     private static void RequireRelayPort(int relayPort)

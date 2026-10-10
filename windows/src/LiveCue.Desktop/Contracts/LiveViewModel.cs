@@ -28,6 +28,11 @@ public interface ILiveViewModel : INotifyPropertyChanged
     /// <summary>The "connection not set up" banner (R-14), or null.</summary>
     BannerModel? ConnectionBanner { get; }
 
+    /// <summary>The exposure warning (architecture 3.9, section 5.5), or null: a mapping that LiveCue does
+    /// not manage, or a public one in Private mode, forwards to the relay port; or the serve status could
+    /// not be read. Its one action opens Settings.</summary>
+    BannerModel? ExposureBanner { get; }
+
     /// <summary>True in Stopped, Checking, PrerequisiteFailed, Starting and Faulted.</summary>
     bool IsStartVisible { get; }
 

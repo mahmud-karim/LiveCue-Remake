@@ -97,7 +97,8 @@ internal sealed class ScriptedMappings(TimeProvider clock) : IMappingManager
             new MappingInspection(ConnectionMode.Public, State, BlockedBy, State == MappingState.Present, settings.PublicHttpsPort, settings.PublicPathPrefix),
             StaleOwned: [],
             TailscaleReadFailure.None,
-            clock.GetUtcNow()));
+            clock.GetUtcNow(),
+            Exposure: []));
 
     public MappingPlan? PlanApply(ConnectionMode mode, RelaySettings settings, string? dnsName, out MappingRefusal refusal)
     {
@@ -164,6 +165,14 @@ internal sealed class RecordingFiles : IHostFileSystem
     public int Touches => Volatile.Read(ref _touches);
 
     public string BaseDirectory => ScriptedHosting.UnusedDataDirectory;
+
+    public string ProgramFilesDirectory => ScriptedHosting.UnusedDataDirectory;
+
+    public bool IsOnFixedLocalDrive(string path)
+    {
+        Interlocked.Increment(ref _probes);
+        return false;
+    }
 
     public string? GetEnvironmentVariable(string name)
     {

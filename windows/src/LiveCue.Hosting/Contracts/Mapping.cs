@@ -81,19 +81,45 @@ public sealed record MappingInspection(
     int HttpsPort,
     string Path);
 
+/// <summary>
+/// One row of the exposure report (architecture 3.9): a live handler, on any port and mount and in any
+/// structure of the serve status, whose kind is Proxy and whose target is exactly
+/// MappingCommand.TargetFor(relay port). It is what Tailscale forwards to the relay, whoever created it.
+/// </summary>
+/// <param name="FunnelOn">Funnel is on for that port: the handler is reachable from the internet.</param>
+/// <param name="Foreground">It belongs to a foreground session or a service.</param>
+/// <param name="LedgerEntry">The ledger entry with the same mode, port, path and target, or null.</param>
+public sealed record ExposedHandler(
+    int HttpsPort,
+    string Mount,
+    bool FunnelOn,
+    bool Foreground,
+    OwnedMapping? LedgerEntry);
+
 /// <summary>Result of one read-only inspection.</summary>
 /// <param name="StaleOwned">Ledger entries that still match a live handler exactly and are not the selected
 /// mode's mapping at its current port and path: the other mode's mapping, or one left at an old port.
 /// Each is a standing warning with "Remove".</param>
 /// <param name="StatusFailure">None when the serve status was read.</param>
+/// <param name="Exposure">The exposure report, sorted by port and then mount (ordinal). Empty when the
+/// serve status could not be read: StatusFailure then says that exposure is unknown, not absent.</param>
 public sealed record ConnectionInspection(
     MappingInspection Private,
     MappingInspection Public,
     IReadOnlyList<OwnedMapping> StaleOwned,
     TailscaleReadFailure StatusFailure,
-    DateTimeOffset At)
+    DateTimeOffset At,
+    IReadOnlyList<ExposedHandler> Exposure)
 {
     public MappingInspection For(ConnectionMode mode) => mode == ConnectionMode.Private ? Private : Public;
+
+    /// <summary>True when some handler that forwards to the relay port is published through Funnel. In
+    /// Private mode the supervisor does not start the relay while this is true (architecture 3.11, 6a).</summary>
+    public bool HasFunnelExposure => Exposure.Any(handler => handler.FunnelOn);
+
+    /// <summary>The rows that are not in the ledger: shown with the removal command as text, never removed
+    /// by the application (TS-8).</summary>
+    public IEnumerable<ExposedHandler> UnownedExposure => Exposure.Where(handler => handler.LedgerEntry is null);
 }
 
 /// <summary>What a confirmation dialog shows and what will run if it is confirmed.</summary>

@@ -10,13 +10,15 @@ internal interface IPairingService
     /// </summary>
     Task<bool> LoadOrCreateAsync(CancellationToken ct);
 
-    /// <summary>Step E-3: SHA-256 of the 43 characters against the accepted hash, constant time. Reads the
-    /// accepted hash at the moment of the call. Allocation-free.</summary>
-    bool Verify(ReadOnlySpan<char> token);
-
-    /// <summary>A token that is cancelled when the pairing accepted right now is revoked by a reset.
-    /// The edge captures it immediately after Verify returned true.</summary>
-    CancellationToken CurrentRevocation { get; }
+    /// <summary>
+    /// Step E-3: SHA-256 of the 43 characters against the accepted hash, constant time. Allocation-free.
+    /// The accepted hash and its revocation token are one immutable object, read once, at the moment of the
+    /// call: on true, <paramref name="revoked"/> is the token of exactly the pairing that was verified, and
+    /// it is cancelled when that pairing is revoked by a reset, even a reset that completes between this
+    /// call and its return. On false it is CancellationToken.None. There is no separate "current
+    /// revocation" member: reading the two apart would let one request survive a reset.
+    /// </summary>
+    bool TryVerify(ReadOnlySpan<char> token, out CancellationToken revoked);
 
     /// <summary>Protocol 5.5: true when <paramref name="headerValue"/> equals the nonce of the self-check
     /// in progress (constant time). False when no check is in progress.</summary>

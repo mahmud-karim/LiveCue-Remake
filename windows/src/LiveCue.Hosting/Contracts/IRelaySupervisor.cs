@@ -43,7 +43,17 @@ public sealed record RelayEventForwarded(DateTimeOffset At, RelayEvent Event) : 
 /// <summary>A read-only mapping inspection finished (step 8 of architecture 3.11, or on demand).</summary>
 public sealed record ConnectionInspected(DateTimeOffset At, ConnectionInspection Inspection) : HostEvent(At);
 
-public enum StartOutcome { Started, PrerequisiteFailed, RelayFault, AlreadyRunning }
+public enum StartOutcome
+{
+    Started,
+    PrerequisiteFailed,
+    RelayFault,
+    AlreadyRunning,
+
+    /// <summary>Check 6a of architecture 3.11: Private mode, and a handler with Funnel on forwards to the
+    /// relay port. No relay instance was created. FailureText carries the status line.</summary>
+    ExposedInPrivateMode,
+}
 
 /// <param name="FailureText">The status-line text of architecture 3.11 for the failure, or null.</param>
 public sealed record StartResult(
@@ -73,8 +83,10 @@ public interface IRelaySupervisor : IAsyncDisposable
     ChannelReader<HostEvent> Events { get; }
 
     /// <summary>
-    /// Steps 1 to 8 of architecture 3.11. Never throws for an expected failure: the result and the events
-    /// carry it. With State other than Stopped it returns AlreadyRunning and does nothing.
+    /// Steps 1 to 8 of architecture 3.11, check 6a included. Never throws for an expected failure: the
+    /// result and the events carry it. With State other than Stopped it returns AlreadyRunning and does
+    /// nothing. For ExposedInPrivateMode it publishes ConnectionInspected with the inspection that showed
+    /// the exposure, creates no relay and returns with State Stopped.
     /// </summary>
     Task<StartResult> StartAsync(CancellationToken ct);
 

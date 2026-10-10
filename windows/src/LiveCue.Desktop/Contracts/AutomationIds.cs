@@ -1,8 +1,8 @@
 namespace LiveCue.Desktop;
 
 /// <summary>
-/// Every automation id of docs/design/03-windows-screens.md section 9, each constant named exactly like
-/// its value. Views set <c>AutomationProperties.AutomationId</c> from here with <c>x:Static</c>; the
+/// Every automation id of docs/design/03-windows-screens.md section 9 and the six ids the security review
+/// added, each constant named exactly like its value. Views set <c>AutomationProperties.AutomationId</c> from here with <c>x:Static</c>; the
 /// self-test finds elements by it.
 /// </summary>
 public static class AutomationIds
@@ -82,4 +82,13 @@ public static class AutomationIds
     // Settings, About
     public const string ThirdPartyNoticesButton = nameof(ThirdPartyNoticesButton);
     public const string SourceCodeButton = nameof(SourceCodeButton);
+
+    // Added by the security review. Screens section 9 does not list these six yet; until it does, their
+    // definition is W-design 3.9, 5.5, 5.7 and 5.8.
+    public const string ExposureBanner = nameof(ExposureBanner);
+    public const string ActivityRejectedCounts = nameof(ActivityRejectedCounts);
+    public const string UnownedExposureList = nameof(UnownedExposureList);
+    public const string CodexVersionStatus = nameof(CodexVersionStatus);
+    public const string MarkContainmentCheckedButton = nameof(MarkContainmentCheckedButton);
+    public const string HideFromCaptureToggle = nameof(HideFromCaptureToggle);
 }

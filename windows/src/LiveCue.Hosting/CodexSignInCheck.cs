@@ -4,7 +4,10 @@ namespace LiveCue.Hosting;
 
 /// <summary>
 /// Runs <c>&lt;codex&gt; login status</c> (architecture 3.7): exit code 0 means signed in. The output is
-/// discarded, and the child gets no LIVECUE_ variable, like every Codex process.
+/// discarded, and the child gets the CodexAllowlist environment, like every Codex process.
+///
+/// First version (foundation): the version is not read; <see cref="ReadVersionAsync"/> reports "unknown".
+/// Work package WP-W06 runs <c>&lt;codex&gt; --version</c>.
 /// </summary>
 internal sealed class CodexSignInCheck : ICodexSignInCheck
 {
@@ -26,7 +29,7 @@ internal sealed class CodexSignInCheck : ICodexSignInCheck
             {
                 FileName = codexPath,
                 Arguments = ["login", "status"],
-                Environment = EnvironmentPolicy.WithoutLiveCueVariables,
+                Environment = EnvironmentPolicy.CodexAllowlist,
                 MaxStandardOutputBytes = 0,
                 Timeout = Limit,
             },
@@ -34,5 +37,11 @@ internal sealed class CodexSignInCheck : ICodexSignInCheck
 
         ct.ThrowIfCancellationRequested();
         return result is { Outcome: ProcessOutcome.Exited, ExitCode: 0 };
+    }
+
+    public Task<string?> ReadVersionAsync(string codexPath, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult<string?>(null);
     }
 }
