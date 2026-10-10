@@ -1,16 +1,21 @@
 name: Windows
 
-# Builds, tests and publishes the Windows side, then runs the published desktop app's self-test and
-# keeps its screenshots. Every step is one task of windows/build.ps1, so a local run is the same run.
+# The `windows` job of docs/architecture/06-test-and-ci-plan.md (section 5.2): build, test, publish, the
+# checks of the published build, and the artefacts. It lives in this file until the CI work package
+# folds every workflow into ci.yml.
+#
+# It runs on every push to main and to a work-package branch (wp/**) that touches the Windows side, and
+# by hand. The repository is merged by its orchestrator after a full run, not through pull requests, so
+# nothing here depends on a pull request or on a label.
 
 on:
   push:
+    branches:
+      - main
+      - 'wp/**'
     paths:
       - 'windows/**'
-      - '.github/workflows/windows.yml'
-  pull_request:
-    paths:
-      - 'windows/**'
+      - 'scripts/publish-windows.ps1'
       - '.github/workflows/windows.yml'
   workflow_dispatch:
 
@@ -25,13 +30,12 @@ concurrency:
 
 jobs:
   windows:
-    name: Build, test, publish, self-test
-    runs-on: windows-latest
+    name: Build, test, publish, check the published build
+    runs-on: windows-2025
     timeout-minutes: 30
     defaults:
       run:
         shell: pwsh
-        working-directory: windows
     env:
       DOTNET_NOLOGO: 'true'
       DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
@@ -42,29 +46,95 @@ jobs:
         with:
           persist-credentials: false
 
-      # The SDK version comes from windows/global.json, the same file a local build obeys.
-      - name: Set up .NET
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      # The runner's own SDK is used; nothing is installed. Inside windows/ the dotnet host obeys
+      # global.json, so this step fails when no installed SDK satisfies it.
+      - name: Check the .NET SDK
+        working-directory: windows
+        run: |
+          $resolved = dotnet --version
+          if ($LASTEXITCODE -ne 0) { throw 'No installed .NET SDK satisfies windows/global.json.' }
+          dotnet --list-sdks
+          $pinned = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+          $want = [version] $pinned
+          $have = [version] ($resolved.Trim() -replace '-.*$', '')
+          if ($have.Major -ne $want.Major -or $have.Minor -ne $want.Minor -or $have -lt $want) {
+            throw "The resolved SDK $resolved does not satisfy global.json ($pinned)."
+          }
+          Write-Host "SDK $resolved satisfies global.json ($pinned)."
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          global-json-file: windows/global.json
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('windows/Directory.Packages.props', 'windows/global.json') }}
 
       - name: Restore
-        run: ./build.ps1 restore
+        run: dotnet restore windows/LiveCueRemake.sln
 
+      # Warnings are errors (windows/Directory.Build.props).
       - name: Build
-        run: ./build.ps1 build
+        run: dotnet build windows/LiveCueRemake.sln -c Release --no-restore
 
+      # Every test except the opt-in live ones. The DPAPI, job-object, child-process and WPF tests run here.
       - name: Test
-        run: ./build.ps1 test
+        run: >
+          dotnet test windows/LiveCueRemake.sln -c Release --no-build
+          --filter "Category!=Live"
+          --logger trx --results-directory artifacts/test-results
+          --blame-hang-timeout 3m
 
+      # Both executables, self-contained for win-x64, into one folder; the script checks the result.
       - name: Publish
-        run: ./build.ps1 publish
+        run: ./scripts/publish-windows.ps1 -Output artifacts/publish
 
-      - name: Smoke-test the published relay host
-        run: ./build.ps1 smoke
-
+      # The published window, built on a scripted relay: no port is bound and no file is touched.
       - name: Self-test the published desktop app
-        run: ./build.ps1 selftest
+        timeout-minutes: 5
+        run: |
+          $shots = Join-Path $PWD 'artifacts/desktop'
+          New-Item -ItemType Directory -Path $shots -Force | Out-Null
+          $out = Join-Path $shots 'self-test.stdout.txt'
+          $err = Join-Path $shots 'self-test.stderr.txt'
+
+          # LiveCueRemake.exe is a window program: redirecting its output is what makes the shell wait
+          # for it and what lets its exit code and its result line be read.
+          $run = Start-Process -FilePath (Join-Path $PWD 'artifacts/publish/LiveCueRemake.exe') `
+            -ArgumentList '--self-test', '--screenshots', "`"$shots`"" `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+          Get-Content -LiteralPath $out
+          if ((Get-Item -LiteralPath $err).Length -gt 0) { Get-Content -LiteralPath $err }
+
+          if ($run.ExitCode -ne 0) { throw "The desktop self-test failed with exit code $($run.ExitCode)." }
+          if (-not (Select-String -LiteralPath $out -SimpleMatch 'Desktop self-test passed' -Quiet)) {
+            throw 'The desktop self-test did not print its result line.'
+          }
+          $pngs = @(Get-ChildItem -LiteralPath $shots -Filter '*.png')
+          if ($pngs.Count -eq 0) { throw 'The desktop self-test wrote no screenshots.' }
+          Write-Host "$($pngs.Count) screenshots."
+
+      # Proves that the self-contained console host starts. The runner has neither Codex nor Tailscale,
+      # so the checks must fail: exit code 2 and one of the fixed prerequisite texts. (The foundation's
+      # checker stops at Tailscale; the finished one stops at Codex, which comes first.)
+      - name: Check the published console host
+        timeout-minutes: 2
+        run: |
+          $data = Join-Path $env:RUNNER_TEMP 'livecue-check-only-data'
+          $output = & (Join-Path $PWD 'artifacts/publish/LiveCueRelayHost.exe') --check-only --data-dir $data
+          $code = $LASTEXITCODE
+          $output
+          if ($code -ne 2) { throw "LiveCueRelayHost --check-only exited with $code, not 2." }
+          $text = $output -join "`n"
+          if ($text -notmatch 'Codex CLI was not found' -and $text -notmatch 'Tailscale is not installed in Program Files\.') {
+            throw 'LiveCueRelayHost --check-only did not print a prerequisite failure text.'
+          }
+
+          # The expected exit code 2 above must not become this step's own result.
+          exit 0
+
+      # The release form of the build. Work-package branches skip it; main and manual runs make it.
+      - name: Zip the published build
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: ./scripts/publish-windows.ps1 -Output artifacts/publish -Zip
 
       - name: Upload test results and screenshots
         if: always()
@@ -72,18 +142,19 @@ jobs:
         with:
           name: windows-evidence
           path: |
-            windows/artifacts/desktop/
-            windows/artifacts/test-results/
+            artifacts/test-results/
+            artifacts/desktop/
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Upload the published app
+      - name: Upload the published build
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-build
           path: |
-            windows/artifacts/LiveCueRemake-win-x64.zip
-            windows/artifacts/LiveCueRemake-win-x64.zip.sha256
+            artifacts/LiveCueRemake-win-x64.zip
+            artifacts/LiveCueRemake-win-x64.zip.sha256
           retention-days: 14
           if-no-files-found: error
           compression-level: 0

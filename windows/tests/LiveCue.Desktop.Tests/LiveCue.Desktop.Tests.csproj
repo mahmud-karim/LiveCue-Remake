@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    View-model behaviour, the command line, and the theme dictionaries. No UI automation: the window
-    itself is exercised by the app's own self-test (LiveCueRemake.exe - -self-test), which CI runs
-    against the published build.
+    The desktop's session, view models, theme dictionaries and contracts (test plan sections 2.6 to 2.9).
+    No UI automation: the window itself is exercised by the app's own self-test
+    (LiveCueRemake.exe - -self-test), which CI runs against the published build. The shared helpers of
+    tests/Shared are linked in by Directory.Build.props.
   -->
 
   <PropertyGroup>

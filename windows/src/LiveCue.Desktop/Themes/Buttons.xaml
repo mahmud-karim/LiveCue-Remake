@@ -151,4 +151,27 @@
     <Setter Property="Template" Value="{StaticResource Button.Template}" />
   </Style>
 
+  <!-- 4.17 Session control, running face: Pause, Resume and Stop in a page header. First version: the secondary button at the session size. -->
+  <Style x:Key="Button.Secondary.Session" TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+    <Setter Property="FontSize" Value="{DynamicResource TypeHeadlineSize}" />
+    <Setter Property="MinHeight" Value="{DynamicResource ButtonHeightSession}" />
+    <Setter Property="Padding" Value="{DynamicResource ButtonPaddingSession}" />
+    <Setter Property="ui:ButtonAssist.IconSize" Value="{DynamicResource IconSizeRegular}" />
+  </Style>
+
+  <!-- 4.2 Destructive primary: the confirm button of a destructive dialog. A solid danger fill with white text. -->
+  <Style x:Key="Button.DestructivePrimary" TargetType="Button" BasedOn="{StaticResource Button.Base}">
+    <Setter Property="Foreground" Value="{DynamicResource InkOnAccentBrush}" />
+    <Setter Property="Background" Value="{DynamicResource StatusDangerBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeOnAccentBrush}" />
+    <Setter Property="ui:ButtonFills.Hover" Value="{DynamicResource StatusDangerHoverBrush}" />
+    <Setter Property="ui:ButtonFills.Pressed" Value="{DynamicResource StatusDangerPressedBrush}" />
+    <Setter Property="Template" Value="{StaticResource Button.Template}" />
+  </Style>
+
+  <!-- 4.3 Icon button. First version: the secondary and the quiet button; a square face arrives with the desktop core. -->
+  <Style x:Key="Button.Icon" TargetType="Button" BasedOn="{StaticResource Button.Secondary}" />
+
+  <Style x:Key="Button.Icon.Quiet" TargetType="Button" BasedOn="{StaticResource Button.Quiet}" />
+
 </ResourceDictionary>

@@ -12,4 +12,9 @@
     <ProjectReference Include="..\LiveCue.Hosting\LiveCue.Hosting.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The console host's tests live in the hosting test project (test plan 2.4). -->
+    <InternalsVisibleTo Include="LiveCue.Hosting.Tests" />
+  </ItemGroup>
+
 </Project>

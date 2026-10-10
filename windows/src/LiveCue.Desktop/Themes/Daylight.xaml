@@ -35,6 +35,8 @@
   <SolidColorBrush x:Key="SurfaceInverseBrush" Color="#E60E1B33" po:Freeze="True" />          <!-- ink 0.90 -->
   <SolidColorBrush x:Key="SurfaceScrimBrush" Color="#4D0E1B33" po:Freeze="True" />            <!-- ink 0.30 -->
   <SolidColorBrush x:Key="SurfaceQrBrush" Color="#FFFFFFFF" po:Freeze="True" />
+  <!-- 4.15: the dark modules of the pairing code, 17.17:1 on surface.qr. -->
+  <SolidColorBrush x:Key="QrModuleBrush" Color="#FF0E1B33" po:Freeze="True" />
 
   <!-- 2.3 State overlays -->
   <SolidColorBrush x:Key="StateHoverBrush" Color="#73FFFFFF" po:Freeze="True" />              <!-- white 0.45 -->

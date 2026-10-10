@@ -144,4 +144,22 @@
     </Style.Triggers>
   </Style>
 
+  <!-- 4.23 Log text: one activity entry. First version: type.mono, wrapped. -->
+  <Style x:Key="Log.Text" TargetType="TextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyMono}" />
+    <Setter Property="FontSize" Value="{DynamicResource TypeMonoSize}" />
+    <Setter Property="LineHeight" Value="{DynamicResource TypeMonoLineHeight}" />
+    <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+
+  <!-- 4.14 Empty state: centred content in the middle of a panel. First version: the centring only. -->
+  <Style x:Key="EmptyState" TargetType="ContentControl">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
 </ResourceDictionary>

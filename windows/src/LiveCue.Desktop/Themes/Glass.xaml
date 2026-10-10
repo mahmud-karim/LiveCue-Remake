@@ -51,7 +51,7 @@
   </Style>
 
   <!-- Compact panel: a one-line strip on the ground (the Live status strip, the Reset pairing panel). -->
-  <Style x:Key="Glass.Panel.Compact" TargetType="ContentControl" BasedOn="{StaticResource Glass.Panel}">
+  <Style x:Key="Glass.PanelCompact" TargetType="ContentControl" BasedOn="{StaticResource Glass.Panel}">
     <Setter Property="ui:Glass.CornerRadius" Value="{DynamicResource RadiusPanelCompact}" />
     <Setter Property="Padding" Value="{DynamicResource InsetPanelCompact}" />
   </Style>
@@ -105,33 +105,6 @@
                                 VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
             </Border>
           </Grid>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
-  </Style>
-
-  <!--
-    Read-only field (design system 4.6): surface.inset fill, stroke.hairline outline, radius.field,
-    at least 44 high. For values the user reads or copies, such as the PC address.
-  -->
-  <Style x:Key="Field.ReadOnly" TargetType="ContentControl">
-    <Setter Property="MinHeight" Value="{DynamicResource FieldHeight}" />
-    <Setter Property="Padding" Value="14,0" />
-    <Setter Property="Focusable" Value="False" />
-    <Setter Property="IsTabStop" Value="False" />
-    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    <Setter Property="VerticalContentAlignment" Value="Center" />
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="ContentControl">
-          <Border CornerRadius="{DynamicResource RadiusField}"
-                  Background="{DynamicResource SurfaceInsetBrush}"
-                  BorderBrush="{DynamicResource StrokeHairlineBrush}"
-                  BorderThickness="1"
-                  Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-          </Border>
         </ControlTemplate>
       </Setter.Value>
     </Setter>

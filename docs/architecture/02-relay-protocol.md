@@ -124,7 +124,7 @@ Each number is defined once, here. Other sections refer to it by id. "Side" says
 | C-54 | Stream length, counted from `ready` | 30 min | relay |
 | C-55 | Speech socket lifetime, counted from the upgrade | 35 min | relay |
 | C-56 | Pause or pairing change takes effect on an open stream within | 2 s | relay |
-| C-57 | WebSocket ping interval (relay to phone) | 15 s | relay |
+| C-57 | WebSocket keep-alive frame interval (relay to phone) | 15 s | relay |
 | C-58 | Close handshake wait before the socket is aborted | 2 s | relay |
 | C-59 | Phone: connect plus model loading | 180 s | phone |
 | C-60 | Phone: finalization wait after it sends `endStream` | 15 s | phone |
@@ -302,7 +302,9 @@ Every request, including every Upgrade request, passes these steps in order. The
 
 Consequences that are part of the contract:
 
-- The three 401 answers of E-1 to E-3 are byte-identical. A caller without the token cannot tell which step
+- The three 401 answers of E-1 to E-3 are identical in every byte the relay writes: the status line, the
+  headers of 5.3 and the body. Only the `Date` header, which the HTTP server adds (5.3), differs, and only
+  with the clock, never with the step that refused. A caller without the token cannot tell which step
   refused it and learns nothing about routes.
 - No work happens before E-3 passes: no body is read, no file is touched, no process is started, no event
   reaches the desktop.
@@ -310,9 +312,12 @@ Consequences that are part of the contract:
 
 ### 5.3 Responses
 
-Every response written by relay code has exactly these headers besides `Content-Length` and the connection
-headers: `Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`,
+Every response written by relay code has exactly these headers besides `Content-Length`, `Date` and the
+connection headers: `Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff`. No CORS header, no `Set-Cookie`, never a 3xx status.
+
+`Date` is not written by relay code: the relay's HTTP server (Kestrel) adds it to every response and has no
+switch to leave it out. It carries the time of the response and nothing else.
 
 Error body, for every status of 400 or above:
 
@@ -829,7 +834,10 @@ There is never a fallback from one speech model to another, or to any cloud serv
 | The stream's token stops being accepted | within C-56 | `PAIRING_CHANGED` |
 | The relay is stopping | at once | `RELAY_STOPPING` |
 
-The relay sends a WebSocket ping every C-57. It does not require pongs.
+The relay sends a WebSocket keep-alive frame every C-57. The frame is an unsolicited Pong (RFC 6455 section
+5.5.3), which is what the relay's WebSocket implementation sends when no reply is demanded; it is not a Ping.
+The phone ignores it and owes no answer: the relay never closes a stream because a keep-alive frame went
+unanswered.
 
 ### 10.6 Errors and close codes
 
@@ -1461,7 +1469,7 @@ with `{"type":"speechComplete","transcript":"Local words","turnId":1,"audioProce
 | P2-141 | Creating a pairing in an empty folder returns a token of shape C-02; the file has a 64-character `tokenHash` and a `protectedToken`, no member holding the token, and its text does not contain the token. | R | AC-RELAY-018, 023, 024 |
 | P2-142 | Loading again returns the same token. Showing the QR twice leaves the file byte-identical, and the shown payload is the text of 4.2 for that token and the advertised endpoint. | R | AC-RELAY-019, 025, 026; AC-WIN-021 |
 | P2-143 | After "Reset pairing", without a restart, `GET /v1/health` with the old token is `401` and with the new token is `200`. | R | AC-RELAY-013, 014, 027, 097; AC-SCR-004 |
-| P2-144 | The QR matrix handed to the desktop is square with at least 21 rows and decodes, once a quiet zone is added, to the exact payload text. The object that carries it has no token member. | R | AC-RELAY-016, 017; AC-WIN-020 |
+| P2-144 | The QR matrix handed to the desktop is square with at least 21 rows and is the byte-mode, level M encoding of the exact payload text: it equals, module for module, an independent encoding of the expected text with the same parameters (the test re-encodes; it uses no decoder). The object that carries it has no token member. | R | AC-RELAY-016, 017; AC-WIN-020 |
 | P2-145 | The serialised form of every desktop event, notice and diagnostic produced during a full test run contains neither the token nor an `Authorization` value. | R | AC-RELAY-010; AC-WIN-024 |
 | P2-146 | A pairing file that is not valid JSON, has a malformed `tokenHash`, or whose protected copy does not hash to `tokenHash` makes the relay refuse to start with the pairing-store fault. The file is left untouched and no token is created. | R | UT-21 |
 | P2-147 | Showing the QR makes one request to `E + "v1/health"` with the headers of 4.5. A 200 with `ok` true and `protocol` 2 reports "verified"; a refused connection, a redirect, a 401 and a timeout each report "not verified". No presence event results. | R | UT-20 |

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using LiveCue.Hosting;
 using LiveCue.Relay;
 using LiveCue.Relay.Protocol;
 
@@ -6,30 +7,33 @@ namespace LiveCue.Desktop.SelfTest;
 
 /// <summary>
 /// The relay the self-test runs the window against (architecture 3.13): an <see cref="IRelay"/> that
-/// binds no port, touches no file and uses no network, and raises the events it is told to.
+/// binds no port, touches no file and uses no network, and publishes the events it is told to.
 /// </summary>
 internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, RelayFaultCode? startFault) : IRelay
 {
-    private readonly Channel<RelayEvent> _events = Channel.CreateBounded<RelayEvent>(256);
+    private readonly Channel<RelayEvent> _events = Channel.CreateUnbounded<RelayEvent>();
 
     public RelayOptions Options { get; } = options;
 
     public RelayStatus Status { get; private set; } = RelayStatus.Stopped;
 
+    public bool Accepting { get; private set; } = true;
+
     public int BoundPort => Status == RelayStatus.Running ? Options.Port : 0;
 
     public ChannelReader<RelayEvent> Events => _events.Reader;
 
-    /// <summary>Raises a synthetic event, as the real relay would from a request thread.</summary>
+    /// <summary>Publishes a synthetic event, as the real relay would from a request thread.</summary>
     public void Raise(RelayEvent relayEvent) => _events.Writer.TryWrite(relayEvent);
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken ct)
     {
         if (startFault is { } code)
         {
             const string message = "The relay port is already in use.";
             Status = RelayStatus.Faulted;
             Raise(new RelayFaulted(clock.GetUtcNow(), code, message));
+            _events.Writer.TryComplete();
             throw new RelayStartException(code, message);
         }
 
@@ -45,15 +49,45 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken ct)
     {
         if (Status == RelayStatus.Running)
         {
             Status = RelayStatus.Stopped;
             Raise(new RelayStopped(clock.GetUtcNow(), RelayStopReason.Requested));
+            _events.Writer.TryComplete();
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task SetAcceptingAsync(bool accepting)
+    {
+        if (Status != RelayStatus.Running)
+        {
+            throw new InvalidOperationException("The relay is not running.");
+        }
+
+        if (Accepting != accepting)
+        {
+            Accepting = accepting;
+            Raise(new AcceptingChanged(clock.GetUtcNow(), accepting));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<PairingQr> ShowPairingAsync(CancellationToken ct)
+    {
+        Raise(new PairingShown(clock.GetUtcNow(), Options.AdvertisedEndpoint));
+        Raise(new SelfCheckCompleted(clock.GetUtcNow(), SelfCheckResult.Verified));
+        return Task.FromResult(new PairingQr(Options.AdvertisedEndpoint, SyntheticMatrix()));
+    }
+
+    public Task<PairingQr> ResetPairingAsync(CancellationToken ct)
+    {
+        Raise(new Notice(clock.GetUtcNow(), NoticeKind.PairingReset, "Pairing reset. Every iPhone must pair again."));
+        return ShowPairingAsync(ct);
     }
 
     public ValueTask DisposeAsync()
@@ -61,10 +95,27 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
         _events.Writer.TryComplete();
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>A 21 x 21 pattern that carries nothing: the self-test has no token to encode.</summary>
+    private static bool[][] SyntheticMatrix()
+    {
+        const int size = 21;
+        var modules = new bool[size][];
+        for (var row = 0; row < size; row++)
+        {
+            modules[row] = new bool[size];
+            for (var column = 0; column < size; column++)
+            {
+                modules[row][column] = ((row * 3) + (column * 5)) % 4 == 0;
+            }
+        }
+
+        return modules;
+    }
 }
 
 /// <summary>Hands the supervisor one scripted relay per start, and lets the script choose how the next start goes.</summary>
-internal sealed class RelayScript(TimeProvider clock)
+internal sealed class RelayScript(TimeProvider clock) : IRelayFactory
 {
     /// <summary>When set, the next start fails with this fault. It applies to one start.</summary>
     public RelayFaultCode? NextStartFault { get; set; }

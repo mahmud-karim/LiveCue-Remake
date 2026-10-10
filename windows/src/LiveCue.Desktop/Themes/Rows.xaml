@@ -18,7 +18,7 @@
     exist only on rows marked IsInteractive, and only ever lighten.
   -->
 
-  <Style TargetType="ui:ListRow">
+  <Style x:Key="Row.List" TargetType="ui:ListRow">
     <Setter Property="FocusVisualStyle" Value="{StaticResource Focus.Row}" />
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
@@ -151,5 +151,35 @@
       </Trigger>
     </Style.Triggers>
   </Style>
+
+  <Style TargetType="ui:ListRow" BasedOn="{StaticResource Row.List}" />
+
+  <!--
+    Check row (design system 4.8; screens 2.6): one prerequisite with its state, title and fix line.
+    First version: the title and the subtitle. The state mark arrives with the desktop core.
+  -->
+  <Style x:Key="Row.Check" TargetType="ui:CheckRow">
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="IsTabStop" Value="False" />
+    <Setter Property="MinHeight" Value="{DynamicResource RowHeightTwoLine}" />
+    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="AutomationProperties.Name" Value="{Binding Title, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ui:CheckRow">
+          <StackPanel Margin="{TemplateBinding Padding}" VerticalAlignment="Center">
+            <TextBlock Text="{TemplateBinding Title}" Style="{DynamicResource Type.Label}" />
+            <TextBlock Text="{TemplateBinding Subtitle}"
+                       Style="{DynamicResource Type.Caption}"
+                       Foreground="{DynamicResource InkSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       TextTrimming="None" />
+          </StackPanel>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="ui:CheckRow" BasedOn="{StaticResource Row.Check}" />
 
 </ResourceDictionary>

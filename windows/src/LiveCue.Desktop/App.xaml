@@ -17,6 +17,7 @@
         <ResourceDictionary Source="Themes/Metrics.xaml" />
         <ResourceDictionary Source="Themes/Typography.xaml" />
         <ResourceDictionary Source="Themes/Icons.xaml" />
+        <ResourceDictionary Source="Themes/Interaction.xaml" />
 
         <!-- Component styles. They reach the tokens above through DynamicResource. -->
         <ResourceDictionary Source="Themes/Glass.xaml" />
@@ -24,15 +25,18 @@
         <ResourceDictionary Source="Themes/Navigation.xaml" />
         <ResourceDictionary Source="Themes/Status.xaml" />
         <ResourceDictionary Source="Themes/Rows.xaml" />
+        <ResourceDictionary Source="Themes/Fields.xaml" />
+        <ResourceDictionary Source="Themes/Dialogs.xaml" />
         <ResourceDictionary Source="Themes/Chrome.xaml" />
         <ResourceDictionary Source="Themes/Supporting.xaml" />
 
-        <!-- Which view shows which page view model. -->
-        <ResourceDictionary Source="Views/Pages.xaml" />
+        <!-- Which view shows which view model. -->
+        <ResourceDictionary Source="Shell/PageTemplates.xaml" />
       </ResourceDictionary.MergedDictionaries>
 
       <ui:ResourceKeyConverter x:Key="ResourceKey" />
       <ui:BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+      <ui:NullToVisibilityConverter x:Key="NullToVisibility" />
     </ResourceDictionary>
   </Application.Resources>
 </Application>

@@ -1,16 +1,19 @@
 using System.Windows;
 using System.Windows.Controls;
+using LiveCue.Desktop.Composition;
 using LiveCue.Desktop.Infrastructure;
 using LiveCue.Desktop.SelfTest;
+using LiveCue.Desktop.Shell;
+using LiveCue.Desktop.Text;
 using LiveCue.Desktop.Theming;
+using LiveCue.Relay.Protocol;
 
 namespace LiveCue.Desktop;
 
-/// <summary>Application entry: either the normal window or the self-test, never both.</summary>
+/// <summary>Application entry: either the normal window or the self-test, never both (W-design 5.12).</summary>
 public partial class App : Application
 {
-    /// <summary>The relay's own stop takes up to 2.5 s; this leaves room for it and no more.</summary>
-    private static readonly TimeSpan ShutdownGrace = TimeSpan.FromSeconds(5);
+    private const int ExitStartupFailed = 1;
 
     private AppServices? _services;
 
@@ -25,10 +28,10 @@ public partial class App : Application
         ToolTipService.InitialShowDelayProperty.OverrideMetadata(
             typeof(FrameworkElement), new FrameworkPropertyMetadata(500));
 
-        AppArguments arguments;
+        AppEnvironment environment;
         try
         {
-            arguments = AppArguments.Parse(e.Args);
+            environment = AppEnvironment.Parse(e.Args);
         }
         catch (ArgumentException exception)
         {
@@ -39,29 +42,43 @@ public partial class App : Application
 
         Themes = new ThemeManager(Resources);
 
-        if (arguments.IsSelfTest)
+        if (environment.IsSelfTest)
         {
             // The self-test owns the lifetime: closing its window must not end the run early.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
-            var exitCode = await SelfTestRunner.RunAsync(this, arguments);
+            var exitCode = await SelfTestRunner.RunAsync(this, environment);
             Shutdown(exitCode);
             return;
         }
 
-        Themes.FollowSystem();
-        _services = AppServices.CreateForUser(new WpfUiDispatcher(Dispatcher));
-        MainWindow = new MainWindow(_services.Shell);
-        MainWindow.Show();
+        try
+        {
+            Themes.FollowSystem();
+            _services = AppServices.CreateForUser(new WpfUiDispatcher(Dispatcher));
+            MainWindow = new MainWindow(_services.Shell);
+            MainWindow.Show();
+        }
+#pragma warning disable CA1031 // Whatever stops the start-up is told to the user; only its type name is shown (R-33).
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            MessageBox.Show(
+                ShellText.StartupFailed + Environment.NewLine + exception.GetType().Name,
+                ShellText.WindowTitle,
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown(ExitStartupFailed);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // Closing the window always stops the relay, with no confirmation. The wait is bounded so a
-        // stuck request cannot keep the process alive; the work runs on the thread pool, so blocking
-        // here cannot deadlock.
+        // Closing the window has already stopped the relay. This releases what is left; the wait is
+        // bounded so that a stuck stop cannot keep the process alive, and the work runs on the thread
+        // pool, so blocking here cannot deadlock.
         if (_services is { } services)
         {
-            Task.Run(async () => await services.DisposeAsync()).Wait(ShutdownGrace);
+            Task.Run(async () => await services.DisposeAsync()).Wait(ProtocolConstants.WindowCloseWait);
         }
 
         base.OnExit(e);

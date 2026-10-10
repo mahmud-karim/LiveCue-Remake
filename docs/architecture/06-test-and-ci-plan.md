@@ -295,7 +295,7 @@ with fake hosting services.
 | `--check-only`: the passed line and exit 0; a failure text and exit 2 | `ConsoleHostTests.Check_only` | any |
 | A relay start fault is exit 3 | `ConsoleHostTests.A_start_fault_is_exit_3` | any |
 | Without `--show-pairing` no output line contains the token | `ConsoleHostTests.The_token_is_never_printed_by_default` | any |
-| With it, the payload text is printed exactly once | `ConsoleHostTests.Show_pairing_prints_the_payload_once` | any |
+| With it, the payload text is printed exactly once, no relay is created and no port is bound; without a stored pairing the fixed text is printed and the exit code is 2 | `ConsoleHostTests.Show_pairing_prints_the_payload_once` | any |
 | `--events json`: one JSON object per line, no token | `ConsoleHostTests.Json_events` | any |
 | There is no reset argument | `HostArgumentsTests.Reset_is_not_an_argument` | any |
 | A cancel request stops the relay and exits 0 | `ConsoleHostTests.Cancel_is_a_clean_stop` | any |
@@ -339,7 +339,7 @@ list and plays the status documents of a scenario ("before", "after"). No test r
 | Navigation, Ctrl+1 to Ctrl+4, Escape | `ShellViewModelTests.Navigation_and_escape` | any |
 | The contrast dictionary has exactly the keys of Daylight; every key of W-design 5.3 exists | `ResourceKeyTests.Key_sets_match`; `…Every_listed_key_exists` (WP-W00) | Windows |
 | Automation ids are unique and equal screens section 9 | `AutomationIdTests.Ids_are_unique` (WP-W00) | any |
-| Architecture 3.1: the desktop assembly has no reference to `IPairingExport` (metadata scan) | `DependencyRuleTests.Desktop_never_references_pairing_export` (WP-W00) | any |
+| Architecture 3.1: the desktop assembly has no reference to `IPairingExport` or `StoredPairingExport` (metadata scan) | `DependencyRuleTests.Desktop_never_references_pairing_export` (WP-W00) | any |
 
 ### 2.7 Live and Activity (WP-W09), folders `Live/`, `Activity/`
 
@@ -400,9 +400,9 @@ standing permission for "a few small live calls with the sign-in already on the 
 
 | # | What | How it is invoked | What it does | Cost |
 |---|---|---|---|---|
-| L-1 | A real Codex answer through the relay | PowerShell: `$env:LIVECUE_LIVE_CODEX = "1"; & $env:LIVECUE_DOTNET_EXE test windows/tests/LiveCue.Hosting.Tests -c Release --filter "Category=Live"`. Test `CodexLiveTests.Catalogue_assist_and_summary_through_the_relay` (`[LiveFact("LIVECUE_LIVE_CODEX")]`) | Finds Codex with the real `CodexLocator`; requires `codex login status` to succeed; starts a relay on port 0 with a temp data folder, an endpoint on `pc.example.test` and the real process runner; calls `GET /v1/models`, then one `POST /v1/assist` with a two-sentence synthetic transcript and one `POST /v1/session-summary`, both with the first offered model and its lowest effort. Asserts status 200, the shapes of protocol 8.3, the echo of the selection, `codexMs` above zero, that the temp folder is gone and that no Codex process remains. Prints the three durations | One catalogue read and two small model requests on the owner's Codex sign-in (a few hundred tokens each). No API key, no money charged per call. About one minute |
+| L-1 | A real Codex answer through the relay | PowerShell: `$env:LIVECUE_LIVE_CODEX = "1"; & $env:LIVECUE_DOTNET_EXE test windows/tests/LiveCue.Hosting.Tests -c Release --filter "Category=Live"`. Test `CodexLiveTests.Catalogue_assist_and_summary_through_the_relay` (`[LiveFact("LIVECUE_LIVE_CODEX")]` and `[Trait("Category", "Live")]`) | Finds Codex with the real `CodexLocator`; requires `codex login status` to succeed; starts a relay on port 0 with a temp data folder, an endpoint on `pc.example.test` and the real process runner; calls `GET /v1/models`, then one `POST /v1/assist` with a two-sentence synthetic transcript and one `POST /v1/session-summary`, both with the first offered model and its lowest effort. Asserts status 200, the shapes of protocol 8.3, the echo of the selection, `codexMs` above zero, that the temp folder is gone and that no Codex process remains. Prints the three durations | One catalogue read and two small model requests on the owner's Codex sign-in (a few hundred tokens each). No API key, no money charged per call. About one minute |
 | L-2 | The public OpenRouter catalogue | `python scripts/smoke/openrouter_catalogue.py` | One unauthenticated `GET` of the public model list of OpenRouter (the URL of spec 02 section 4). Checks what the phone's parser relies on: a `data` array; entries with string `id` and `name`; `pricing.prompt` and `pricing.completion` as strings where present. Prints the entry count, the number of entries the phone would skip, and `PASS` or `FAIL`. Sends no key and writes no file | One anonymous request. Free |
-| L-3 | PC speech on a real GPU (protocol P2-M01 to P2-M03) | `powershell -File scripts/verify-pc-asr.ps1 <model> <wav> [repeats]` | Validates its arguments (P2-M01); starts `LiveCueRelayHost.exe --endpoint https://pc.example.test/ --port 0 --data-dir <temp> --lab <folder> --show-pairing --events json`, reads the token and the port from its output, opens the speech socket on loopback, streams the file in real time and checks P2-M02 and P2-M03; prints one JSON line ending in `"result":"PASS"`; stops the host and deletes the temp folder | Needs Docker Desktop running, the lab images and weights (architecture 5.4) and several GB of GPU memory. No money. Up to four minutes per run |
+| L-3 | PC speech on a real GPU (protocol P2-M01 to P2-M03) | `powershell -File scripts/verify-pc-asr.ps1 <model> <wav> [repeats]` | Validates its arguments (P2-M01); starts `LiveCueRelayHost.exe --endpoint https://pc.example.test/ --port 0 --data-dir <temp> --lab <folder> --events json` and reads the port from its output; reads the token by running `LiveCueRelayHost.exe --show-pairing --endpoint https://pc.example.test/ --data-dir <temp>` once (it starts no second relay); opens the speech socket on loopback, streams the file in real time and checks P2-M02 and P2-M03; prints one JSON line ending in `"result":"PASS"`; stops the host and deletes the temp folder | Needs Docker Desktop running, the lab images and weights (architecture 5.4) and several GB of GPU memory. No money. Up to four minutes per run |
 
 Rules for all three: synthetic input only, never a microphone and never a real conversation; nothing is
 written into the repository; a failure is reported to the orchestrator, not retried in a loop. L-1 is run
@@ -469,7 +469,7 @@ a client library, decides what is on the wire. "Slow" tests wait for a real Kest
 | S-32 | The token is compared in constant time through its hash; `Verify` allocates nothing | P2-140; `PairingTokenTests.Verify_uses_fixed_time_comparison_and_does_not_allocate` |
 | S-33 | The plaintext token is never in `pairing.json`, in a leftover `.pending` file or in the schemas folder | P2-141; `PairingStoreTests.No_file_in_the_data_folder_contains_the_token` |
 | S-34 | A reset takes effect on the next request, ends open streams and in-flight answers | P2-143, P2-149, P2-115 |
-| S-35 | The desktop cannot obtain the payload: `PairingQr` has no token, the desktop assembly has no reference to `IPairingExport` | P2-144; `DependencyRuleTests.Desktop_never_references_pairing_export` |
+| S-35 | The desktop cannot obtain the payload: `PairingQr` has no token, the desktop assembly has no reference to `IPairingExport` or `StoredPairingExport` | P2-144; `DependencyRuleTests.Desktop_never_references_pairing_export` |
 | S-36 | The self-check sends the token only to the advertised endpoint, refuses redirects and never follows one to another host | P2-147; `SelfCheckTests.A_redirect_is_not_followed` |
 | S-37 | A copied `pairing.json` from another Windows account does not load | `DpapiPairingTests.A_blob_that_does_not_unprotect_is_unreadable` (Windows) |
 
@@ -497,11 +497,19 @@ independent review of `Edge/`.
 
 Two workflows (architecture 7.2): `ci.yml` and `release.yml`. Free standard GitHub-hosted runners, a public
 repository, no repository secrets, no job that contacts a speech or model provider. Default permission
-`contents: read`. Actions are referenced by major version: `actions/checkout@v7`,
-`actions/upload-artifact@v7`, `actions/download-artifact@v8`, `actions/cache@v6`. Linux jobs name
+`contents: read`. Actions are pinned to the commit of a release, with the release named in a comment; the
+releases are of `actions/checkout` v7, `actions/upload-artifact` v7, `actions/download-artifact` v8 and
+`actions/cache` v6. Linux jobs name
 `ubuntu-24.04` and the Windows job `windows-2025`, not the moving `-latest` labels. The iPhone helper
 scripts are the ones proven on the `spike/ios-ci` branch; the spike's `ios.yml` is folded into `ci.yml` and
 deleted.
+
+Orchestrator ruling: this repository is merged by its orchestrator after a full run, not through pull
+requests, so no job and no tier depends on a pull request or on a label. A builder gets CI by pushing a
+work-package branch (`wp/**`). Until WP-W14 lands `ci.yml`, the `windows` job of 5.2 lives in
+`.github/workflows/windows.yml`: it runs on pushes to `main` and to `wp/**` that touch `windows/**`,
+`scripts/publish-windows.ps1` or the workflow itself, and by hand; the zip of step 10 is made on `main` and on
+a manual run.
 
 ### 5.1 Two tiers, so that builders do not queue for macOS
 
@@ -510,8 +518,8 @@ twenty to forty minutes. The first job of `ci.yml` therefore decides a **tier** 
 
 | Tier | When | What runs |
 |---|---|---|
-| **full** | A push to `main`; `release.yml` calling `ci.yml`; a manual dispatch (default); a pull request that carries the label `ci:full` | Every job, whatever changed |
-| **branch** | Every other pull request; a manual dispatch with `tier: branch` | Only the jobs of the areas the pull request touches, and at most one macOS job |
+| **full** | A push to `main`; `release.yml` calling `ci.yml`; a manual dispatch (default) | Every job, whatever changed |
+| **branch** | A push to a work-package branch (`wp/**`); a manual dispatch with `tier: branch` | Only the jobs of the areas the branch touches, and at most one macOS job |
 
 Area rules of the branch tier (`scripts/ci/changed_areas.py`, from `git diff --name-only` between the merge
 base with the target branch and the head):
@@ -534,19 +542,19 @@ What that means for macOS runners:
 
 So eight Windows builders and the core builders never touch a macOS runner, five app builders run at once
 without waiting, and a `main` run uses two macOS jobs at its peak. The whole simulator suite on both OS
-versions and the device build run in the full tier. The orchestrator adds the label `ci:full` to a pull
-request that touches `ios/App/**` or `ios/UITests/**` before merging it; every other pull request merges on a
+versions and the device build run in the full tier. The orchestrator starts a full-tier run by hand on a
+branch that touches `ios/App/**` or `ios/UITests/**` before merging it; every other branch merges on a
 green branch tier, and the push to `main` then runs the full tier.
 
-Pushes to branches other than `main` start nothing: a builder opens a (draft) pull request to get CI.
+Pushes to branches other than `main` and `wp/**` start nothing: a builder pushes a work-package branch to get CI.
 
 ### 5.2 `ci.yml`
 
 | Setting | Value |
 |---|---|
-| Triggers | `push` to `main`; `pull_request` (opened, synchronize, reopened, labeled); `workflow_dispatch` with input `tier` (`full` or `branch`, default `full`); `workflow_call` with the same input |
+| Triggers | `push` to `main` and to `wp/**`; `workflow_dispatch` with input `tier` (`full` or `branch`, default `full`); `workflow_call` with the same input |
 | Permissions | `contents: read` |
-| Concurrency | group `${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}`; `cancel-in-progress` true for pull requests and for `main`, false when called by `release.yml` |
+| Concurrency | group `${{ github.workflow }}-${{ github.ref }}`; `cancel-in-progress` true for branch pushes and for `main`, false when called by `release.yml` |
 | Default shell | `bash`, except the Windows job (`pwsh`) |
 | Environment | `DEVELOPER_DIR` = the Xcode 26.3 folder (architecture 4.1); `DOTNET_NOLOGO`, `DOTNET_CLI_TELEMETRY_OPTOUT` |
 
@@ -564,8 +572,8 @@ Jobs:
 | `ios-device-build` | `macos-26`, 45 min | full tier only | `ios-tests` |
 | `ci-ok` | `ubuntu-24.04`, 2 min | always (`if: always()`) | every job above |
 
-**`changes`.** Check out with full history. Run `changed_areas.py` with the event name, the base ref, the
-labels and the dispatch input. Outputs: `tier`, the five flags (all true in the full tier), and `ios_matrix`,
+**`changes`.** Check out with full history. Run `changed_areas.py` with the event name, the ref (a
+work-package branch is compared with its merge base on `main`) and the dispatch input. Outputs: `tier`, the five flags (all true in the full tier), and `ios_matrix`,
 a JSON list: `[]`, or the `glass` leg, or both legs.
 
 **`audit`.** Check out with full history (`fetch-depth: 0`). `python3 -B -m unittest discover -s scripts/tests`.
@@ -593,7 +601,7 @@ file); `pytest asr/tests`. No torch, no model, no GPU, no Docker.
 | 6 | `dotnet test windows/LiveCueRemake.sln -c Release --no-build --filter "Category!=Live" --logger trx --results-directory artifacts/test-results --blame-hang-timeout 3m`. The DPAPI, job-object, child-process and WPF tests run here |
 | 7 | `scripts/publish-windows.ps1 -Output artifacts/publish` (architecture 3.15): publishes `LiveCue.Desktop` and `LiveCue.Relay.Host` self-contained for `win-x64` into the one folder; copies `asr/` without `private/`, `tests/` and caches; copies `LICENSE` and `THIRD-PARTY-NOTICES.md`; then fails unless both executables exist and the folder holds no `pairing*.json`, no `settings.json` and no `asr/private` |
 | 8 | Self-test of the published build: `artifacts/publish/LiveCueRemake.exe --self-test --screenshots artifacts/desktop`, started so that its exit code is read (`Start-Process -Wait -PassThru`), limit 5 min. Non-zero fails the job. The log is printed |
-| 9 | Console host of the published build: `LiveCueRelayHost.exe --check-only` must exit 2 and print the "Codex CLI was not found" text, because the runner has no Codex. This proves the self-contained host starts |
+| 9 | Console host of the published build: `LiveCueRelayHost.exe --check-only` must exit 2 and print the "Codex CLI was not found" text, because the runner has no Codex (the foundation's checker does not look for Codex yet and stops at "Tailscale is not installed in Program Files."; the step accepts either text until WP-W06 lands, and passes `--data-dir` a temporary folder). This proves the self-contained host starts |
 | 10 | Full tier only: the script's `-Zip` mode writes `artifacts/LiveCueRemake-win-x64.zip` and `artifacts/LiveCueRemake-win-x64.zip.sha256` (lower-case hex, two spaces, file name) |
 | 11 | Always: upload `artifacts/test-results` and `artifacts/desktop` as `windows-evidence`, 14 days. Full tier: upload the zip and its checksum as `windows-build`, 14 days, `if-no-files-found: error` |
 
