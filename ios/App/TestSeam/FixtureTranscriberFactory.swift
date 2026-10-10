@@ -9,7 +9,6 @@ import LiveCueCore
     }
 
     func makeTranscriber(for provider: SpeechProvider) -> any SpeechTranscriber {
-        // STUB(WP-07)
         FixtureTranscriber(provider: provider, clock: clock)
     }
 }
