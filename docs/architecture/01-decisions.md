@@ -136,7 +136,7 @@ call). "Where" names the component of the architecture document that implements 
 | IOS-B1 | On-device model selection saved but never restored | Keep; drop key | Models are loaded explicitly after each launch and each provider change. The `selectedModel` preference does not exist. | `OnDeviceModelManager`, `PreferencesStore` | B |
 | IOS-B2 | Ghost sessions | Fix | Nothing is saved until the transcriber is connected. A failed start leaves nothing. At launch, a session without an end time is closed at its last save. | `SessionController`, `SessionStore` | B |
 | IOS-B3 | Elapsed time includes connection and paused time | Keep | Unchanged; the same clock is the offset of resumed streams. | `SessionController` | B |
-| IOS-B4 | On-device errors do not pause | Fix | A failure of any provider moves the session to Paused with an alert. At Voz's 30-minute cap the pending audio is transcribed as part of that pause. | `SessionController`, `VozTranscriber`, `ParakeetTranscriber` | B |
+| IOS-B4 | On-device errors do not pause | Fix | A failure of any provider moves the session to Paused and shows the reason in the session notice, not an alert (`04-ios-architecture.md` 1.2). An on-device hand-off queue overflow counts as such a failure. At Voz's 30-minute cap the pending audio is transcribed as part of that pause. | `SessionController`, `VozTranscriber`, `ParakeetTranscriber` | B |
 | IOS-B5 | On-device capture ignores interruptions and route changes | Fix | Observed for every provider, with the same two messages; the session pauses. | `AudioCapture` | B |
 | IOS-B6 | Audio session handling differs on Pause | Keep | Released for Meta and PC speech; kept active for on-device providers. | `AudioCapture` | B |
 | IOS-B7 | Stop after Pause finalises twice | Fix | Stop from Paused does not finalise again. | `SessionController` | B |
@@ -149,13 +149,13 @@ call). "Where" names the component of the architecture document that implements 
 | IOS-B14 | "follows Dynamic Type" only partly true | Fix | Every text style scales with Dynamic Type. | `DesignSystem` | B |
 | IOS-B15 | Uncommitted partial lost on disconnect | Keep | Unchanged. | transcribers | B |
 | IOS-B16 | Parakeet partial is unbounded | Fix | The partial is cut to its last 16,000 bytes and the body is fitted to the limit. | Core `WireBudget` | B |
-| IOS-B17 | "PC connected" in the manual section reflects the saved PC | Fix | Shown only when the relay is online and the typed address equals the saved endpoint. | `PairingController` | B |
+| IOS-B17 | "PC connected" in the manual section reflects the saved PC | Fix | The line is not built. The Saved PC panel alone shows the state of the saved PC (`02-ios-screens.md` section 10). | Pairing | B |
 | IOS-B18 | Turn timestamps stored to whole seconds | Fix | Dates are stored with milliseconds. | Core `LiveCueJSON` | B |
 | IOS-A1 | Parakeet partial semantics | Keep | The partial is the last callback text; one segment is committed on Pause or Stop; no end-of-utterance commit. Device check in section 7. | `ParakeetTranscriber` | A |
 | IOS-A2 | On-device model identity | Keep | The exact package pins decide the models. | `project.yml` | B |
 | IOS-A3 | Start is not gated on readiness | Keep | The readiness panel is informational; missing prerequisites surface after the tap. | Home, `SessionController` | A |
-| IOS-A4 | No unpair, model delete, delete confirmation, Assist cancel, idle-timer hold | Keep absent | None is added. The relay's cancel route is used internally only. | none | B |
-| IOS-A5 | Two routes to Settings | Keep | Both stay. | `AppShell` | A |
+| IOS-A4 | No unpair, model delete, delete confirmation, Assist cancel, idle-timer hold | Keep absent, one change | Deleting a session asks for confirmation (`02-ios-screens.md` section 13). Unpair, model delete, Assist cancel and an idle-timer hold are not added. The relay's cancel route is used internally only. | History | B |
+| IOS-A5 | Two routes to Settings | Fix | One route: the Settings tab. The Home row opens the new Transcription screen; the PC speech model has its own screen; the answer service is picked in place (`02-ios-screens.md` section 1). | `AppShell`, Features | B |
 | IOS-A6 | Appearance row and its test | Fix | The row reads "Daylight". | Settings | B |
 | IOS-A7 | Local-network string names one VPN product | Fix | "LiveCue connects privately to your Windows PC." | `project.yml` | A |
 | IOS-A8 | Data continuity | Drop | No old data is read. No migration code, including the legacy token-only pairing migration. | `Persistence` | B |
@@ -325,9 +325,19 @@ carries over unchanged, read with the remake's names (bundle, executable, artefa
 
 | Id | Outcome |
 |---|---|
-| AC-IOS-043, 044, 045 | Extended: they now hold for every speech provider, not only Meta and PC speech (IOS-B4, IOS-B5). |
+| AC-IOS-008 | Changed: readiness reads "Ready" (a chip with a check) instead of "✓ Ready"; "Setup" is unchanged. |
+| AC-IOS-020, 029 | Changed: the state label reads "Connecting…" while starting or resuming, "Pausing…" and "Stopping…" instead of "Updating…". "Listening" and "Paused" are unchanged. |
+| AC-IOS-022 | Holds for the race only: the Start control is disabled with a caption while the PC model cannot start. The alert reads "PC speech model: … Open Transcription to start it or check its status." |
+| AC-IOS-028 | Changed: the expanded transcript follows new text only while the reader is at its end; otherwise "Jump to live" is offered. |
+| AC-IOS-043, 044, 045, 046 | Extended: they now hold for every speech provider, not only Meta and PC speech (IOS-B4, IOS-B5); for on-device providers the queue limit of 046 is 128 and has its own text. Changed: the reason is shown in the session notice, not in an alert. |
+| AC-IOS-047 | Changed: after Pause the problem is reported by the session notice titled "Paused"; after Stop by the alert on Home. |
+| AC-IOS-070 | Extended: copying shows the toast "Copied". |
 | AC-IOS-078 | Changed: the summary is requested only when the session has at least one segment (IOS-B12). |
+| AC-IOS-083 | Changed: the swipe action asks for confirmation; "Delete" then removes the session permanently (IOS-A4). |
 | AC-IOS-090 | Changed: the Appearance row reads "Daylight". |
+| AC-IOS-093 | Changed: choosing a provider applies immediately and stays on the Transcription screen (IOS-A5). |
+| AC-IOS-095, 096, 097 | Changed: the provider's rows are shown on Transcription and on Settings; the PC model controls are the PC speech model screen, where AC-IOS-099 to 106 hold. |
+| AC-IOS-104 | The "session is active" clause holds in the logic; the screen cannot be open during a session. |
 | AC-IOS-109 | Changed: an empty key gets the missing-key message; a key containing whitespace gets the malformed-key message (section 6). |
 | AC-IOS-113 | Holds in the settings logic; there is no UI state for it (IOS-D9). |
 | AC-IOS-132 | Holds for the canonical endpoint form (protocol 4.3). |
@@ -404,7 +414,20 @@ Every string of the specs is kept verbatim except the ones below. A designer may
 | Settings, Version, when unreadable | "0.5.1" | "Unknown" |
 | Local-network usage description | "LiveCue connects privately to your Windows PC over your Tailscale network." | "LiveCue connects privately to your Windows PC." |
 | Every message that used to be the relay's text shown verbatim | relay text | The phone's own text for the code (protocol 14.1, 14.2) |
-| Voz 30-minute alert | "Pending recording reached 30 minutes. Tap Assist to transcribe it." | "Pending recording reached 30 minutes and was transcribed. Resume to keep recording." |
+| Voz 30-minute message (now a session notice) | "Pending recording reached 30 minutes. Tap Assist to transcribe it." | "Pending recording reached 30 minutes and was transcribed. Resume to keep recording." |
+| On-device processing fell behind (session notice) | "Transcription could not keep up. Stop and restart the session." | "Transcription could not keep up. Recording paused; resume to continue." |
+| On-device processing failed during a session (session notice) | the speech package's error text | "Transcription stopped on this iPhone. Resume to continue." |
+| Session notice titles (new) | none | "Recording paused"; "Paused" for a failed finalisation on Pause |
+| Live session state label | "Updating…" | "Connecting…" (starting, resuming), "Pausing…", "Stopping…" |
+| Home, readiness header | "✓ Ready" | A chip reading "Ready" |
+| Home, rows | Readiness rows "Transcription", "Windows relay", "Meta connection", "PC speech model" and a setup row "Transcription & appearance" with the detail "Cloud, PC or iPhone speech" | One row "Transcription" whose subtitle carries "Meta connection: …" or "PC speech model: …"; the pairing row carries the relay values (`02-ios-screens.md` section 3) |
+| Three messages that named "Transcription settings" (Meta missing key, Meta connection not accepted, PC model start check) | "… Transcription settings …" | "… Transcription …" (`04-ios-architecture.md` 1.3) |
+| Three messages that named "Assistant settings" (OpenRouter missing key, rejected key, no model chosen) | "… Assistant settings …" | "… Assistant models & timing …" (`04-ios-architecture.md` 1.3) |
+| Settings, Text size | "16 pt · follows Dynamic Type" | "Follows your iPhone's text size" |
+| Speech benchmark, title and purpose | Title "Model Lab"; a purpose text of two sentences | Title "Speech benchmark"; the first sentence only |
+| Model Library tag | "RECOMMENDED" | "Recommended" |
+| History, delete (new) | none | The confirmation of `02-ios-screens.md` section 13 |
+| Strings marked **(new)** in `02-ios-screens.md` | none | Adopted as written there |
 | Saving or using a key that contains whitespace (Meta and OpenRouter) | the missing-key message, or "Enter a valid API key." | "This key contains spaces or line breaks. Paste it again exactly as issued." |
 | Meta key screen, text S-07 | ends "… The key previously saved on Windows is not automatically copied; paste your Meta key here once." | That sentence is removed. The PC never holds a Meta key. |
 | Settings privacy text S-06 | as in the spec | One sentence added at the end: "The Voz speech package reports anonymous usage to its vendor." |

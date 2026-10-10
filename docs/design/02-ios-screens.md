@@ -186,7 +186,7 @@ Three lines.
 |---|---|---|
 | A | State chip, then the level meter (visualiser size S, DS 4.21) | Elapsed time in `type.label`, tabular, `MM:SS`; then the sliders icon button (quiet, 44) `assistant-lab`, label "Assistant models & timing", disabled while an Assist runs |
 | B | Provider line, `type.caption` `ink.secondary`: the speech provider's display name; Meta appends " · est. transcription" | Meta only: the estimated cost, `$0.00000` plus " USD", tabular, `live-transcription-cost` |
-| C | Status line, `type.caption` `ink.secondary`: the latest connection or timing message (table below) | Assistant model: the text after the last "/" of the model id, or "Choose model" |
+| C | Status line, `type.caption` `ink.secondary`, `transcriber-status` **(new identifier)**: the latest connection or timing message (table below) | Assistant model: the text after the last "/" of the model id, or "Choose model" |
 
 Elapsed time counts wall-clock seconds from session creation and keeps counting while paused, as before.
 
@@ -194,7 +194,7 @@ State chip, level meter and status line by session state:
 
 | Session state | Chip | Level meter | Status line |
 |---|---|---|---|
-| Starting, or resuming | Live with spinner, "Connecting…" | Idle (`ink.secondary`, minimum) | "Connecting to `<provider display name>`…", then for PC-local the PC's own loading message with elapsed seconds, for example "Loading Nemotron 3.5 on PC · 12 s" |
+| Starting, or resuming | Live with spinner, "Connecting…" | Idle (`ink.secondary`, minimum) | "Connecting to `<provider display name>`…", then for PC-local, while the PC loads the model, "Loading `<provider short name>` on PC · `N` s. Microphone starts when ready.", for example "Loading Nemotron 3.5 on PC · 12 s. Microphone starts when ready." |
 | Listening | Live with pulsing dot, "Listening" | Moving with the level | Meta: "Meta direct · `0.00` s setup". PC-local: "Connected · `0.00` s setup". After the first text arrives: "First words · `0.00` s from stream start". Parakeet: "Last buffer processing: `N` ms". Voz: "Recording on this iPhone" **(new)**, then after each batch "`0.0` s audio → `0.00` s transcription" |
 | Pausing | Warning with spinner, "Pausing…" **(new)** | Flat | "Finishing the transcript…" **(new)** |
 | Paused by the user | Warning with pause glyph, "Paused" | Flat, `status.warning` | The last listening line plus " · Final `0.00` s" when a finalisation time is known |
@@ -211,6 +211,7 @@ A warning banner between the status panel and the transcript, `session-notice` *
 - Announced assertively once; warning haptic (DS 7.2).
 - On-device errors (Voz reaching its 30-minute cap, Parakeet failing or falling behind) now pause the session and show this notice, like stream failures do.
 - A failed finalise on Pause shows the notice with the title "Paused" and the body "Could not finalize the transcript. Some final words may be missing."
+- A failed Resume shows the notice with the body "Transcription could not start. " followed by the reason; the session stays paused.
 
 ### 4.4 Transcript panel
 
@@ -385,8 +386,9 @@ Mockup: `ios-settings`.
 | "Assistant" | Navigating row "Assistant models & timing" with the model id as subtitle, `assistant-lab`. Then a multi-line field (2 to 5 lines) labelled "Assistant instructions", placeholder "Optional instruction (e.g. answer briefly)", `assistant-instruction`, saved on every keystroke; caption "Applied to every Assist request until you change it."; keyboard accessory button "Done", `finish-instruction` |
 | "Devices" | Navigating row, `pair-pc`: "PC connection" with the saved state as subtitle when paired, else "Pair Windows PC" |
 | "Transcription cost" | Detail rows "Meta Muse rate" → "$0.18 / hour" and "PC-local models" → "$0 API usage"; spec text S-05; quiet button with the external-link glyph, "Meta pricing & usage documentation" |
-| "Display" | Detail rows "Text size" → "Follows your iPhone's text size" **(reworded; it is now true)**; "Appearance" → "Daylight"; "Version" → the app's version, or "Unknown" if it cannot be read |
-| "Privacy" | Spec text S-06 |
+| "Display" | Detail row "Text size" → "Follows your iPhone's text size" **(reworded; it is now true)** |
+| "About" **(new)** | Detail rows "Appearance" → "Daylight"; "Version" → the app's version, or "Unknown" if it cannot be read. Then two captions: "Speech packages" with the attribution text, and "Usage reporting" with the Voz usage text (both in `03-system-architecture.md` section 4.13) |
+| "Privacy" | Spec text S-06, with the sentence added by `01-decisions.md` section 6.1 |
 
 The "Provider" row is disabled, with a caption saying why **(new)**, while an on-device model is being prepared ("Available when the model has finished preparing.") or while a PC model command is in flight or the PC reports starting or stopping ("Available when the PC model has finished changing.").
 
@@ -496,13 +498,13 @@ Mockups: `ios-pairing-new`, `ios-pairing-saved`, `ios-qr-scan`.
 **Panel "Quick pairing"**
 
 - Primary button, large, full width, with the QR glyph: "Scan PC QR code", `scan-pairing-qr` → QR sheet.
-- Caption **(reworded for the new Windows app)**: "In LiveCue Desktop on your PC, open Pairing and choose Show QR. If the camera cannot scan, use Copy pairing text there and paste it here."
+- Caption **(reworded for the new Windows app)**: "Open LiveCue Desktop on Windows and scan its QR. Without a camera, paste the pairing text from the PC, or enter the values manually." LiveCue Desktop itself never shows the pairing text; it comes from the PC's command-line host.
 - Multi-line monospaced field, placeholder "Paste pairing text".
 - Secondary button "Read pairing payload", disabled while the field is empty. It fills the two fields below and clears this one; nothing is saved or sent yet.
 
 **Panel "Manual pairing"**
 
-- Field "PC address": URL keyboard, no auto-capitalisation, placeholder an example HTTPS address.
+- Field "PC address": URL keyboard, no auto-capitalisation, placeholder `https://<pc-name>.<network>.ts.net:11443/`.
 - Secure field "Pairing token".
 - Primary button, full width: "Verify and pair", disabled while either field is empty, busy while verifying.
 
@@ -543,6 +545,7 @@ Mockup: `ios-model-library`.
 | Description | "~467 MB · Transcribes when you tap Assist" or "~230 MB · English live captions · 320 ms mode" |
 | Main button | Primary: "Download & use"; "Reload" once loaded. Busy and disabled while preparing |
 | Unload | Secondary button "Unload", only when loaded; disabled while preparing |
+| Usage reporting | Voz only, a caption **(new)**: "The Voz package reports anonymous usage to its vendor, Desert Ant Labs. LiveCue cannot turn this off." |
 | Progress block | Only while this model is being prepared, or after its preparation failed: a determinate bar, `model-download-progress`; "`N`% setup" and "`MM:SS` elapsed"; the status line (section 14); a byte or file counter when known; the caption "Downloading and model preparation are separate steps; preparation can continue after the download reaches 100%." |
 
 - Section title "Pinned source", then a panel with detail rows "Status" → the status line, and "Package" → "Desert Ant 3.1.0" (Voz) or "FluidAudio 0.15.6" (Parakeet).
@@ -594,7 +597,7 @@ Mockups: `ios-history`, `ios-history-empty`, `ios-session-detail`.
 
 **Delete.** Swiping a row reveals "Delete". It opens a system confirmation: title "Delete this conversation?", message "Its transcript and answers are removed from this iPhone. This cannot be undone.", buttons "Delete" (destructive) and "Cancel" **(new)**. On Delete the row fades out.
 
-**States.** Empty: a 64 icon tile with the clock glyph, title "No conversations yet", body "Completed sessions will appear here.", on the ground. With items. A session cut off by the app closing appears with the title "New conversation".
+**States.** Empty: a 64 icon tile with the clock glyph, title "No conversations yet", body "Completed sessions will appear here.", on the ground. With items. A session cut off by the app closing appears closed at its last save and titled by the normal rule: the first 48 characters of its first segment, or "Conversation".
 
 ### Session detail
 
@@ -624,7 +627,7 @@ Every message the old app produced is still produced. This section says where ea
 | Situation | Surface |
 |---|---|
 | Start checks fail, or the transcriber cannot start (the session is discarded) | "LiveCue" alert, on Home |
-| The session pauses itself or loses audio | Session notice (4.3) |
+| The session pauses itself or loses audio; Resume fails; finalising fails on Pause | Session notice (4.3) |
 | An Assist fails | Error card (4.5) |
 | Pairing, QR, model preparation | "LiveCue" alert |
 | Finalising fails on Stop | "LiveCue" alert, on Home |
@@ -640,13 +643,10 @@ Every message the old app produced is still produced. This section says where ea
 | "Microphone route changed. Resume to use the current microphone." | Input device went away |
 | "Meta transcription stopped. Check API access, billing, or rate limits before retrying." | Meta error event |
 | "Could not connect directly to Meta. Check this iPhone's internet connection and retry. No PC is required for Meta transcription." | Meta socket failed |
-| The relay's own text | The relay sent a speech error |
-| "Your PC rejected this pairing. Scan the PC's QR and pair again." **(new)** | PC speech connection refused: not authorised |
-| "Your PC is busy with another conversation. Resume in a moment." **(new)** | Refused: relay busy |
-| "The relay on your PC is paused. Resume it in LiveCue Desktop, then resume here." **(new)** | Refused: relay paused |
-| "The PC speech model is changing. Resume when it is ready." **(new)** | Refused: model changing |
-| The categorised connection message (spec 8.1) | Any other PC speech connection failure. Raw system error text is never shown |
-| "Pending recording reached 30 minutes. Tap Assist to transcribe it, then resume." **(reworded)** | Voz pending-audio cap. The session is now paused |
+| The phone's own text for the relay's error code (`02-relay-protocol.md` section 14.1) | The relay ended the PC speech stream or refused it: not authorised, another stream active, relay paused, model changing, and every other code |
+| The phone's text for the condition (`02-relay-protocol.md` section 14.2) | The PC speech connection failed without a code: unreachable, secure connection failed, dropped. Raw system error text and the relay's own text are never shown |
+| "Transcription could not start. " + the reason | Resume failed |
+| "Pending recording reached 30 minutes and was transcribed. Resume to keep recording." **(reworded)** | Voz pending-audio cap. The session is now paused and the pending audio has been transcribed as part of that pause |
 | "Transcription could not keep up. Recording paused; resume to continue." **(reworded)** | On-device processing fell behind. The session is now paused |
 | "Transcription stopped on this iPhone. Resume to continue." **(new)** | On-device processing failed. Replaces the library's raw error text |
 
@@ -656,8 +656,8 @@ The inline errors of spec 8.3 are unchanged. Two cases change:
 
 | Text | Cause |
 |---|---|
-| The categorised connection message (spec 8.1); if neither category fits, "Your PC could not complete this request. Check that LiveCue Desktop is running, then retry." **(new)** | A Codex Assist failed in transit. Replaces raw system error text (spec 11.1, B8) |
-| "Could not load the OpenRouter model list. Check your connection and try again." **(new)** | The OpenRouter catalogue was empty and fetching it failed. Replaces the misleading "Choose an OpenRouter model…" (spec 11.1, B9) |
+| The phone's text for the code or condition (`02-relay-protocol.md` sections 14.1 and 14.2) | A Codex Assist failed. Replaces raw system error text and relay-provided text (spec 11.1, B8) |
+| The OpenRouter error text of the failed fetch (spec 8.3) | The OpenRouter catalogue was empty and fetching it failed. Replaces the misleading "Choose an OpenRouter model…" (spec 11.1, B9) |
 
 ### Alerts on Home and Pairing
 
@@ -670,7 +670,7 @@ The messages of spec 8.1 that are not session notices, unchanged, with these adj
 
 ### Inline status lines
 
-Saved PC, Meta key, OpenRouter key, catalogue, PC model and Model Library lines are those of spec 8.2, unchanged. Assistant Lab and Meta key screens name "Assistant models & timing" and "Transcription" where the old text said "Assistant settings" and "Transcription settings".
+Saved PC, Meta key, OpenRouter key, catalogue, PC model and Model Library lines are those of spec 8.2, unchanged, except that a failure reported by the PC is worded by `02-relay-protocol.md` section 14. Messages name "Assistant models & timing" and "Transcription" where the old text said "Assistant settings" and "Transcription settings"; the exact strings are in `04-ios-architecture.md` section 1.3.
 
 ---
 
@@ -707,6 +707,7 @@ Every identifier from spec 1.13, and where it is now.
 | `model-download-progress` | Model Library | Progress bar |
 | `history-transcription-cost`, `history-local-transcription` | History | Usage line |
 | `session-notice` **(new)** | Live session | Session notice banner |
+| `transcriber-status` **(new)** | Live session | Status panel, line C, the status line |
 
 `dismiss-answer` must not exist anywhere.
 
@@ -738,7 +739,7 @@ Everything the old app could do is still reachable. These are the differences a 
 | Older answers were cards as loud as the latest | Latest is the one prominent card; the rest sit in "Earlier answers" | DS principle 5 |
 | Copy gave no feedback | Toast "Copied" | The action was invisible |
 | "PC connected" under the manual pairing fields | Removed | It described a different PC than the one being typed |
-| Pairing caption named the terminal launcher | Names the Pairing view of the Windows app and its "Copy pairing text" | The launcher no longer exists |
+| Pairing caption named the terminal launcher | Says to scan the QR in LiveCue Desktop, or to paste the pairing text from the PC | The launcher no longer exists, and the desktop window never shows the pairing text |
 | Home artwork: tile with five bars over wave lines | The new brand mark | DS 8.2 |
 
 Not added, by decision: an unpair button, a cancel for a running Assist, a device list, a dark theme, an onboarding flow, and any way to edit the instruction from the live screen.
