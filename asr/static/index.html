@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
+<title>LiveCue speech lab</title>
+<style>
+:root{--ground:#E6ECF5;--b1:#9DC1F5;--b2:#B9C4F7;--b3:#A8D4F2;--b4:#C7D3F5;--ink:#0E1B33;--ink2:#3D4A63;--acc:#0B57D0;--acc-hover:#1A66DE;--acc-pressed:#0949B0;--ok:#0B6443;--warn:#7D5108;--bad:#B3243F;--sh:40,60,110;--m:max(100vw,100vh)}
+*{box-sizing:border-box}
+html{min-height:100%;background:radial-gradient(circle calc(var(--m)*.46) at 6% -6%,var(--b1),transparent 72%),radial-gradient(circle calc(var(--m)*.44) at 96% 24%,var(--b2),transparent 72%),radial-gradient(circle calc(var(--m)*.48) at 2% 64%,var(--b3),transparent 72%),radial-gradient(circle calc(var(--m)*.5) at 92% 100%,var(--b4),transparent 72%),var(--ground);background-attachment:fixed}
+body{margin:0 auto;max-width:960px;padding:32px 16px 40px;color:var(--ink);font:14px/20px "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 8px 20px}
+.kicker{margin:0 0 4px;font-size:12px;line-height:16px;font-weight:600;color:var(--ink2)}
+h1{margin:0;font:700 30px/36px "Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+h2{margin:0;font-size:15px;line-height:20px;font-weight:600}
+p{margin:0}
+.muted{color:var(--ink2)}
+.panel{border-radius:30px;padding:20px;margin-bottom:16px;background:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,0) 40%),linear-gradient(rgba(255,255,255,.62),rgba(255,255,255,.62)),rgba(var(--sh),.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 0 0 1px rgba(255,255,255,.6),0 12px 32px rgba(var(--sh),.14)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.row + .row,.row + p,p + .row{margin-top:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:4px 10px;border-radius:14px;font-size:13px;line-height:18px;font-weight:600;color:var(--c);background:linear-gradient(var(--t),var(--t)),rgba(255,255,255,.85);box-shadow:0 4px 12px rgba(var(--sh),.16)}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.chip.neu{--c:var(--ink2);--t:rgba(14,27,51,.08)}
+.chip.live{--c:var(--acc);--t:rgba(11,87,208,.12)}
+.chip.ok{--c:var(--ok);--t:rgba(11,100,67,.12)}
+.chip.warn{--c:var(--warn);--t:rgba(125,81,8,.12)}
+.chip.bad{--c:var(--bad);--t:rgba(179,36,63,.12)}
+button,.file{font:inherit;font-weight:600;color:var(--ink);height:40px;padding:0 20px;border:0;border-radius:20px;cursor:pointer;background:linear-gradient(rgba(255,255,255,.85),rgba(255,255,255,.85)),rgba(var(--sh),.16);box-shadow:inset 0 0 0 1px rgba(255,255,255,.9),0 4px 12px rgba(var(--sh),.16)}
+button:hover:enabled{background:#fff}
+button:active:enabled{background:#EEF3FB}
+button.primary{color:#fff;background:var(--acc);box-shadow:inset 0 0 0 1px rgba(255,255,255,.3),0 6px 16px rgba(var(--sh),.28)}
+button.primary:hover:enabled{background:var(--acc-hover)}
+button.primary:active:enabled{background:var(--acc-pressed)}
+button:disabled{opacity:.45;cursor:default;box-shadow:none}
+button:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input[type=file]{font:inherit;color:var(--ink2);max-width:100%;min-height:40px;padding:6px 8px;border-radius:16px;border:1px solid rgba(14,27,51,.6);background:rgba(255,255,255,.85)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.stat{border-radius:22px;padding:16px;background:rgba(255,255,255,.46);box-shadow:inset 0 0 0 1px rgba(255,255,255,.7)}
+.stat span{display:block;font-size:13px;line-height:18px;color:var(--ink2)}
+.stat strong{display:block;margin-top:4px;font:600 22px/28px "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+#transcript{min-height:200px;margin-top:12px;font-size:15px;line-height:22px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:720px}
+#transcript.empty{color:var(--ink2)}
+footer{margin:0 8px;font-size:13px;line-height:18px;color:var(--ink2)}
+footer p + p{margin-top:6px}
+@media (max-width:640px){.stats{grid-template-columns:1fr}header{flex-direction:column;align-items:flex-start}h1{font-size:24px;line-height:30px}}
+@media (prefers-reduced-transparency:reduce){.panel{background:#F6F8FB}.stat{background:#FAFBFD}}
+@media (prefers-contrast:more){.muted,.stat span,footer,#transcript.empty{color:var(--ink)}.panel,.stat{box-shadow:inset 0 0 0 1px rgba(14,27,51,.6)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <p class="kicker">LiveCue speech lab</p>
+    <h1>Local speech test</h1>
+  </div>
+  <span id="status" class="chip neu" role="status" aria-live="polite">Connecting…</span>
+</header>
+
+<section class="panel" aria-labelledby="model">
+  <div class="row">
+    <h2 id="model">Loading model…</h2>
+    <span id="config" class="muted"></span>
+  </div>
+  <p class="muted">One model holds the GPU at a time. Use the launcher script, or LiveCue on the iPhone, to switch models.</p>
+  <div class="row">
+    <button id="start" class="primary" disabled>Start microphone</button>
+    <button id="stop" disabled>Stop and finalize</button>
+    <button id="sample" disabled>Try sample phrase</button>
+  </div>
+  <div class="row">
+    <input id="file" type="file" accept="audio/*" aria-label="Recording to replay">
+    <button id="replay" disabled>Replay file live</button>
+  </div>
+</section>
+
+<div class="stats">
+  <div class="stat"><span>Audio sent</span><strong id="duration">0.0 s</strong></div>
+  <div class="stat"><span>First words, from stream start</span><strong id="first">–</strong></div>
+  <div class="stat"><span>Finalization after stop</span><strong id="final">–</strong></div>
+</div>
+
+<section class="panel" aria-labelledby="transcript-title">
+  <h2 id="transcript-title">Transcript</h2>
+  <div id="transcript" class="empty" aria-live="polite">Your transcript will appear here.</div>
+</section>
+
+<footer>
+  <p>Audio stays on this PC and is held in memory only. Nothing is recorded or logged. This page is reachable only from this PC.</p>
+  <p>A test stops at 120 seconds. The first-words time includes any silence at the start and the time taken to speak; it is not the model's own delay. File replay sends audio at speaking speed, not all at once.</p>
+</footer>
+
+<script>
+"use strict";
+// Limits kept on the page side. The service enforces its own.
+const SAMPLE_RATE = 16000;
+const FRAME_SAMPLES = 1280;              // 80 ms
+const AUTO_STOP_MS = 119000;             // just under the 120 s limit of a test
+const MAX_FILE_BYTES = 20 * 1024 * 1024; // files under 20 MB
+const MAX_FILE_SECONDS = 120;            // and under two minutes
+const MAX_QUEUED_BYTES = 320000;         // give up when the socket falls this far behind
+const MODEL_NAMES = {nemotron: "Nemotron 3.5 ASR · 0.6B", qwen3: "Qwen3-ASR · 1.7B"};
+
+const el = id => document.getElementById(id);
+const ui = {
+  status: el("status"), model: el("model"), config: el("config"), start: el("start"), stop: el("stop"),
+  sample: el("sample"), file: el("file"), replay: el("replay"), duration: el("duration"),
+  first: el("first"), final: el("final"), transcript: el("transcript"),
+};
+
+let available = false;   // the model answered /health
+let socket = null;
+let session = null;      // {samples, startedAt, sawText, replaying, done}
+let capture = null;      // {context, media, source, processor, sink, timer}
+
+function setStatus(text, tone) {
+  ui.status.textContent = text;
+  ui.status.className = "chip " + (tone || "neu");
+}
+
+function setButtons() {
+  const idle = available && !session;
+  ui.start.disabled = !idle;
+  ui.sample.disabled = !idle;
+  ui.replay.disabled = !idle;
+  ui.stop.disabled = !session || session.done;
+}
+
+function showTranscript(text) {
+  ui.transcript.textContent = text;
+  ui.transcript.classList.remove("empty");
+}
+
+function seconds(ms, digits) {
+  return (ms / 1000).toFixed(digits) + " s";
+}
+
+function releaseCapture() {
+  if (!capture) return;
+  clearTimeout(capture.timer);
+  if (capture.processor) { capture.processor.onaudioprocess = null; capture.processor.disconnect(); }
+  if (capture.source) capture.source.disconnect();
+  if (capture.sink) capture.sink.disconnect();
+  if (capture.media) capture.media.getTracks().forEach(track => track.stop());
+  if (capture.context) capture.context.close();
+  capture = null;
+}
+
+function endSession(text, tone) {
+  releaseCapture();
+  session = null;
+  if (socket) { const closing = socket; socket = null; closing.close(); }
+  setStatus(text, tone);
+  setButtons();
+}
+
+function fail(message) {
+  endSession(message || "Something went wrong", "bad");
+}
+
+function openSession() {
+  session = {samples: 0, startedAt: performance.now(), sawText: false, replaying: false, done: false};
+  ui.transcript.textContent = "";
+  ui.transcript.classList.remove("empty");
+  ui.first.textContent = "–";
+  ui.final.textContent = "–";
+  ui.duration.textContent = "0.0 s";
+  setStatus("Connecting…", "neu");
+  setButtons();
+
+  return new Promise((resolve, reject) => {
+    const mine = new WebSocket("ws://" + location.host + "/stream");
+    socket = mine;
+    mine.onmessage = event => {
+      if (socket !== mine || !session) return;
+      let message;
+      try { message = JSON.parse(event.data); } catch (error) { return; }
+      if (message.type === "ready") {
+        session.startedAt = performance.now();
+        setStatus("Listening", "live");
+        resolve();
+      } else if (message.type === "error") {
+        const text = String(message.message || "The test failed");
+        fail(text);
+        reject(new Error(text));
+      } else if (message.type === "transcript" || message.type === "result") {
+        const text = String(message.text || "");
+        showTranscript(text);
+        if (text && !session.sawText) {
+          session.sawText = true;
+          ui.first.textContent = seconds(performance.now() - session.startedAt, 2);
+        }
+        if (message.type === "result") {
+          ui.final.textContent = typeof message.finalizationMs === "number" ? seconds(message.finalizationMs, 2) : "–";
+          endSession("Complete", "ok");
+        }
+      }
+    };
+    mine.onerror = () => {
+      if (socket !== mine) return;
+      fail("Could not reach the local model");
+      reject(new Error("Could not reach the local model"));
+    };
+    mine.onclose = () => {
+      if (socket !== mine) return;
+      fail("The stream closed before it finished");
+      reject(new Error("The stream closed before it finished"));
+    };
+  });
+}
+
+function sendAudio(floats) {
+  if (!session || session.done || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (socket.bufferedAmount > MAX_QUEUED_BYTES) { fail("The connection cannot keep up"); return; }
+  const pcm = new Int16Array(floats.length);
+  for (let i = 0; i < pcm.length; i++) pcm[i] = Math.max(-1, Math.min(1, floats[i])) * 32767;
+  socket.send(pcm.buffer);
+  session.samples += pcm.length;
+  ui.duration.textContent = (session.samples / SAMPLE_RATE).toFixed(1) + " s";
+}
+
+function stopAndFinalize() {
+  if (!session || session.done) return;
+  session.done = true;
+  session.replaying = false;
+  releaseCapture();
+  setStatus("Finalizing…", "warn");
+  setButtons();
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({type: "stop"}));
+}
+
+async function startMicrophone() {
+  try {
+    await openSession();
+    const media = await navigator.mediaDevices.getUserMedia({
+      audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}, video: false,
+    });
+    if (!session || !socket || socket.readyState !== WebSocket.OPEN) {
+      media.getTracks().forEach(track => track.stop());
+      throw new Error("The test ended before the microphone was allowed. Start again.");
+    }
+    const context = new AudioContext({sampleRate: SAMPLE_RATE});
+    capture = {context, media, source: null, processor: null, sink: null, timer: 0};
+    if (context.sampleRate !== SAMPLE_RATE) throw new Error("This browser cannot capture at 16 kHz");
+    capture.source = context.createMediaStreamSource(media);
+    // ScriptProcessorNode is deprecated but needs no separate worklet file,
+    // which keeps this page in one piece.
+    capture.processor = context.createScriptProcessor(2048, 1, 1);
+    capture.sink = context.createGain();
+    capture.sink.gain.value = 0; // never play the microphone back
+    capture.processor.onaudioprocess = event => sendAudio(event.inputBuffer.getChannelData(0));
+    capture.source.connect(capture.processor);
+    capture.processor.connect(capture.sink);
+    capture.sink.connect(context.destination);
+    capture.timer = setTimeout(stopAndFinalize, AUTO_STOP_MS);
+  } catch (error) {
+    if (session || capture) fail(error && error.message);
+  }
+}
+
+async function decodeToMono16k(file) {
+  if (!file) throw new Error("Choose an audio file first");
+  if (file.size >= MAX_FILE_BYTES) throw new Error("Use a file smaller than 20 MB");
+  const probe = new OfflineAudioContext(1, 1, SAMPLE_RATE);
+  const decoded = await probe.decodeAudioData(await file.arrayBuffer());
+  if (decoded.duration > MAX_FILE_SECONDS) throw new Error("Use a recording under two minutes");
+  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * SAMPLE_RATE)), SAMPLE_RATE);
+  const node = offline.createBufferSource();
+  node.buffer = decoded;
+  node.connect(offline.destination);
+  node.start();
+  return (await offline.startRendering()).getChannelData(0);
+}
+
+async function replay(file) {
+  if (session) return;
+  try {
+    setStatus("Preparing audio…", "neu");
+    const pcm = await decodeToMono16k(file);
+    await openSession();
+    const mine = session;
+    mine.replaying = true;
+    const began = performance.now();
+    for (let at = 0; at < pcm.length && mine.replaying; at += FRAME_SAMPLES) {
+      const end = Math.min(at + FRAME_SAMPLES, pcm.length);
+      // A frame cannot be sent before it would have been spoken.
+      const wait = end / (SAMPLE_RATE / 1000) - (performance.now() - began);
+      if (wait > 0) await new Promise(done => setTimeout(done, wait));
+      if (session === mine && mine.replaying) sendAudio(pcm.subarray(at, end));
+    }
+    if (session === mine && mine.replaying) stopAndFinalize();
+  } catch (error) {
+    fail(error && error.message);
+  }
+}
+
+async function replaySample() {
+  if (session) return;
+  try {
+    setStatus("Loading sample…", "neu");
+    const response = await fetch("/sample", {cache: "no-store"});
+    if (!response.ok) throw new Error("No sample clip is installed on this PC");
+    await replay(await response.blob());
+  } catch (error) {
+    fail(error && error.message);
+  }
+}
+
+ui.start.onclick = startMicrophone;
+ui.stop.onclick = stopAndFinalize;
+ui.replay.onclick = () => replay(ui.file.files[0]);
+ui.sample.onclick = replaySample;
+window.addEventListener("beforeunload", () => { releaseCapture(); if (socket) socket.close(); });
+
+fetch("/health", {cache: "no-store"})
+  .then(response => { if (!response.ok) throw new Error(); return response.json(); })
+  .then(health => {
+    ui.model.textContent = MODEL_NAMES[health.model] || "Unknown model";
+    ui.config.textContent = Number(health.chunkMs) + " ms chunks · English test";
+    available = true;
+    setStatus(health.busy ? "In use by another session" : "Ready", health.busy ? "warn" : "ok");
+    setButtons();
+  })
+  .catch(() => {
+    ui.model.textContent = "Model unavailable";
+    setStatus("Model unavailable", "bad");
+  });
+</script>
+</body>
+</html>
