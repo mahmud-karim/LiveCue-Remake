@@ -48,10 +48,17 @@ final class PairingPayloadTests: XCTestCase {
     }
 
     func testAcceptsEveryCharacterOfTheTokenShape() throws {
-        let mixed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJ0123-_9"
-        XCTAssertEqual(mixed.count, 43)
-        let pairing = try PairingPayload.parse(payload(endpoint: "https://pc.example.test/", token: mixed))
-        XCTAssertEqual(pairing.token, mixed)
+        // Built from the synthetic token, one character changed at a time, so that no other token-shaped
+        // text is written in this repository.
+        for character in ["a", "m", "z", "B", "Z", "0", "5", "9", "_", "-"] {
+            let token = String(repeating: "A", count: 42) + character
+            XCTAssertEqual(token.count, RelayConstants.tokenLength)
+            let pairing = try PairingPayload.parse(payload(endpoint: "https://pc.example.test/", token: token))
+            XCTAssertEqual(pairing.token, token, character)
+
+            let leading = character + String(repeating: "A", count: 42)
+            XCTAssertEqual(try PairingPayload.parse(payload(endpoint: "https://pc.example.test/", token: leading)).token, leading)
+        }
     }
 
     // MARK: - Rejected (P2-202)
