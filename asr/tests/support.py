@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 import struct
 import threading
 import time
@@ -31,6 +32,13 @@ STREAM_BUSY_ERROR = {"type": "error", "message": "One test is already running."}
 
 #: Timers small enough that no test waits for real seconds.
 FAST = dict(idle_seconds=5.0, closing_seconds=1.0)
+
+
+def free_port() -> int:
+    """A loopback port that is free right now."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
 
 # -- PCM ---------------------------------------------------------------------

@@ -13,7 +13,6 @@ import os
 import socket
 import subprocess
 import sys
-import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -24,15 +23,9 @@ from websockets.sync.client import connect
 
 import server
 from engines.fake import FakeEngine
-from support import RELAY_LIMIT_ERROR
+from support import RELAY_LIMIT_ERROR, free_port
 
 ASR_ROOT = Path(server.__file__).resolve().parent
-
-
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
 
 
 def get_json(port: int, path: str = "/health") -> dict:
@@ -65,20 +58,9 @@ def handshake_status(port: int, path: str, headers: dict) -> int:
     return int(reply.split(" ", 2)[1])
 
 
-@pytest.fixture(scope="module")
-def port():
-    number = free_port()
-    engine = FakeEngine()
-    engine.load()
-    settings = server.Settings(model="nemotron", engine="fake", listen_port=number, host_port=number)
-    live = server.build_server(engine, settings)
-    thread = threading.Thread(target=live.run, daemon=True)
-    thread.start()
-    wait_until(lambda: live.started)
-    yield number
-    live.should_exit = True
-    thread.join(15)
-    assert not thread.is_alive()
+@pytest.fixture
+def port(live_lab):
+    return live_lab.host_port
 
 
 def test_server_options():
@@ -173,6 +155,35 @@ def test_a_client_that_drops_the_tcp_connection_frees_the_model(port):
     assert get_json(port)["busy"] is True
     ws.socket.close()  # no closing handshake at all
     wait_until(lambda: get_json(port)["busy"] is False)
+
+
+# -- behind a published port, as in the container ---------------------------------
+
+
+def test_host_is_the_published_port_not_the_port_listened_on(published_lab):
+    listening, published = published_lab.listen_port, published_lab.host_port
+    assert listening != published
+    # Reached directly, the service is addressed by a name it does not answer to.
+    assert handshake_status(listening, "/relay", {"Host": f"127.0.0.1:{listening}"}) == 403
+    assert handshake_status(listening, "/relay", {"Host": f"127.0.0.1:{published}"}) == 101
+    assert handshake_status(listening, "/stream", {"Host": f"localhost:{published}"}) == 101
+    origin = {"Origin": f"http://127.0.0.1:{published}"}
+    assert handshake_status(listening, "/stream", {"Host": f"127.0.0.1:{published}", **origin}) == 101
+    wrong = {"Origin": f"http://127.0.0.1:{listening}"}
+    assert handshake_status(listening, "/stream", {"Host": f"127.0.0.1:{published}", **wrong}) == 403
+
+
+def test_relay_session_through_a_published_port(published_lab):
+    """What the relay does: it dials the published port and names it in Host."""
+    link = socket.create_connection(("127.0.0.1", published_lab.listen_port), timeout=5)
+    with connect(f"ws://127.0.0.1:{published_lab.host_port}/relay", sock=link) as ws:
+        assert json.loads(ws.recv(timeout=5))["type"] == "ready"
+        assert json.loads(ws.recv(timeout=5))["type"] == "speechStart"
+        ws.send(bytes(2560))
+        assert json.loads(ws.recv(timeout=5))["transcript"] == "test caption"
+        ws.send('{"type":"endStream"}')
+        assert json.loads(ws.recv(timeout=5))["type"] == "speechComplete"
+        assert json.loads(ws.recv(timeout=5))["audioProcessedMs"] == 80
 
 
 # -- the real entry point ------------------------------------------------------
