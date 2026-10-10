@@ -78,6 +78,16 @@ internal sealed class SpeechRig : IAsyncDisposable
     }
 
     /// <summary>
+    /// The test host with the real PC model controller over the fake lab runtime (<c>Host.Lab</c>): what
+    /// a stream and the model routes do to each other. <see cref="Model"/> is not used by this rig.
+    /// </summary>
+    public static async Task<SpeechRig> StartWithRealModelControlAsync()
+    {
+        var host = await RelayTestHost.StartAsync();
+        return new SpeechRig(host, new FakeLocalModelController());
+    }
+
+    /// <summary>
     /// A relay of its own with the given lab connector, or with the production connector dialling
     /// <paramref name="labPort"/> when <paramref name="connector"/> is null. The test host cannot do
     /// this: its connector is always the fake.
@@ -251,6 +261,16 @@ internal sealed class SpeechRig : IAsyncDisposable
 internal static class SpeechWait
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(15);
+
+    public static async Task UntilAsync(Func<Task<bool>> condition, string what)
+    {
+        var watch = Stopwatch.StartNew();
+        while (!await condition())
+        {
+            Assert.True(watch.Elapsed < Patience, $"Did not happen in time: {what}.");
+            await Task.Delay(5);
+        }
+    }
 
     public static async Task UntilAsync(Func<bool> condition, string what)
     {
