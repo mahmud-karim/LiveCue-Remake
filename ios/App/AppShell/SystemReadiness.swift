@@ -7,7 +7,6 @@ enum ProviderLockReason: Equatable, Sendable {
     case pcModelChanging
 
     var caption: String {
-        // STUB(WP-09)
         switch self {
         case .preparingModel: return "Available when the model has finished preparing."
         case .pcModelChanging: return "Available when the PC model has finished changing."
@@ -19,32 +18,60 @@ enum ProviderLockReason: Equatable, Sendable {
 /// section 0.2). It stores nothing: reading its properties inside a view body is tracked through the
 /// owners it reads.
 @MainActor final class SystemReadiness {
+    private let speech: SpeechSettings
+    private let assistant: AssistantSettings
+    private let relay: RelayMonitor
+    private let models: OnDeviceModelManager
+
     init(speech: SpeechSettings, assistant: AssistantSettings, relay: RelayMonitor, models: OnDeviceModelManager) {
-        // STUB(WP-09)
+        self.speech = speech
+        self.assistant = assistant
+        self.relay = relay
+        self.models = models
     }
 
+    /// The speech provider is PC-local or the answer service is Codex.
     var needsPC: Bool {
-        // STUB(WP-09)
-        false
+        PCRequirement.needsPC(speech: speech.provider, answers: assistant.configuration.provider)
     }
 
+    /// Meta: a key is saved. PC-local: the PC model can start a session. On-device: the model of the
+    /// selected provider is loaded.
     var speechReady: Bool {
-        // STUB(WP-09)
-        false
+        let provider = speech.provider
+        if provider.isCloud {
+            return speech.hasMetaKey
+        }
+        if provider.isPCLocal {
+            return relay.canStartSession(for: provider)
+        }
+        return models.isLoaded(for: provider)
     }
 
+    /// Codex: the relay is online. OpenRouter: a key is saved and a model is chosen.
     var answersReady: Bool {
-        // STUB(WP-09)
-        false
+        switch assistant.configuration.provider {
+        case .codex:
+            return relay.isOnline
+        case .openrouter:
+            return assistant.hasOpenRouterKey && !assistant.configuration.model.isEmpty
+        }
     }
 
     var systemReady: Bool {
-        // STUB(WP-09)
-        false
+        speechReady && answersReady
     }
 
+    /// An on-device model is being prepared, or a PC model command is in flight or the PC reports
+    /// starting or stopping. A running session is not a reason here: `SpeechSettings.select` refuses
+    /// that by itself.
     var providerLockReason: ProviderLockReason? {
-        // STUB(WP-09)
-        nil
+        if models.isPreparing {
+            return .preparingModel
+        }
+        if relay.isPCModelCommandInFlight || relay.pcModelStatus?.isChanging == true {
+            return .pcModelChanging
+        }
+        return nil
     }
 }
