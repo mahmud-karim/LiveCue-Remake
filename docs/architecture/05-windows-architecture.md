@@ -3620,17 +3620,42 @@ folder" (`IsConfigured` false, MSG-2), the same answer the hosting library gives
 answers `429 TOO_MANY_REQUESTS`. Otherwise it reads the two headers, accepts the upgrade (an offered
 `Sec-WebSocket-Extensions` or subprotocol is ignored and never a reason to refuse, protocol 10.1), awaits
 `ISpeechBridge.RunAsync`, and decrements in a `finally`. So a socket that is being refused counts until it
-is closed.
+is closed. A header that is absent or sent more than once is handed over as absent; the upgrade is accepted
+all the same, and admission refuses it with a frame.
+
+Two things the server core adds here. It keeps its own count of upgraded connections with the same cap
+(4.3) and gives a place back a moment after the route's `finally` has run; an accept that it refuses in that
+moment (`InvalidOperationException` before the response has started) is answered with the same 429. And
+when the bridge returns with the socket in any state but `Closed` (the stream aborted it), the route also
+aborts the connection (`HttpContext.Abort`). On the build PC the server core resets such a connection by
+itself; the explicit abort keeps that from depending on how it ends an upgraded request whose output a phone
+that does not read has left unsent.
 
 **Structure.** One `SpeechStream` per socket, run as a single loop over one mailbox (an unbounded channel of
 internal events). Everything else only posts to the mailbox: the phone receive loop, the lab receive loop,
 the prepare and connect tasks, the timers (created from the clock) and the three tokens (`WhileAccepting`,
 `PairingRevoked`, `Stopping`). Only the loop changes state and decides what is sent. Two writer loops drain
-the phone queue (W-03, W-04) and the lab queue (C-73).
+the phone queue (W-03, W-04) and the lab queue (C-73). The loop never waits for anything but the next
+event, so a slow phone or a slow lab cannot keep it from seeing a timer.
+
+Three rules that the framework's WebSocket and the manual clock impose:
+
+- The socket allows one send at a time, so every frame **and the close frame** go through the one phone
+  writer. A cancelled receive or send aborts a framework WebSocket, so no phone I/O is given a
+  cancellation token; the stream aborts the socket itself when the table says so.
+- The mailbox stays short whatever the other side sends: the phone reader and the lab reader each wait until
+  the loop has taken the message they posted last. At most one message from the phone and one from the lab
+  wait at any time.
+- Inside one step of the loop, timers are set and events are published **before** a frame is queued, and the
+  phone writer sets the W-04 timer (for the close frame also the C-58 timer) before the write. Whoever sees
+  a frame arrive can rely on the state that frame announces. The tests depend on it: they advance the clock
+  right after a frame.
 
 **Receiving from the phone** (`PhoneSocket`): messages are assembled into a buffer of C-20 plus one byte. A
-message that reaches that last byte posts `FrameTooLarge` and reading stops. A close frame or a transport
-error posts `PhoneGone`.
+message that reaches that last byte posts `FrameTooLarge` once, and from then on nothing is assembled or
+handed on: whatever still arrives is read into the same buffer and thrown away, so that the phone's close
+frame is still seen and the close handshake can complete. The same holds from the moment the stream enters
+`Closing`. A close frame, or a transport error in either direction, posts `PhoneGone`.
 
 **Admission** (protocol 10.2), in order, first failure wins: S-1 `ProtocolHeader` is the text of C-01; S-2
 `ModelHeader` is one of C-04; S-3 `Access.Accepting`; S-4 `LocalModel.IsConfigured`; S-5 not
@@ -3677,7 +3702,7 @@ error posts `PhoneGone`.
 | any before `Closing` | `PhoneGone` | Cancel prepare wait and connect. Publish `SpeechStreamChanged(Stopped)` | `Closed` |
 | any | lifetime timer; phone queue overflow (W-03); phone write stall (W-04) | Abort the phone socket | `Closed` |
 | `Closing` | phone close frame received, or C-58 passed since the close was sent | Abort the socket if it is still open | `Closed` |
-| `Closed` | (entry) | Stop every timer. Dispose the lab socket. Release the lease. Complete `RunAsync` | |
+| `Closed` | (entry) | Stop every timer. Dispose the lab socket if `Closing` has not done so. Release the lease. Publish `SpeechStreamChanged(Stopped)` when the stream was admitted and has published no ending yet. Answer the phone's close frame with 1000 when the phone closed first and nothing is queued; otherwise abort the socket unless its close handshake is complete. Complete `RunAsync` | |
 
 `Fail(code)` does this once per stream (a second failure is ignored, so exactly one `error` frame is ever
 sent): queue the `error` frame of that code; after it is written, send the close frame with the close code of
@@ -3685,9 +3710,34 @@ protocol 10.6 (1008 from `Admitting`, 1009 for `FRAME_TOO_LARGE`, 1001 for `RELA
 and the code as the reason; start the C-58 wait; publish `SpeechStreamChanged(Failed, code, relay text)`
 unless the failure happened in `Admitting`.
 
+How the table is read, where it leaves a choice:
+
+- A row for one state wins over an "any" row for the same event. In `AwaitingLabReady` every lab text other
+  than the expected `ready` is `MODEL_NOT_READY`, an event of a type the relay does not know included: the
+  lab's first message must be `ready`. In `Preparing`, `Connecting`, `AwaitingLabReady` and `Finalizing`
+  every phone message is `AUDIO_OUT_OF_SEQUENCE`, an empty frame and a text of an unknown type included
+  (the one rule of protocol 10.5). Only a message beyond C-20 is `FRAME_TOO_LARGE` instead, in every state
+  before `Closing`.
+- Entering `Closing`, by `Fail` or by the clean end, stops every timer but the lifetime, cancels the wait on
+  prepare, the connect and both lab loops, and disposes the lab socket at once: it has no further use, and
+  the lab ends its session when the connection ends. A lab socket that the connector still delivers
+  afterwards is disposed unused. The lease is not released earlier for it (see below).
+- An admitted stream publishes exactly one ending: `Failed` from `Fail`, otherwise `Stopped`. The rows that
+  abort the socket (lifetime, W-03, W-04) publish `Stopped` on entering `Closed` when nothing was published
+  before.
+- The C-58 wait is counted from the moment the writer reaches the close frame. A frame before it that cannot
+  be written is ended by W-04.
+- C-55 is a last line. Every state has a shorter limit of its own (C-51 while loading, C-52 and C-54 while
+  streaming, C-53 while finalizing, W-04 and C-58 while closing), so with those working the lifetime never
+  fires first; when it does fire, the socket is aborted whatever the state.
+- An empty audio frame while streaming is dropped and is not audio: the idle limit keeps counting.
+
 Lease (decision A-07): a failure or `PhoneGone` in `Preparing` releases the lease at that moment, before the
 close handshake, and cancels only the wait on `PrepareAsync`. In every later state the lease is released on
-entering `Closed`, when both sockets are closed.
+entering `Closed`, when both sockets are closed. So after `ready` a failed stream holds the lease until the
+phone has answered the close or C-58 has passed. One socket may outlive the lease by a moment: when the
+phone closed first, its close frame is answered after the lease is released, since the stream is over for
+the phone already.
 
 **Frames the relay builds** (`SpeechFrames`), members in this order: `loading`: `type`, `provider`,
 `elapsedSeconds`, `message`; `ready`: `type`, `provider`, `sampleRate`, `handshakeMs` (milliseconds since the
@@ -3699,14 +3749,27 @@ integers (`16000`, never `16000.0`).
 **`LabEventFilter`** rebuilds the four lab-derived types from the allowlist of protocol 10.3, members in the
 order `type`, `turnId`, `audioProcessedMs`, `finalizationMs`, `transcript`. A number is forwarded as its
 original token when it is a JSON number that parses to a finite `double`; `transcript` when it is a string,
-cut to C-22 code units, one fewer when the last kept unit is a high surrogate. Everything else is left out.
+cut to C-22 code units, one fewer when the last kept unit is a high surrogate. Everything else is left out,
+and so is a `transcript` whose escapes name half a surrogate pair (it is valid JSON, but not text).
 If the encoded frame would still be longer than C-21 (possible only when the text is mostly characters that
-JSON escapes), `transcript` is cut further by the same rule until the frame fits.
+the relay's writer escapes), `transcript` is cut further by the same rule until the frame fits: the longest
+prefix that fits is kept. `SpeechText` carries the text as the frame carries it.
 
-**`AudioLimiter`**: allowed bytes at a moment are the C-72 formula applied to the milliseconds since `ready`,
-from the clock. **`LabSocketConnector`**: a `ClientWebSocket` to `ws://127.0.0.1:<LabPort>/relay`, no proxy,
-no `Origin`, keep-alive off, connect bounded by C-47; it reports a message longer than C-23 as `Invalid`, a
-close frame or a prematurely closed connection as `Closed`, and every other failure as `LabSocketException`.
+What the relay's writer escapes: `WireJson` uses the framework's relaxed encoder, which leaves the basic
+plane as UTF-8 but still writes most control characters as `\u00XX` (six bytes) and a character outside the
+basic plane as an escaped surrogate pair (twelve bytes instead of four). To a JSON reader that is the same
+text, and the phone decodes it. It is not what protocol section 1 says ("non-ASCII text as UTF-8, not as
+`\u` escapes"), and it is why a transcript of emoji alone would pass C-21 without the further cut.
+`WireJson` is a frozen file: this is handed to the orchestrator and not changed here.
+
+**`AudioLimiter`**: allowed bytes at a moment are the C-72 formula applied to the whole milliseconds since
+`ready`, from the clock. **`LabSocketConnector`**: a `ClientWebSocket` to `ws://127.0.0.1:<LabPort>/relay`,
+no proxy, no `Origin`, no offered extension or subprotocol, keep-alive off, connect bounded by C-47 on the
+clock; it reports a binary message or a message longer than C-23 as `Invalid` (at once, without assembling
+it; the rest of that message is skipped before the next one is read), a close frame or a prematurely closed
+connection as `Closed`, and every other failure as `LabSocketException`. Disposing aborts the connection
+without a close handshake. A refused loopback connection takes Windows about two seconds to report, inside
+C-47.
 
 ### 4.12 Fixed texts (`Protocol/FixedTexts.cs`)
 
