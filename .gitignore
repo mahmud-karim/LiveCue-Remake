@@ -1,0 +1,42 @@
+# Local-only orchestration notes and machine-specific details (never publish)
+docs/orchestration/
+*.local.md
+*.local.json
+.env
+.env.*
+!.env.example
+
+# Secrets and pairing data
+relay.json
+*.pem
+*.key
+*.p12
+*.mobileprovision
+
+# Node
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# .NET
+bin/
+obj/
+artifacts/
+*.user
+.vs/
+
+# Xcode / Swift
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+.build/
+.swiftpm/
+*.ipa
+*.xcresult/
+xcuserdata/
+
+# OS
+.DS_Store
+Thumbs.db
