@@ -74,7 +74,7 @@ at area level by the owning package, and end to end by WP-W13 (1.7).
 | P2-001 | `UnauthorizedTests.No_authorization_is_the_fixed_401_on_any_method_and_target` | H, raw | any |
 | P2-002 | `UnauthorizedTests.A_well_formed_unknown_token_is_the_same_401` | H | any |
 | P2-003 | `UnauthorizedTests.Browser_headers_are_the_same_401_on_every_route_and_on_the_upgrade` (also `Origin:` with an empty value) | H, raw | any |
-| P2-004 | `UnauthorizedTests.Malformed_authorization_is_the_same_401` (eight cases) | H, raw | any |
+| P2-004 | `UnauthorizedTests.Malformed_authorization_is_the_same_401` (nine cases) | H, raw | any |
 | P2-005 | `UnauthorizedTests.A_401_does_no_work` (presence unchanged; backend and lab runtime not called; a declared body of which no byte was sent is answered at once) | H, raw, BE, LR, EV | any |
 | P2-006 | `RouteMatchTests.Unknown_targets_are_404` (eight cases) | H, raw | any |
 | P2-007 | `ProtocolHeaderTests.Absent_or_other_version_is_400_and_an_unknown_route_stays_404` | H | any |
@@ -147,6 +147,7 @@ at area level by the owning package, and end to end by WP-W13 (1.7).
 | P2-058 | `CancelRouteTests.Cancel_kills_the_run_and_the_request_ends_409`; `…An_unknown_id_is_404_request_not_found`; `…An_encoded_slash_is_404_not_found` | H, BE, raw | any |
 | P2-059 | `AnswerDeadlineTests.A_backend_that_never_returns_is_504_at_the_deadline_counted_from_arrival` (the catalogue is delayed first, so its time is inside the deadline) | H, BE, CS, C | any |
 | P2-060 | `AnswerValidatorTests.Missing_memory_a_numeric_answer_and_non_json_fail`; `…An_extra_member_is_dropped` | none | any |
+| P2-065 | `AnswerValidatorTests.The_marker_is_always_written_as_null` (backend output with a UUID, with `not-a-uuid` and with `null`) | none | any |
 | P2-061 | `SummaryRouteTests.A_valid_summary_is_returned_with_execution` | H, BE | any |
 | P2-062 | `ClientAbortTests.Closing_the_connection_kills_the_run_and_frees_the_slot_within_a_second` | H, BE, raw | any |
 | P2-063 | `CheckOrderTests.The_four_orderings_hold` | H, BE, CS | any |
@@ -188,12 +189,13 @@ at area level by the owning package, and end to end by WP-W13 (1.7).
 | P2-100 | `SpeechHappyPathTests.Each_model_is_accepted_loads_and_becomes_ready` | H, LM, LS | any |
 | P2-101 | `SpeechHappyPathTests.Audio_reaches_the_lab_byte_for_byte_and_prepare_got_the_model` | H, LM, LS | any |
 | P2-102 | `SpeechHappyPathTests.The_stream_completes_and_closes_with_1000` | H, LM, LS | any |
-| P2-103 | `LabEventFilterTests.Unknown_members_and_types_are_dropped`; `…A_non_finite_number_is_omitted`; `…A_long_transcript_is_cut_without_splitting_a_pair` | none | any |
+| P2-103 | `LabEventFilterTests.Unknown_members_and_types_are_dropped`; `…A_non_finite_number_is_omitted`; `…A_long_transcript_is_cut_without_splitting_a_pair`; `…A_heavily_escaped_transcript_is_cut_until_the_frame_fits_C21` | none | any |
 | P2-104 | `SpeechAdmissionTests.An_unknown_or_missing_model_is_a_typed_refusal_and_nothing_is_called` | H, LM, LS | any |
 | P2-105 | `SpeechPrepareTests.A_failed_prepare_is_model_load_failed_without_private_text` | H, LM, LS | any |
 | P2-106 | `SpeechPrepareTests.A_load_in_progress_refuses_the_next_stream_and_a_later_one_is_admitted` | H, LM | any |
 | P2-107 | `SpeechUpgradeTests.No_token_a_wrong_token_and_a_reset_token_are_http_401` | H, raw | any |
 | P2-108 | `SpeechUpgradeTests.An_origin_header_is_http_401` | H, raw | any |
+| Protocol 10.1 | `SpeechUpgradeTests.An_offered_extension_is_ignored_and_the_upgrade_is_accepted` (the request carries `Sec-WebSocket-Extensions: permessage-deflate`; the 101 answer has no `Sec-WebSocket-Extensions` header and the first frame is `loading`) | H, raw | any |
 | P2-109 | `SpeechAdmissionTests.Paused_is_a_typed_refusal` | H | any |
 | P2-110 | `SpeechAdmissionTests.A_second_stream_is_speech_busy_and_the_first_continues` | H, LM, LS | any |
 | P2-111 | `SpeechSequenceTests.A_frame_before_ready_or_after_end_stream_is_out_of_sequence` | H, LM, LS | any |

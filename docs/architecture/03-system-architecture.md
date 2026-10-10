@@ -926,7 +926,7 @@ The app switches to fixtures when launched with `-ui-testing`. The mechanism is 
 | `-meta-key-persistence` | Leave the test Meta key as it was. |
 | `-openrouter-ui-reset` | Remove the test OpenRouter key at launch. |
 | `-openrouter-persistence-test` | Keep the saved answer configuration. |
-| `-pc-offline` | Relay reported offline ("PC offline."). |
+| `-pc-offline` | Relay reported unreachable (`L-UNREACHABLE`). |
 | `-pc-catalog-slow` | Codex catalogue takes 8 s. |
 | `-pc-model-slow-start` | PC model start takes 6 s. |
 | `-pc-model-start-error` | PC model start ends in error with a message mentioning Docker Desktop. |

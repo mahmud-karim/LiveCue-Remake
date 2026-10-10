@@ -76,8 +76,9 @@ now agree.
 | R-35 | Opening the Pairing view | Shows the placeholder; the QR appears on "Show QR" | Old AC-WIN-019: a QR is displayed "without a further click"; WIN-20: one decryption and one self-check per explicit "Show QR" | Navigation requests nothing; "Show QR" does. AC-WIN-019 is recorded as changed | W | decisions 5.3 |
 | R-36 | "The desktop command failed. Please retry." | Listed as a relay problem in Activity | RELAY-D7: there is no command channel | Kept as the activity line for an action of the window that threw (pause, show QR, reset, a mapping call) | W | screens 4.1 |
 
-Two protocol sentences cannot be met to the letter with Kestrel and the framework's WebSocket. Both are
-invisible to a conforming phone; both are flagged for the orchestrator (section 4.3, notes K-1 and K-2).
+Two protocol sentences could not be met to the letter with Kestrel and the framework's WebSocket. Both are
+invisible to a conforming phone; the protocol was reworded for both after the review (section 4.3, notes K-1
+and K-2; decisions, review rulings X-03 and X-04).
 
 ---
 
@@ -3044,8 +3045,8 @@ Notes on what Kestrel does and cannot do:
 
 | Id | Fact | Consequence |
 |---|---|---|
-| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. **For the orchestrator:** protocol 5.3 should read "besides `Content-Length`, `Date` and the connection headers" |
-| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. **For the orchestrator:** protocol 10.5 says "ping"; either accept this or reword it to "keep-alive frame". Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
+| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. Protocol 5.2 and 5.3 say the same since the review (X-03) |
+| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Protocol C-57 and 10.5 say "keep-alive frame" since the review (X-04), and the device check covers it (iPhone design 6.5 item 10). Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
 | K-3 | The framework WebSocket has no maximum message size | `PhoneSocket` receives into a buffer of C-20 plus one byte and stops at the first byte beyond C-20 |
 | K-4 | After a response to a request whose body the application did not read, Kestrel reads and discards the rest of the body unless the connection is closing | Every response written before the body was completely read carries `Connection: close`. No relay code and no Kestrel code reads a body before E-3 passes |
 | K-5 | A body below the minimum data rate makes the body read throw `BadHttpRequestException` | `BodyReader` turns it into `408 REQUEST_TIMEOUT` when the response has not started; otherwise Kestrel's bare 408 stands. Both are allowed by protocol 5.1 |
@@ -3113,7 +3114,7 @@ written as UTF-8.
 |---|---|
 | 1 `HealthRoute` | Writes the pre-built document of protocol 6.2. No other work |
 | 2 `PairVerifyRoute` | Reads the body (5.4 rules); on an error writes it; otherwise writes `{"ok":true}`. Records nothing |
-| 3 `ModelsRoute` | `Catalog.ReadAsync(Work)`. On `ASSISTANT_CATALOG_UNAVAILABLE`: publish `AssistantNotice` and answer 503. Otherwise 200 with the offers. Served while paused |
+| 3 `ModelsRoute` | `Catalog.ReadAsync(Work)`. On `ASSISTANT_CATALOG_UNAVAILABLE`: publish `AssistantNotice` and answer 503. Otherwise 200 with `{"models":[…]}` as in protocol 6.4, each offer written as `id`, `name`, `reasoningEfforts` (an empty list gives `{"models":[]}`). Served while paused |
 | 9 `CancelRoute` | `Answers.TryCancel(RequestId)`: true gives `200 {"ok":true,"cancelled":true}`; false gives `404 REQUEST_NOT_FOUND`. A target that does not match the pattern never reaches the route (P-6 answers 404 `NOT_FOUND`) |
 
 ### 4.7 Pairing (`Pairing/`)
@@ -3191,7 +3192,7 @@ Three layers, composed as `CatalogReader` over `CachedCatalogSource` over the so
 | R-5 | `AssistantSelection` shape check | `400 INVALID_ASSISTANT` |
 | R-6 | `Catalog.ReadAsync(Work)` | `AssistantNotice`, then `503 ASSISTANT_CATALOG_UNAVAILABLE` |
 | R-7 | Selection is in the catalogue | `AssistantNotice`, then `400 ASSISTANT_SELECTION_UNAVAILABLE` |
-| | Publish `RequestStarted` (`Transcript`, `PartialTranscript`, `Instruction` are the body's members when they are strings; `PayloadJson` is the compact body). Register the run in `RunRegistry` under its id with a token source linked to `Work` | |
+| | Publish `RequestStarted` (`Transcript`, `PartialTranscript`, `Instruction` are the body's members when they are strings; `PayloadJson` is the compact body). Register the run in `RunRegistry` under its id (compared ordinally, so letter case matters) with a token source linked to `Work` | |
 | R-8 | `IAnswerBackend.RunAsync`; then `AnswerValidator` | see below |
 
 Outcomes of R-8, first match wins; each publishes one `RequestFailed` with the same code unless it says
@@ -3238,7 +3239,9 @@ Assist: an object whose `detectedQuestion`, `answer` and `details` are strings a
 with string `summary`, arrays of strings `facts` and `openQuestions`, and `throughSegmentId` that is a string
 or `null`. Summary: an object with strings `title` and `summary` and arrays of strings `keyPoints` and
 `actionItems`. A missing or wrongly typed member fails; any other member is dropped. The reply is written
-member by member in the order of protocol 8.3, then `execution`.
+member by member in the order of protocol 8.3, then `execution`. In an assist reply `memory.throughSegmentId`
+is always written as JSON `null`, whatever string the model wrote (protocol 8.3, P2-065): the model's marker
+is validated for its type and then discarded.
 
 ### 4.10 PC model control (`LocalModel/LocalModelController.cs`)
 
@@ -3260,10 +3263,25 @@ timestamp) or none. A semaphore of one guards every change of `operation`. "Usab
 MSG-1 is the message of the controller's stored status before its first probe; route 4 always probes, so it
 is never sent.
 
+**Routes 4, 5 and 6** (`Routes/LocalModelStatusRoute.cs`, `LocalModelStartRoute.cs`,
+`LocalModelStopRoute.cs`). Route 4: `GetStatusAsync(Work)`, then `200` with the status object. Routes 5 and
+6, in the order of protocol 6.6: M-1 `Access.Accepting` is false: `503 RELAY_PAUSED`, before the body is
+read; M-2 `ReadJsonBodyAsync`, and on an error write it; M-3 `model` is not a string equal to one of C-04
+(ordinal): `400 INVALID_MODEL`; then `StartAsync` or `StopAsync` (M-4 to M-7). A `Refusal` is written as its
+error; otherwise the status object, with `202` when `Began` is true and `200` when it is false.
+
+The status object is written with `Utf8JsonWriter`, never by serialising the record: exactly the members
+`state`, `model`, `busy`, `elapsedSeconds`, `message`, in that order. `state` is the lower-case name
+(`stopped`, `starting`, `ready`, `stopping`, `error`). `model` is a string or JSON `null`, never omitted.
+`busy` is a JSON boolean. `elapsedSeconds` is a JSON integer with no fraction. `message` is the text of
+protocol 9.4. The phone decodes this object strictly (P2-219): a missing member or a number in quotes fails
+every status poll.
+
 Commands. Each row is evaluated under the semaphore, in order.
 
 | Command | Check or action | Result |
 |---|---|---|
+| Start, Stop | `IsConfigured` is false (M-4) | `503 LAB_NOT_CONFIGURED` |
 | Start, Stop | An operation is running (M-5) | `409 MODEL_OPERATION_IN_PROGRESS` |
 | Start, Stop | `leaseHeld` (M-6) | `409 MODEL_BUSY` |
 | Start, Stop | Probe; the lab reports busy (M-6) | `409 MODEL_BUSY` |
@@ -3295,7 +3313,8 @@ the arguments are separate list elements, environment `LabScriptAllowlist`, outp
 ### 4.11 Speech bridge (`Speech/`)
 
 **`SpeechRoute`** (before the upgrade): increments the open-socket count; above C-32 it decrements and
-answers `429 TOO_MANY_REQUESTS`. Otherwise it reads the two headers, accepts the upgrade, awaits
+answers `429 TOO_MANY_REQUESTS`. Otherwise it reads the two headers, accepts the upgrade (an offered
+`Sec-WebSocket-Extensions` or subprotocol is ignored and never a reason to refuse, protocol 10.1), awaits
 `ISpeechBridge.RunAsync`, and decrements in a `finally`. So a socket that is being refused counts until it
 is closed.
 
@@ -3325,7 +3344,7 @@ error posts `PhoneGone`.
 | `Connecting` | connected | Start the lab receive loop | `AwaitingLabReady` |
 | `Connecting` | connect failed | `Fail(LAB_CONNECTION_FAILED)` | `Closing` |
 | `AwaitingLabReady` | lab text that is an object with `type` `ready`, `model` equal to the requested model and `sampleRate` 16000 | Stop the loading and load-limit timers. Send `ready`. Record the ready timestamp. Start the idle timer (C-52) and the stream timer (C-54). Publish `SpeechStreamChanged(Ready)` | `Streaming` |
-| `AwaitingLabReady` | any other lab message | `Fail(MODEL_NOT_READY)` | `Closing` |
+| `AwaitingLabReady` | any other lab text message, or a message of kind `Invalid` | `Fail(MODEL_NOT_READY)` | `Closing` |
 | `Preparing`, `Connecting`, `AwaitingLabReady` | loading timer | Send `loading` with whole seconds since the upgrade | same |
 | `Preparing`, `Connecting`, `AwaitingLabReady` | load-limit timer | `Fail(MODEL_LOAD_TIMEOUT)` | `Closing` |
 | `Preparing`, `Connecting`, `AwaitingLabReady`, `Finalizing` | any phone message | `Fail(AUDIO_OUT_OF_SEQUENCE)` | `Closing` |
@@ -3368,12 +3387,17 @@ entering `Closed`, when both sockets are closed.
 
 **Frames the relay builds** (`SpeechFrames`), members in this order: `loading`: `type`, `provider`,
 `elapsedSeconds`, `message`; `ready`: `type`, `provider`, `sampleRate`, `handshakeMs` (milliseconds since the
-upgrade, one decimal); `error`: `type`, `code`, `message`.
+upgrade, one decimal); `error`: `type`, `code`, `message`. In both `loading` and `ready`, `provider` is the
+requested model id exactly as it arrived in `X-LiveCue-Speech-Model` (`nemotron` or `qwen3`), never a label
+of 4.12: the phone compares it with the id it sent. `elapsedSeconds` and `sampleRate` are written as JSON
+integers (`16000`, never `16000.0`).
 
 **`LabEventFilter`** rebuilds the four lab-derived types from the allowlist of protocol 10.3, members in the
 order `type`, `turnId`, `audioProcessedMs`, `finalizationMs`, `transcript`. A number is forwarded as its
 original token when it is a JSON number that parses to a finite `double`; `transcript` when it is a string,
 cut to C-22 code units, one fewer when the last kept unit is a high surrogate. Everything else is left out.
+If the encoded frame would still be longer than C-21 (possible only when the text is mostly characters that
+JSON escapes), `transcript` is cut further by the same rule until the frame fits.
 
 **`AudioLimiter`**: allowed bytes at a moment are the C-72 formula applied to the milliseconds since `ready`,
 from the clock. **`LabSocketConnector`**: a `ClientWebSocket` to `ws://127.0.0.1:<LabPort>/relay`, no proxy,

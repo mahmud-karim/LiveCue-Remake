@@ -474,7 +474,7 @@ public struct SessionMemory: Codable, Equatable, Sendable {
     public var summary: String
     public var facts: [String]
     public var openQuestions: [String]
-    public var throughSegmentId: UUID?   // a string that is not a UUID fails decoding of this value
+    public var throughSegmentId: UUID?   // a string that is not a UUID fails decoding of the whole value; a relay reply is therefore never decoded directly (3.1.5)
     public init(summary: String = "", facts: [String] = [], openQuestions: [String] = [], throughSegmentId: UUID? = nil)
 }
 
@@ -968,7 +968,9 @@ public struct RelayClient: Sendable {
     /// always nil: the reply's value is never read (protocol 13.5).
     public func assist(_ request: AssistRequest, pairing: PairingPayload) async throws -> AssistResponse
     public func summarize(_ request: SummaryRequest, pairing: PairingPayload) async throws -> SummaryResponse
-    /// Route 9, best effort. Never throws; both answers count as done.
+    /// Route 9, best effort. Never throws; both answers count as done. The id in the path is
+    /// `requestId.uuidString`, the same upper-case text the encoder wrote in the body: the relay compares
+    /// ids byte for byte.
     public func cancel(requestId: UUID, pairing: PairingPayload) async
 }
 ```
@@ -977,12 +979,21 @@ Rules inside `RelayClient` that callers rely on:
 
 - The route's phone timeout is a total time, raced against `timing.sleep`. When it wins, the outcome is
   `L-TIMEOUT` (row 3), also if the transport then reports cancellation.
+- Every relay request is built with `HTTPRequest.timeout` (the transport's idle timeout) equal to the
+  route's phone timeout plus 10 s, so the transport's own timer can never end a request before the total
+  timer does. A slow route always ends as `L-TIMEOUT`, never as a transport time-out (row 5).
 - For `assist` and `summarize`: when the phone timeout wins, or when the calling task is cancelled while the
   request is in flight, the client starts **one** unstructured task that sends `cancel(requestId:)` and does
   not wait for it. Nothing else in the app sends route 9. Deleting a session whose summary is in flight
   cancels the summary's task, which produces that one `DELETE` (P2-212).
 - `RelayOutcome.swift` (internal) implements protocol 13.6 as one function from
   `(route, Result<(HTTPResponseHead, Data), TransportFailure>)` to success bytes or a `RelayFailure`.
+- The assist reply is never decoded with the synthesised decoder of `AssistResponse` directly: its `memory`
+  is a `SessionMemory`, whose marker must be a UUID. The relay always sends `memory.throughSegmentId` as
+  `null` (protocol 8.3), but the phone does not rely on that: it tolerates and ignores any string there.
+  `RelayClient` parses the reply with `JSONValue.parse`, removes the member `memory.throughSegmentId` when
+  `memory` is an object, encodes that value again and decodes `AssistResponse` from the result. A reply
+  that fails this is `L-UNREADABLE` (row 8).
 
 #### 3.1.6 Relay speech frames and negotiation (protocol 10.3, 13.7)
 
@@ -997,7 +1008,8 @@ public enum RelaySpeechFrame: Equatable, Sendable {
     case error(code: String, message: String)
     case unknown                                         // a JSON object of another type: ignored
     /// nil when the text is not a JSON object with a string `type`. Members of the wrong JSON type are
-    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`.
+    /// read as absent. `ready` and `error` with a missing member parse as `.unknown`. `loading` with a
+    /// missing member is still `loading`, with 0 or "" in its place.
     public static func parse(_ text: String) -> RelaySpeechFrame?
 }
 
@@ -1018,8 +1030,9 @@ public struct RelaySpeechNegotiation: Sendable {
     public private(set) var isReady: Bool
     public private(set) var endStreamSent: Bool
     /// Throws `RelayFailure`: an `error` frame's code; L-SPEECH-NOT-CONFIRMED for a `ready` naming another
-    /// provider or sample rate; L-UNEXPECTED-FRAME for any other frame before `ready` or for text that is
-    /// not a frame.
+    /// provider or sample rate; L-UNEXPECTED-FRAME for `speechStart`, `transcript`, `speechComplete` or
+    /// `streamComplete` before `ready`, and for text that is not a frame. `.unknown` is `Step.ignore` in
+    /// every state.
     public mutating func receive(text: String) throws -> Step
     public mutating func markEndStreamSent()
     /// How the stream ended, given the close. `insideWindow` is false when C-60 passed first.
@@ -1179,7 +1192,8 @@ public actor SpeechStreamSession {
     public init(dialect: SpeechStreamDialect, transport: any WebSocketTransport, timing: CoreTiming = .system)
     /// Opens the socket and returns when the provider is ready for audio: the Meta acknowledgement
     /// (limit 30 s) or the relay's valid `ready` (limit C-59). Emits `.status` while waiting, then
-    /// `.status(.connected)` and `.usage(.begin)`. Throws `SpeechStreamFailure` or `CancellationError`;
+    /// `.status(.connected)` and `.usage(.begin)`. For the relay dialect, when C-59 passes first the socket
+    /// is closed and the failure is `.relay(.local(.timeout, origin: .stream))`. Throws `SpeechStreamFailure` or `CancellationError`;
     /// after a throw the socket is closed and `events` has finished.
     public func start() async throws
     /// PCM16 mono at the dialect's rate, any length. Frames it and sends it. Ignored before `start`
@@ -1359,7 +1373,8 @@ struct URLSessionHTTPTransport: HTTPTransport {
 }
 
 // Platform/URLSessionWebSocketTransport.swift
-// One ephemeral URLSession per connection, invalidated on close. `open` resumes the task and waits for
+// One ephemeral URLSession per connection, invalidated on close. The upgrade request keeps an idle timeout
+// of 60 s or more (protocol 13.1). `open` resumes the task and waits for
 // `urlSession(_:webSocketTask:didOpenWithProtocol:)`; if the task completes first, an HTTP response on
 // the task means `WebSocketUpgradeRejected(status:)`, anything else a `TransportFailure`.
 // `receive()` returns `.closed(code:reason:)` once when the task reports a close code; a failure without
@@ -2918,8 +2933,8 @@ Launch order: `LaunchConfiguration.current`; `AppEnvironment.make` (in fixture m
 | `FixtureTranscriber.finalize` | Stops the loop; streaming: `usage(.finish(completed: true))`; status "Paused". `transcribePending` returns 0. |
 | `FixtureAnswerService.answer` | `onProgress(partialAnswer)`; sleep 0.4 s; return the fixed answer with detected question = the fixture segment (Codex) or the sentinel (OpenRouter), the details, a memory, and `execution` echoing the request's selection with the fixture timings; OpenRouter adds the fixture usage. With `assistFailsOnce`, the first call for each session id throws `OpenRouterError.unavailable` after the progress call. |
 | `FixtureAnswerService.loadCatalogue` | The Codex or OpenRouter fixture catalogue; Codex waits 8 s first with `pcCatalogSlow`. `verify(key:)` returns at once. `summarize` returns a fixed summary. |
-| `FixtureRelayGateway.health` | Success; with `pcOffline`, a failure with an unknown code and the relay text "PC offline." |
-| `FixtureRelayGateway` PC model | Starts `stopped` (MSG-1). Start: `starting` (MSG-6) for 1 s, or 6 s with `pcModelSlowStart`, then `ready` (MSG-4); with `pcModelStartError`, `error` (MSG-8) instead. Stop: `stopping` (MSG-7) for 1 s, then `stopped` (MSG-3). `elapsedSeconds` counts whole seconds of the running operation. |
+| `FixtureRelayGateway.health` | Success; with `pcOffline`, `RelayFailure.local(.unreachable)`, which is what a PC that is switched off gives (protocol 13.6 row 5) |
+| `FixtureRelayGateway` PC model | Starts `stopped` (MSG-3; MSG-1 is never sent on the wire). Start: `starting` (MSG-6) for 1 s, or 6 s with `pcModelSlowStart`, then `ready` (MSG-4); with `pcModelStartError`, `error` (MSG-8) instead. Stop: `stopping` (MSG-7) for 1 s, then `stopped` (MSG-3). `elapsedSeconds` counts whole seconds of the running operation. |
 | `FixtureEngineLoader` | Reports fraction 0.5, sleeps 2 s, returns a fixture engine. |
 
 ### 4.10 Timers, timeouts and limits
@@ -3460,7 +3475,7 @@ decisions 5.2; "P2" ids are protocol 15.9.
 | `LiveCueJSONTests` (WP-02) | CORE-A12, IOS-B18: exactly three fractional digits written; zero to nine accepted; a non-UTC or malformed date fails; UUIDs written upper case and read in either case; absent optionals omitted; a stored `isFinal` key is ignored (CORE-C2) | literals |
 | `SessionLifecycleTests` (WP-02) | AC-IOS-076 title rule (48 characters, "Conversation"); IOS-B2 recovery: end time, title and interrupted streams after `closedAfterInterruption(at:)`; a closed session is unchanged | `CoreFixtures.session` |
 | `ContextBuilderTests` (WP-02) | AC-009, 010, S01, S02, S04, S05; P2-208 (request id present, `transcriptTruncated` exactly when cut, nil without segments); retry keeps the text and changes only id and assistant | `CoreFixtures.session` |
-| `WireBudgetTests` (WP-02) | AC-011; P2-207 for the four inputs, assist and summary: encoded size at most C-11, cuts on character boundaries, the end kept; shrink order of step 3; `head` and `tail` on multi-byte text | generated strings |
+| `WireBudgetTests` (WP-02) | AC-011; P2-207 for the four inputs, assist and summary: encoded size at most C-11, cuts on character boundaries, the end kept; shrink order of step 3, including a plain ASCII request whose members are all at their step 1 budgets (136,192 bytes of text before fitting); `head` and `tail` on multi-byte text | generated strings |
 | `WordErrorRateTests` (WP-02) | AC-012, 013, S20 | literals |
 | `TranscriptionUsageTests` (WP-02) | AC-033 to 035, 082, 090 to 103, 107, S17; `apply(_:)` equals the direct calls; `firstText` applied once; `interruptOpenStreams` | none |
 | `PCModelStatusTests` (WP-02) | AC-070 to 080, S18; P2-219 | literals |
@@ -3468,7 +3483,7 @@ decisions 5.2; "P2" ids are protocol 15.9.
 | `PairingPayloadTests` (WP-01) | AC-004 to 008 with a 43-character token; P2-202; P2-203 manual entry; `storedText` member order and round trip through `parse` | `CoreFixtures.token` |
 | `RelayEndpointTests` (WP-01) | P2-200 for both endpoints and all ten routes; P2-203 canonical forms; every rejection of the grammar in protocol 4.3 | literals |
 | `JSONValueTests` (WP-01) | A boolean is never a number and a number never a boolean; non-finite and fractional numbers have no `intValue`; text that is not JSON parses to nil | literals |
-| `RelayClientRoutesTests` (WP-03) | P2-201 (headers on every route, none named `Origin` or `Cookie`); P2-204; P2-211 (one request per failing call); P2-221; verify sends `{}`; start and stop send the model and accept 200 and 202 | `FakeHTTPTransport`, `CoreFixtures` |
+| `RelayClientRoutesTests` (WP-03) | P2-201 (headers on every route, none named `Origin` or `Cookie`); P2-204; P2-211 (one request per failing call); P2-221; verify sends `{}`; start and stop send the model and accept 200 and 202; a health 200 with `protocol` 2 and `ok` false is `L-UNREADABLE`; every request's `timeout` is its route's phone timeout plus 10 s; the cancel path ends in `requestId.uuidString` | `FakeHTTPTransport`, `CoreFixtures` |
 | `RelayClientClassificationTests` (WP-03) | P2-205, one test per row of protocol 13.6, including row 3 with `ManualTime` | `FakeHTTPTransport`, `ManualTime` |
 | `RelayClientAssistTests` (WP-03) | P2-210; the reply decodes for `throughSegmentId` null, a UUID and "not-a-uuid", and the returned marker is nil (core half of P2-209); P2-212 (one `DELETE` on timeout, one on task cancellation, a 404 answer is not an error); the body sent is the fitted body | `FakeHTTPTransport`, `ManualTime`, `CoreFixtures.assistReplyJSON` |
 | `RelayMessagesTests` (WP-03) | P2-206 for every case of `RelayWireCode` and `RelayLocalCondition`; unknown code with and without usable relay text, for both origins; no text contains the token; the four compositions of protocol 14.3 and the prefix rule (IOS-B10) | none |
@@ -3480,9 +3495,9 @@ decisions 5.2; "P2" ids are protocol 15.9.
 | `MetaConnectionTestTests` (WP-04) | The test sends the handshake, requires the acknowledgement, sends `endStream`, closes, and sends no binary frame (AC-IOS-110); a rejected acknowledgement is `authentication`; expiry of 15 s is `connection` | `FakeWebSocketTransport`, `ManualTime` |
 | `PCMFramerTests` (WP-04) | Full frames of the given size; one final shorter, non-empty, even frame (P2-216 framing) | none |
 | `PendingAudioBufferTests` (WP-04) | 30-minute cap refuses the chunk; only words ending after the cursor are kept; the buffer is trimmed to 2 s and keeps audio appended during transcription | none |
-| `RelaySpeechFrameTests` (WP-04) | Each frame type of protocol 10.3; wrong member types read as absent; unknown types (P2-218) | literals |
-| `RelaySpeechNegotiationTests` (WP-04) | P2-213 (mismatched `ready`), P2-214, P2-215, P2-217, step 7 of protocol 13.7 (close reason is a known code) | none |
-| `SpeechStreamSessionRelayTests` (WP-04) | The speech URL and headers (P2-200, P2-201); no audio before `ready` and `loading` keeps waiting up to C-59 (P2-213, AC-IOS-020); P2-214 end to end; P2-215 (1000 inside C-60 is completed; 1011, a drop and no close are interrupted; AC-IOS-047); P2-216 (2,560-byte frames, remainder, exactly one `endStream`); P2-218; usage events in order (AC-IOS-041) | `FakeWebSocketTransport`, `ManualTime`, `CoreFixtures.pairing` |
+| `RelaySpeechFrameTests` (WP-04) | Each frame type of protocol 10.3; wrong member types read as absent; a `loading` frame with a missing member is still `loading`; unknown types (P2-218) | literals |
+| `RelaySpeechNegotiationTests` (WP-04) | P2-213 (mismatched `ready`), P2-214, P2-215, P2-217, step 7 of protocol 13.7 (close reason is a known code); before `ready` an unknown type is ignored and each of the four lab types is `L-UNEXPECTED-FRAME` | none |
+| `SpeechStreamSessionRelayTests` (WP-04) | The speech URL and headers (P2-200, P2-201); no audio before `ready` and `loading` keeps waiting up to C-59, after which the socket is closed and the start fails with `L-TIMEOUT` (P2-213, AC-IOS-020); P2-214 end to end; P2-215 (1000 inside C-60 is completed; 1011, a drop and no close are interrupted, the last with `L-STREAM-DROPPED`; AC-IOS-047); P2-216 (2,560-byte frames, remainder, exactly one `endStream`); P2-218; usage events in order (AC-IOS-041) | `FakeWebSocketTransport`, `ManualTime`, `CoreFixtures.pairing` |
 | `SpeechStreamSessionMetaTests` (WP-04) | The fixed endpoint; handshake first; acknowledgement required; 3,840-byte frames; an `error` event ends the stream with the provider text; completed only after `endStream` and close 1000 (IOS-A11); 30 s connect limit | `FakeWebSocketTransport`, `ManualTime` |
 | `ContractSmokeTests` (WP-01) | The constants of 3.1.5 have the values of protocol section 2 | none |
 
@@ -3570,7 +3585,9 @@ session notice, an unpaired first run, the QR camera. They are covered in 6.2.
 8. Model folders are excluded from backup after preparation.
 9. Keychain inside LiveContainer: keys save and survive a relaunch; with a failing Keychain the pairing is
    still restored from the file.
-10. A PC speech stream of several minutes through Private mode and through Public mode on a mobile network.
+10. A PC speech stream of several minutes through Private mode and through Public mode on a mobile network,
+    including at least one full minute of silence: the relay's keep-alive is an unsolicited Pong every 15 s,
+    and the stream must stay up through it.
 11. One real pairing in each mode, one real Codex answer and one summary; "Reset pairing" on the PC shows
     "Pairing needs attention" on the phone.
 12. Haptics are felt during a session and are not audible in the transcript.

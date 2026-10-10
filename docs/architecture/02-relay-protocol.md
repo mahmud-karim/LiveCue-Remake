@@ -124,7 +124,7 @@ Each number is defined once, here. Other sections refer to it by id. "Side" says
 | C-54 | Stream length, counted from `ready` | 30 min | relay |
 | C-55 | Speech socket lifetime, counted from the upgrade | 35 min | relay |
 | C-56 | Pause or pairing change takes effect on an open stream within | 2 s | relay |
-| C-57 | WebSocket ping interval (relay to phone) | 15 s | relay |
+| C-57 | WebSocket keep-alive frame interval (relay to phone) | 15 s | relay |
 | C-58 | Close handshake wait before the socket is aborted | 2 s | relay |
 | C-59 | Phone: connect plus model loading | 180 s | phone |
 | C-60 | Phone: finalization wait after it sends `endStream` | 15 s | phone |
@@ -213,7 +213,7 @@ one trailing `/` (an absent path becomes `/`). The relay only ever advertises a 
 stores and displays the canonical form.
 
 The phone accepts a payload text only when all of these hold. Any failure gives the one fixed message
-`PAIRING_PAYLOAD_INVALID` (14.3).
+`PAIRING_PAYLOAD_INVALID` (14.2).
 
 | # | Rule |
 |---|---|
@@ -302,7 +302,8 @@ Every request, including every Upgrade request, passes these steps in order. The
 
 Consequences that are part of the contract:
 
-- The three 401 answers of E-1 to E-3 are byte-identical. A caller without the token cannot tell which step
+- The three 401 answers of E-1 to E-3 are byte-identical apart from the `Date` header, which follows the
+  clock and never the failing step. A caller without the token cannot tell which step
   refused it and learns nothing about routes.
 - No work happens before E-3 passes: no body is read, no file is touched, no process is started, no event
   reaches the desktop.
@@ -310,7 +311,7 @@ Consequences that are part of the contract:
 
 ### 5.3 Responses
 
-Every response written by relay code has exactly these headers besides `Content-Length` and the connection
+Every response written by relay code has exactly these headers besides `Content-Length`, `Date` and the connection
 headers: `Content-Type: application/json; charset=utf-8`, `Cache-Control: no-store`,
 `X-Content-Type-Options: nosniff`. No CORS header, no `Set-Cookie`, never a 3xx status.
 
@@ -332,7 +333,7 @@ For routes that read a body (6.1):
 |---|---|---|
 | 1 | A declared `Content-Length` above C-10 is refused without reading. | `413 PAYLOAD_TOO_LARGE` |
 | 2 | Bytes are counted while streaming; the read stops when the count passes C-10. | `413 PAYLOAD_TOO_LARGE` |
-| 3 | The whole body arrives within C-41. | `408 REQUEST_TIMEOUT` |
+| 3 | The whole body arrives within C-41. On a route whose deadline (6.1) is shorter than C-41 the deadline passes first and 5.5 answers. | `408 REQUEST_TIMEOUT` |
 | 4 | The body is valid UTF-8 JSON, nesting depth at most 32, and its top level is an object (not an array, `null` or a scalar). An empty body is not valid. | `400 INVALID_JSON` |
 
 The request `Content-Type` header is not checked.
@@ -614,14 +615,16 @@ of the schemas in 12.5. Nothing else Codex wrote is forwarded. `execution` is ad
 
 | Member | Definition |
 |---|---|
-| `model`, `reasoningEffort` | The validated selection that was actually used. They MUST echo the request's selection; the phone rejects a reply that does not. |
+| `model`, `reasoningEffort` | The validated selection that was actually used. They MUST echo the request's selection on both routes. The phone checks the echo on assist replies (13.5) and does not read `execution` on summary replies. |
 | `codexMs` | Milliseconds (fractional) spent in the Codex run. |
 | `relayTotalMs` | Milliseconds from receiving the request headers to the run returning. Always ≥ `codexMs`. |
 | `requestReadMs` | Milliseconds from receiving the request headers to having the body read and parsed. |
 | `relayOverheadMs` | `max(0, relayTotalMs − codexMs)`. |
 
-`memory.throughSegmentId` in an assist response is whatever the model wrote and has no meaning. **The phone
-ignores it** and keeps its own marker (13.5).
+`memory.throughSegmentId` in an assist response is **always JSON `null`**. The relay never forwards the
+marker the model wrote: whatever the validated Codex output holds in that member (a UUID, any other string or
+`null`), the reply carries `null`. The phone owns the marker (decision D-11): it **ignores the member** and
+keeps its own marker (13.5), and it must also accept, and ignore, any string there.
 
 ### 8.4 Limits
 
@@ -633,7 +636,7 @@ no retry inside the relay.
 | Outcome | Response | Meaning for the phone |
 |---|---|---|
 | Deadline C-43 passed | `504 ASSISTANT_TIMEOUT` | Took too long. |
-| Cancelled through route 9 | `409 REQUEST_CANCELLED` | The phone itself cancelled; not a failure. |
+| Cancelled through route 9 | `409 REQUEST_CANCELLED` | The phone itself cancelled and has normally stopped waiting. If the reply is read anyway it is handled like any other code (14.1). |
 | Pairing reset while in flight | `401 UNAUTHORIZED` | Pairing revoked. |
 | Codex could not be started, exited non-zero, wrote no output, wrote output that is not valid JSON, larger than C-24, or not matching the schema | `500 ASSISTANT_FAILED` | The PC's assistant failed. |
 | Any other relay fault | `500 INTERNAL_ERROR` | |
@@ -655,7 +658,7 @@ Returned by routes 4, 5 and 6:
 |---|---|---|---|
 | `state` | string | yes | `stopped`, `starting`, `ready`, `stopping` or `error` |
 | `model` | string or `null` | yes | `nemotron` or `qwen3`: the loaded model, or the model an operation or error concerns. `null` exactly when `state` is `stopped`. |
-| `busy` | boolean | yes | The lab reports a running session, **or** a phone speech stream holds the lease. |
+| `busy` | boolean | yes | The lab reports a running session, **or** a phone speech stream holds the lease. Always `false` while `state` is `starting` or `stopping`: the stored status of 9.3 rule 1 is returned without a probe. |
 | `elapsedSeconds` | integer | yes | Whole seconds since the running operation began; `0` when none is running. |
 | `message` | string | yes | Fixed English status text from 9.4. The phone shows it as is. |
 
@@ -700,7 +703,8 @@ Rules:
    one is loaded is how switching works; the start script replaces the container.
 6. **Stop**: probe first. Lab busy: refuse (`MODEL_BUSY`). A different model loaded: refuse
    (`MODEL_MISMATCH`). Otherwise begin the operation (`202`) and run the stop script; failure latches `error`.
-7. **Prepare** (used only by the speech stream, 10.4): probe. Lab busy: fail (`MODEL_BUSY`). Requested model
+7. **Prepare** (used only by the speech stream, 10.4): an operation is already running (it began after step
+   S-5): fail (`MODEL_OPERATION_IN_PROGRESS`). Otherwise probe. Lab busy: fail (`MODEL_BUSY`). Requested model
    usable: return at once. Otherwise begin a start operation exactly as in rule 5 and wait for it.
 8. An operation never depends on a phone staying connected.
 
@@ -735,8 +739,10 @@ The phone opens `wss://…/v1/speech` (section 3) with these headers:
 | `X-LiveCue-Protocol` | `2` |
 | `X-LiveCue-Speech-Model` | `nemotron` or `qwen3` |
 
-No `Origin` header, no subprotocol, no compression extension. The relay never negotiates per-message
-compression and never selects a subprotocol.
+No `Origin` header and no subprotocol. The phone does not ask for compression, but its system WebSocket
+client may still offer `permessage-deflate` in `Sec-WebSocket-Extensions`. The relay ignores every offered
+extension and subprotocol: it never negotiates per-message compression, never selects a subprotocol, and an
+offer is never a reason to refuse the upgrade.
 
 Before the upgrade the relay applies E-1, E-2, E-3, E-4 and E-7 of 5.2. A failure there is a plain HTTP
 response (`401`, `404`, `429`) with the usual JSON error body, and no upgrade. E-4 needs a well-formed
@@ -773,7 +779,7 @@ closes with code 1008.
 
 | `type` | Other members | Meaning |
 |---|---|---|
-| `loading` | `provider` (string), `elapsedSeconds` (integer), `message` (string) | The model is being prepared. Sent right after admission and then every C-50 until `ready`. `elapsedSeconds` counts from the upgrade. `message` is `Loading <model> on PC · <N> s. Microphone starts when ready.` |
+| `loading` | `provider` (string), `elapsedSeconds` (integer), `message` (string) | The model is being prepared. Sent right after admission and then every C-50 until `ready`. `elapsedSeconds` counts from the upgrade. `provider` is the requested model id (C-04). `message` is `Loading <label> on PC · <N> s. Microphone starts when ready.`, where `<label>` is `Nemotron` or `Qwen3`. It is a fallback text: the phone composes its own status line from its provider name and `elapsedSeconds`. |
 | `ready` | `provider` (string), `sampleRate` (integer, always `16000`), `handshakeMs` (number, milliseconds since the upgrade) | The lab is connected. The phone MUST wait for this frame and MUST check that `provider` equals the model it asked for and `sampleRate` equals 16000 before it opens the microphone. |
 | `speechStart` | `turnId`, `audioProcessedMs` | A turn began. |
 | `transcript` | `turnId`, `audioProcessedMs`, `transcript` | Cumulative partial text of a turn. |
@@ -829,13 +835,15 @@ There is never a fallback from one speech model to another, or to any cloud serv
 | The stream's token stops being accepted | within C-56 | `PAIRING_CHANGED` |
 | The relay is stopping | at once | `RELAY_STOPPING` |
 
-The relay sends a WebSocket ping every C-57. It does not require pongs.
+The relay sends a WebSocket keep-alive frame every C-57: a Ping, or an unsolicited Pong (RFC 6455 section
+5.5.3). Neither needs an answer. The phone writes no code for it and must not treat an unsolicited Pong as
+an error.
 
 ### 10.6 Errors and close codes
 
 | Code | Cause |
 |---|---|
-| `PROTOCOL_MISMATCH`, `INVALID_SPEECH_MODEL`, `RELAY_PAUSED`, `LAB_NOT_CONFIGURED`, `MODEL_OPERATION_IN_PROGRESS`, `SPEECH_BUSY` | Admission (10.2). `RELAY_PAUSED` also mid-stream. |
+| `PROTOCOL_MISMATCH`, `INVALID_SPEECH_MODEL`, `RELAY_PAUSED`, `LAB_NOT_CONFIGURED`, `MODEL_OPERATION_IN_PROGRESS`, `SPEECH_BUSY` | Admission (10.2). `RELAY_PAUSED` also mid-stream. `MODEL_OPERATION_IN_PROGRESS` also from prepare (9.3 rule 7), then with close code 1011. |
 | `MODEL_BUSY` | Prepare found the lab in use by another session (a lab page test). |
 | `MODEL_LOAD_FAILED` | Prepare had to load the model and the load failed. |
 | `MODEL_LOAD_TIMEOUT` | C-51. |
@@ -1016,7 +1024,7 @@ One process per assist or summary request. Arguments, in this order:
 | Prompt | Written to standard input as UTF-8, then standard input is closed. The final `-` argument makes Codex read it. |
 | Working directory | A fresh directory `livecue-remake-XXXXXX` under the OS temp folder, also passed with `-C`. Removed (recursively) when the request ends, on success or failure. |
 | Schema file | `assist.schema.json` or `summary.schema.json` (12.5), written by the relay into its data folder at start. |
-| Output | After exit code 0 the relay reads `output.json` (at most C-24), parses it and validates it against the schema itself: every required member present with the right type. Unknown members are dropped. Any failure is `ASSISTANT_FAILED`. |
+| Output | After exit code 0 the relay reads `output.json` (at most C-24), parses it and validates it against the schema itself: every required member present with the right type. Unknown members are dropped. In an assist reply `memory.throughSegmentId` is then written as `null`, whatever the output held (8.3). Any failure is `ASSISTANT_FAILED`. |
 | Limit | C-43 for the whole request. On expiry the process tree is killed. |
 | Cancellation | Runs are tracked by `requestId`. Route 9, a client abort, a pairing reset and relay shutdown kill the run. |
 | Standard output | Discarded. |
@@ -1113,6 +1121,7 @@ The relay client lives in the platform-independent core package and is tested on
 | Redirects | Never followed, on HTTP and on the speech socket. A 3xx is handled as its status code (13.6). |
 | Retries | **None.** One request per user action or per poll tick. Polling is the only repetition. |
 | Largest inbound speech message | C-21. |
+| Transport idle timeout | Longer than the route's phone timeout (6.1), so a slow answer ends by 13.6 row 3 and never by a transport time-out. For the speech socket: 60 s or more. The relay never leaves a stream without a data frame for longer than C-50 while loading or one lab window (30 s, 11.3) while streaming, and sends a keep-alive frame every C-57. |
 | When the PC is not needed | No request of any kind is sent to the relay: no health poll, no status poll, no summary. |
 
 ### 13.2 Headers
@@ -1130,7 +1139,8 @@ The phone never sends `Origin`, `Cookie` or `Sec-Fetch-*` headers.
 ### 13.3 Online state and polling
 
 - The relay is **online** when `GET /v1/health` answers 200 with `ok` true and `protocol` equal to C-01. A 200
-  with any other `protocol`, or without one, is "not online" with the `PROTOCOL_MISMATCH` text.
+  with any other `protocol`, or without one, is "not online" with the `PROTOCOL_MISMATCH` text. A 200 whose
+  `protocol` is C-01 but whose `ok` is not `true` is "not online" with the `L-UNREADABLE` text.
 - Health is checked at launch, on every return to the foreground, on "Reconnect", once inside Start when a
   PC speech provider finds the relay offline, and then every C-61 after the previous check completed, for as
   long as the PC is needed and a pairing exists. Checks never overlap.
@@ -1158,7 +1168,8 @@ Step 1, fixed budgets (sizes are UTF-8 bytes of the raw string):
 
 Step 2: encode the body. If it is at most C-11 bytes, it is done.
 
-Step 3, only when step 2 does not fit (possible only with text that JSON must escape heavily): shrink one
+Step 3, only when step 2 does not fit (when several members are near their budgets at once, or with text
+that JSON must escape heavily): shrink one
 member at a time, in this order, each to the longest tail (head for `instruction`; dropping oldest items for
 the lists) that makes the encoded body fit, moving to the next member only when the current one is empty and
 the body still does not fit: `transcript`, `memory.summary`, `partialTranscript`, `memory.facts` and
@@ -1173,7 +1184,7 @@ steps 2 and 3.
 |---|---|
 | Catalogue before assist | Before every Codex assist the phone fetches route 3. The selected model and effort must be in it; if not, the assist fails locally and the selection is left unchanged. |
 | Echo | The reply's `execution.model` and `execution.reasoningEffort` must equal the selection that was sent. Otherwise the assist fails (`L-NOT-CONFIRMED`) and nothing is saved. |
-| Memory marker | **The phone owns it.** When a fresh request is built, the phone records the id of the session's last segment. After a successful assist it stores the reply's `memory` with `throughSegmentId` replaced by that recorded id. The value in the reply is ignored and need not be a UUID. A same-text retry does not move the marker. |
+| Memory marker | **The phone owns it.** When a fresh request is built, the phone records the id of the session's last segment. After a successful assist it stores the reply's `memory` with `throughSegmentId` replaced by that recorded id. The value in the reply is ignored: the relay sends `null` (8.3), and the phone also accepts any string there, UUID or not, without failing the reply. A same-text retry does not move the marker. |
 | Summary | Sent after Stop when the answer service is Codex, a pairing exists **and the session has at least one segment**. Any failure is silent; there is no retry. |
 | Cancel (route 9) | Sent once, best effort, when the phone's own timeout for route 7 or 8 expires or the request's task is cancelled, and when a session is deleted while its summary is in flight. There is no user-facing cancel. Both answers of route 9 count as done. |
 
@@ -1205,8 +1216,11 @@ route timeout stops the request, the outcome is row 3, not row 1.
    rows 10 to 12, with `404` as `NOT_FOUND` and `429` as `TOO_MANY_REQUESTS`. A transport failure is
    classified as in rows 4 to 6.
 2. Wait for frames. `loading` keeps waiting and updates the status line. `error` fails the start with that
-   code. `ready` must match the selection (10.3); a mismatch is `L-SPEECH-NOT-CONFIRMED`. Any other frame
-   before `ready` is `L-UNEXPECTED-FRAME`. The whole wait is bounded by C-59.
+   code. `ready` must match the selection (10.3); a mismatch is `L-SPEECH-NOT-CONFIRMED`. A frame whose
+   `type` the phone does not know is ignored (section 1). Any other frame before `ready` (`speechStart`,
+   `transcript`, `speechComplete`, `streamComplete`), and text that is not a JSON object with a string
+   `type`, is `L-UNEXPECTED-FRAME`. The whole wait is bounded by C-59, counted from the start of the
+   connection attempt; when it passes, the phone closes the socket and the start fails with `L-TIMEOUT`.
 3. Only after a valid `ready`: open the microphone and send audio (C-70, C-71).
 4. While streaming: `speechStart`, `transcript`, `speechComplete` feed the transcript state machine;
    `streamComplete` records the finalization time; `error` ends the stream with that code; unknown types are
@@ -1214,7 +1228,8 @@ route timeout stops the request, the outcome is row 3, not row 1.
 5. To finish (Pause or Stop): stop capture, flush queued audio including one final short frame if any
    remains, send `{"type":"endStream"}` once, then wait up to C-60 for the close.
 6. The stream is **completed** when the phone sent `endStream` and the socket closed with code 1000 inside
-   C-60. Every other ending is **interrupted**.
+   C-60. Every other ending is **interrupted**; when C-60 passes with no close, the condition is
+   `L-STREAM-DROPPED`.
 7. A close without an `error` frame: if the close reason text is a known code, use it; otherwise the ending
    is `L-STREAM-DROPPED`.
 8. No reconnection, ever. A failed stream pauses the session; the user resumes, which opens a new stream.
@@ -1284,7 +1299,7 @@ otherwise `L-HTTP` (for HTTP) or `L-STREAM-DROPPED` (for a stream).
 | `L-TLS` | 13.6 row 4 | The secure connection to your PC failed. Check the PC tunnel and retry. Scanning the QR again will not repair this connection. |
 | `L-UNREACHABLE` | 13.6 row 5 | Your PC is currently unreachable. Keep LiveCue Desktop running and check your internet connection. The app will reconnect automatically. |
 | `L-NETWORK` | 13.6 row 6 | Could not reach your PC because of a network error. Check the connection and retry. |
-| `L-TIMEOUT` | 13.6 row 3 | Your PC did not answer in time. Check that LiveCue Desktop is running, then retry. |
+| `L-TIMEOUT` | 13.6 row 3; 13.7 step 2 when C-59 passes | Your PC did not answer in time. Check that LiveCue Desktop is running, then retry. |
 | `L-NO-RELAY` | 13.6 row 11 | Your PC answered, but the LiveCue relay is not running. Open LiveCue Desktop and start the relay. |
 | `L-HTTP` | 13.6 row 12 | Relay error (`<status>`). |
 | `L-UNREADABLE` | 13.6 row 8 | The relay returned an unreadable response. |
@@ -1308,7 +1323,7 @@ relay text under the unknown-code rule.
 | Catalogue load fails | `Could not load models. Restart the updated PC app and check the connection. ` + the message |
 | PC model status check fails | `Could not check the PC model. Keep the updated LiveCue Desktop running. ` + the message |
 | Assist fails | The message alone, inline. |
-| A stream fails after it started | The message alone, in the alert; the session pauses. |
+| A stream fails after it started | The message alone, in the session notice titled "Recording paused"; the session pauses. |
 
 ---
 
@@ -1396,6 +1411,7 @@ Fixture `L`: a catalogue source result with one entry: id `gpt-6-luna`, not hidd
 | P2-062 | Closing the client connection during a run kills the run and frees the slot within 1 s. | R | new |
 | P2-063 | Check order: paused and slot busy gives `RELAY_PAUSED`; slot busy and invalid JSON gives `ASSISTANT_BUSY`; invalid `requestId` and invalid `assistant` gives `INVALID_REQUEST_ID`; malformed `assistant` and failing catalogue gives `INVALID_ASSISTANT`. | R | new |
 | P2-064 | The Codex argument list for a run equals 12.2 item by item; the child environment has no variable starting with `LIVECUE_`; the prompt equals 12.3 around the compact body; the temp directory is gone after success and after failure. | R | UT-10 |
+| P2-065 | For backend output whose `memory.throughSegmentId` is a UUID string, the text `not-a-uuid`, or `null`, the assist reply's `memory.throughSegmentId` is JSON `null`. | R | new |
 
 ### 15.5 PC speech model control
 
