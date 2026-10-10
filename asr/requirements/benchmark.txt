@@ -1,0 +1,5 @@
+# Only benchmark.py uses these. They are installed in both images so the tool
+# can run inside the container. The service never imports them.
+soundfile==0.13.1
+scipy==1.17.1
+jiwer==4.0.0
