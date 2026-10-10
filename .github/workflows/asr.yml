@@ -1,0 +1,65 @@
+name: ASR lab
+
+# Tests the PC speech-recognition service and its launcher scripts on free GitHub-hosted runners.
+# No secrets are used. No GPU, no Docker, no torch and no model: the service runs its fake engine,
+# and Docker is replaced by stand-ins. Nothing is downloaded except the pinned test requirements.
+
+on:
+  push:
+    paths:
+      - "asr/**"
+      - ".github/workflows/asr.yml"
+  pull_request:
+    paths:
+      - "asr/**"
+      - ".github/workflows/asr.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer run for the same branch and trigger replaces the one in progress.
+concurrency:
+  group: asr-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol:
+    # 3.12 is the Python of the container. 3.10 is kept working for development on the PC.
+    name: Protocol tests, Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.10"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the test requirements
+        run: |
+          python --version
+          python -m pip install --disable-pip-version-check -r asr/requirements/test.txt
+          python -m pip list
+
+      - name: Run the tests
+        run: python -m pytest asr/tests
+
+  scripts:
+    # The relay starts these scripts with Windows PowerShell 5.1, so they are tested with it.
+    name: Launcher scripts, Windows PowerShell 5.1
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run the script tests
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          & .\asr\tests\Test-LabScripts.ps1
+          exit $LASTEXITCODE
