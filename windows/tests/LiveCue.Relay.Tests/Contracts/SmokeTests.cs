@@ -46,9 +46,9 @@ public sealed class SmokeTests
             await status.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.ServiceUnavailable, start.StatusCode);
         Assert.Contains("LAB_NOT_CONFIGURED", await start.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-        Assert.Equal(HttpStatusCode.InternalServerError, assist.StatusCode);
-        Assert.Contains("ASSISTANT_FAILED", await assist.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-        Assert.Equal(HttpStatusCode.InternalServerError, summary.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, assist.StatusCode);
+        Assert.Contains("\"answer\":\"Answer.\"", await assist.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, summary.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, cancel.StatusCode);
         Assert.Contains("REQUEST_NOT_FOUND", await cancel.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
