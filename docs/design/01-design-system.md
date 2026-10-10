@@ -459,6 +459,19 @@ A control's visible shape may be smaller than its target; the target is extended
 | Warning / error | `exclamationmark.triangle.fill` | `Alert` (filled) |
 | Offline | `wifi.slash` | `Offline` |
 | Secret | `key.fill` | `Key` |
+| Live tab, voice | `waveform` | `Waveform` |
+| Assistant settings | `slider.horizontal.3` | `Sliders` |
+| Download | `arrow.down.circle` | `Download` |
+| Search | `magnifyingglass` | `Search` |
+| PC speech model | `cpu` | `Chip` |
+| Opens outside the app | `arrow.up.right.square` | `External` |
+| Information | `info.circle` | `Info` |
+| Activity log | n/a | `Activity` |
+| Folder | n/a | `Folder` |
+| Container runtime | n/a | `Box` |
+| Command-line tool | n/a | `Terminal` |
+| Internet-reachable | `globe` | `Globe` |
+| Window buttons | n/a | `Minimize`, `Maximize`, `Restore` |
 
 ### 2.19 Departures from the reference tokens
 
@@ -823,6 +836,8 @@ Anatomy: label above (`type.caption` semibold, `ink.secondary`, 6 gap), field (r
 
 Rules: the label is always visible; a placeholder is an example, never the label. Fields sit in a panel, card, sheet or dialog (rule C-2).
 
+Search is the one field that may sit on the ground: on iPhone it is the system `.searchable` field in the navigation bar, which is system chrome; Windows has no search in this app.
+
 | Platform | Mapping |
 |---|---|
 | iPhone | `TextField` with `.textFieldStyle(.plain)` inside the drawn container; `axis: .vertical` for multi-line |
@@ -870,6 +885,15 @@ Text: title `type.body` in `ink.primary`; subtitle `type.caption` in `ink.second
 
 Only rows that do something get hover and pressed states. A row that navigates shows a trailing chevron.
 
+Row variants used by the screen designs:
+
+| Variant | What changes |
+|---|---|
+| Choice row | One of a set of options. The selected row shows a trailing check glyph in `accent.fill` and its title at semibold; the others show nothing. The title keeps its size, so nothing shifts. Screen readers get the selected trait |
+| Value row | Title and a short value share the first line (value right-aligned in `type.caption`, `ink.secondary`, truncating before the title does); the subtitle takes the full width below |
+| Detail row | A key and a value, for read-only facts and timings. Minimum height 26, no icon, no separator; key in `type.caption` `ink.secondary` on the left, value in `type.caption` `ink.primary` with tabular figures on the right. Read as "key, value" |
+| Check row | The result of one check. Leading 20 glyph instead of a tile: check in `status.success` for a pass, alert in `status.danger` for a failure. A pass has a `type.body` title; a failure has a `type.label` title and a subtitle saying how to fix it |
+
 | Platform | Mapping |
 |---|---|
 | iPhone | A `Button` or `NavigationLink` with the row as its label, inside a panel in a `ScrollView`. Use `List` only where swipe actions are needed, with `.listRowBackground(Color.clear)` and the same row drawing |
@@ -884,6 +908,8 @@ Only rows that do something get hover and pressed states. A row that navigates s
 | Prominent card | `surface.raised` | `stroke.raised` | `shadow.raised` | 22 | 16 / 16 | On the ground or inside a panel. At most one per screen |
 
 Optional header: title in `type.headline`, optional subtitle in `type.caption` `ink.secondary`, optional trailing quiet button or icon button; 12 below the header.
+
+A panel that holds only a one- or two-line strip (a status strip, a single action with its explanation) uses the compact form: radius 26, padding 14 vertical and 14 to 20 horizontal, no header.
 
 Panels and cards are not interactive by themselves. A card that acts as one button takes the row states from 4.8. Section titles that sit on the ground between panels use `type.label` in `ink.primary`, 8 above the panel.
 
@@ -1045,6 +1071,18 @@ Anatomy: capsule, leading 24 glyph, label in `type.headline`, optional trailing 
 | iPhone, iOS 18 to 25 | Solid accent capsule (idle) and `daylightChrome` capsule (listening), matched with `matchedGeometryEffect` |
 | Windows | Content placement, 4.1 and 4.2 recipes at 48 high. Used for the relay's start and stop if the functional spec keeps a manual control |
 
+Labels come from the screen, not from the component: "Start conversation" on the iPhone Home screen, "Start relay" on Windows. "Start listening" above stands for either.
+
+**Live control cluster (iPhone).** During a session the bottom cluster holds three controls in one `GlassEffectContainer`, 12 apart, vertically centred on each other:
+
+| Position | Control | Size | Face |
+|---|---|---|---|
+| Leading | Pause or Resume | 52 circle, glyph 22 | Neutral glass icon button; `pause.fill` or `play.fill` in `ink.primary` |
+| Centre | Assist | 64 high, fills the remaining width | The accent face of this component: `sparkles` 24 and "Assist"; busy shows a 20 spinner and "Replying…" |
+| Trailing | Stop | 52 circle, glyph 22 | The compact listening face: neutral glass with `stop.fill` in `status.danger`; a 20 spinner while stopping |
+
+Here the cue action is the hero, so it takes the 64 capsule and the accent, and Stop shrinks to a circle with its accessibility label ("Stop conversation") in place of visible text. This is the one place a session control has no visible label; the red stop glyph at the trailing edge is the convention it relies on. When a screen has no cue action, Stop uses the full capsule from the table above.
+
 Rules:
 
 - The stop glyph is the only red in the listening state.
@@ -1091,7 +1129,7 @@ Anatomy: the newest cue is a prominent card (4.9); older cues are plain cards an
 
 | Part | Style |
 |---|---|
-| Header | 28 circular icon tile (`accent.tint`, `sparkles` at 16 in `accent.fill`); "Cue" in `type.micro`, `accent.fill`; trailing state text in `type.caption` `ink.secondary` |
+| Header | 28 circular icon tile (`accent.tint`, `sparkles` at 16 in `accent.fill`); a kicker in `type.micro`, `accent.fill` (the product's word for it: "Assistant" in LiveCue); trailing state text in `type.caption` `ink.secondary`, or a live chip reading "Latest" on the newest saved answer |
 | Prompt (optional) | What the cue answers: `type.label`, `ink.secondary`, at most 2 lines |
 | Body | `type.cue`, `ink.primary`, selectable |
 | Footer | Left: latency or time in `type.caption`, tabular, `ink.secondary`. Right: quiet icon buttons Copy and Retry |
@@ -1187,7 +1225,24 @@ Each state has its own mark shape as well as its own colour, and always a text l
 | Scrollbar | 12 wide gutter, no track fill, no arrow buttons; thumb 6 wide, radius 3, `control.scrollThumb`; hover α 0.40 |
 | Divider | `stroke.hairline`, 1 px |
 | Count badge | Capsule, minimum 20 x 20, `accent.fill`, 12 px SemiBold `ink.onAccent` (6.39:1) |
-| Tray icon | The small brand glyph (8.2) with a 6 px status dot at the bottom right: `status.success` running, `status.warning` attention, none when stopped |
+| Tray icon | The small brand glyph (8.2) with a 6 px status dot at the bottom right: `status.success` running, `status.warning` attention, none when stopped. Only if an app has a tray presence; the LiveCue Windows app has none |
+| Log view | A read-only, selectable text block in `type.mono` inside a card with radius 16, filling its panel and scrolling vertically. Timestamps and payload text in `ink.secondary`, message text in `ink.primary`. Long lines wrap. It follows new entries only while scrolled to the end |
+
+### 4.24 Disclosure
+
+Shows or hides a block of secondary content in place ("Timing & usage", "More detail", "Pair another PC or scan a code").
+
+Anatomy: a full-width row at least 44 / 36 high with a label in `type.label` `ink.primary` on the left and a 16 chevron in `ink.secondary` on the right (down when closed, up when open); the content appears directly below, inside the same card or panel. A short inline form ("More detail" / "Hide detail") is a quiet button (4.2) whose label names the action and has no chevron.
+
+| State | Appearance |
+|---|---|
+| Closed | Label and chevron down |
+| Open | Chevron up; content visible. The label does not change in the row form |
+| Hover (Windows), pressed | Row states from 4.8 |
+| Focused | Focus ring |
+| Disabled | Standard |
+
+Opening and closing take `motion.base`: the content fades and the container grows downward; nothing above moves. Reported to assistive technology as a button with an expanded or collapsed state. The content is never the only place a required action lives.
 
 ---
 
@@ -1524,7 +1579,7 @@ Screens are designed in the next step. These are the constraints that step start
 - One window: the custom title bar across the top (brand on the left, window buttons on the right), a 232 px glass sidebar on the left (navigation rows, a connection status card at the bottom), and a content area with a page title on the ground and panels below it.
 - The same shell as the sibling Windows apps, so the family is recognisable.
 - Pages follow the functional spec; expect status, pairing, devices and settings. The pairing page pairs the QR tile with its instructions side by side, and stacks them when the window is narrow.
-- Default size 1120 x 760, minimum 900 x 600. Below 1000 px wide, two-column pages become one column. Content panels stop growing at 920 px wide and stay left-aligned.
+- Default size 1240 x 660, minimum 960 x 620. Two-column pages keep both columns down to the minimum width. Reading text inside a panel stops growing at 720 px wide; panels themselves fill the content area.
 - No floating toolbars (rule W-1). Dialogs are in-window.
 
 ---

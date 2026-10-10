@@ -40,3 +40,6 @@ xcuserdata/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent worktrees and local tooling
+.claude/
