@@ -16,6 +16,7 @@ public sealed partial class MappingSafetyTests
 {
     private static readonly string[] StatusRead = ["status", "--json"];
     private static readonly string[] ServeStatusRead = ["serve", "status", "--json"];
+    private static readonly int[] FunnelPorts = [443, 8443, 10000];
 
     // ---- TS-1 ----
 
@@ -263,10 +264,11 @@ public sealed partial class MappingSafetyTests
         }
 
         // The run is not vacuous: each of the four forms was written many times, and many plans were refused.
-        Assert.True(writes > 2000, $"{writes} commands were written.");
-        Assert.True(refusals > 2000, $"{refusals} plans were refused.");
+        // (With this seed: 2,049 commands written, 9,839 plans refused.)
+        Assert.True(writes > 1500, $"{writes} commands were written.");
+        Assert.True(refusals > 5000, $"{refusals} plans were refused.");
         Assert.Equal(["funnel http", "funnel off", "serve http", "serve off"], kinds.Keys.Order(StringComparer.Ordinal));
-        Assert.All(kinds.Values, count => Assert.True(count > 100, string.Join(", ", kinds)));
+        Assert.All(kinds.Values, count => Assert.True(count > 200, string.Join(", ", kinds)));
     }
 
     // ---- TS-9 ----
@@ -412,19 +414,19 @@ public sealed partial class MappingSafetyTests
                 Assert.Equal("--set-path=/", arguments[2]);
                 break;
             case (4, "funnel", "off"):
-                Assert.Contains(Port(HttpsOption(), arguments[1]), new[] { 443, 8443, 10000 });
+                Assert.Contains(Port(HttpsOption(), arguments[1]), FunnelPorts);
                 Assert.Matches(PrefixOption(), arguments[2]);
                 break;
             case (4, "serve", _):
                 Assert.Equal("--bg", arguments[1]);
                 var privatePort = Port(HttpsOption(), arguments[2]);
                 Assert.InRange(privatePort, 1, 65535);
-                Assert.DoesNotContain(privatePort, new[] { 443, 8443, 10000 });
+                Assert.DoesNotContain(privatePort, FunnelPorts);
                 RelayPort(arguments[3]);
                 break;
             case (5, "funnel", _):
                 Assert.Equal("--bg", arguments[1]);
-                Assert.Contains(Port(HttpsOption(), arguments[2]), new[] { 443, 8443, 10000 });
+                Assert.Contains(Port(HttpsOption(), arguments[2]), FunnelPorts);
                 Assert.Matches(PrefixOption(), arguments[3]);
                 RelayPort(arguments[4]);
                 break;
