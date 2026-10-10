@@ -1,0 +1,89 @@
+name: Windows
+
+# Builds, tests and publishes the Windows side, then runs the published desktop app's self-test and
+# keeps its screenshots. Every step is one task of windows/build.ps1, so a local run is the same run.
+
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+# Nothing here writes to the repository, and there are no secrets to read.
+permissions:
+  contents: read
+
+# One run per ref; a newer push cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Build, test, publish, self-test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: windows
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The SDK version comes from windows/global.json, the same file a local build obeys.
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: windows/global.json
+
+      - name: Restore
+        run: ./build.ps1 restore
+
+      - name: Build
+        run: ./build.ps1 build
+
+      - name: Test
+        run: ./build.ps1 test
+
+      - name: Publish
+        run: ./build.ps1 publish
+
+      - name: Smoke-test the published relay host
+        run: ./build.ps1 smoke
+
+      - name: Self-test the published desktop app
+        run: ./build.ps1 selftest
+
+      - name: Upload test results and screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-evidence
+          path: |
+            windows/artifacts/desktop/
+            windows/artifacts/test-results/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload the published app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-build
+          path: |
+            windows/artifacts/LiveCueRemake-win-x64.zip
+            windows/artifacts/LiveCueRemake-win-x64.zip.sha256
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
