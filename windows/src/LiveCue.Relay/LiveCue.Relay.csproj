@@ -22,6 +22,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      The three launcher scripts of protocol 11.5, linked from asr/ so that there is one source. The relay
+      writes its own copies into the data folder's lab\ at each start and never runs a file of the lab folder.
+    -->
+    <EmbeddedResource Include="..\..\..\asr\Start-ASR-Lab.ps1" Link="LocalModel\Scripts\Start-ASR-Lab.ps1" LogicalName="LiveCue.Relay.LocalModel.Scripts.Start-ASR-Lab.ps1" />
+    <EmbeddedResource Include="..\..\..\asr\Stop-ASR-Lab.ps1" Link="LocalModel\Scripts\Stop-ASR-Lab.ps1" LogicalName="LiveCue.Relay.LocalModel.Scripts.Stop-ASR-Lab.ps1" />
+    <EmbeddedResource Include="..\..\..\asr\LabCommon.ps1" Link="LocalModel\Scripts\LabCommon.ps1" LogicalName="LiveCue.Relay.LocalModel.Scripts.LabCommon.ps1" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The seams are internal and reach the tests through this. -->
     <InternalsVisibleTo Include="LiveCue.Relay.Tests" />
   </ItemGroup>
