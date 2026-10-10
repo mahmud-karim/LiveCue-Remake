@@ -314,6 +314,7 @@ private struct FallbackGlassButtonStyle: ButtonStyle {
 
     @Environment(\.theme) private var theme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -339,7 +340,7 @@ private struct FallbackGlassButtonStyle: ButtonStyle {
                 }
             }
             .contentShape(Capsule())
-            .scaleEffect(configuration.isPressed ? theme.motion.pressedScale : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? theme.motion.pressedScale : 1)
             .opacity(isEnabled ? 1 : theme.opacity.disabled)
             .animation(theme.motion.press, value: configuration.isPressed)
     }

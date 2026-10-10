@@ -41,6 +41,11 @@ struct IconButton: View {
             }
             .frame(width: theme.size.minimumTarget, height: theme.size.minimumTarget)
             .accessibilityLabel(label)
+            // Chrome keeps its size, so its glyph stops growing and offers the Large Content Viewer.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            .accessibilityShowsLargeContentViewer {
+                Label(label, systemImage: systemImage)
+            }
         case .raised:
             Button(action: perform) { symbol }
                 .buttonStyle(LCIconButtonStyle(isRaised: true))
@@ -83,6 +88,7 @@ private struct LCIconButtonFace: View {
 
     @Environment(\.theme) private var theme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         configuration.label
@@ -98,8 +104,12 @@ private struct LCIconButtonFace: View {
                 }
             }
             .contentShape(Circle())
-            .scaleEffect(configuration.isPressed && isRaised ? theme.motion.pressedScale : 1)
+            .scaleEffect(scale)
             .opacity(isEnabled ? 1 : theme.opacity.disabled)
             .animation(theme.motion.press, value: configuration.isPressed)
+    }
+
+    private var scale: CGFloat {
+        configuration.isPressed && isRaised && !reduceMotion ? theme.motion.pressedScale : 1
     }
 }

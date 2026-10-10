@@ -30,6 +30,7 @@ private struct LCButtonFace: View {
 
     @Environment(\.theme) private var theme
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         configuration.label
@@ -40,9 +41,15 @@ private struct LCButtonFace: View {
             .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: height)
             .background { face }
             .contentShape(shape)
-            .scaleEffect(configuration.isPressed && kind != .quiet ? theme.motion.pressedScale : 1)
+            .scaleEffect(scale)
             .opacity(isEnabled ? 1 : theme.opacity.disabled)
             .animation(theme.motion.press, value: configuration.isPressed)
+    }
+
+    /// A pressed button shrinks a little. A quiet button has no shape to shrink, and with Reduce Motion
+    /// the change of fill is the whole pressed state.
+    private var scale: CGFloat {
+        configuration.isPressed && kind != .quiet && !reduceMotion ? theme.motion.pressedScale : 1
     }
 
     @ViewBuilder
