@@ -36,6 +36,12 @@ DerivedData/
 *.ipa
 *.xcresult/
 xcuserdata/
+# Info.plist files that XcodeGen writes on every generation
+ios/Generated/
+
+# Python
+__pycache__/
+*.pyc
 
 # OS
 .DS_Store

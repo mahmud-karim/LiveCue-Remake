@@ -1,0 +1,113 @@
+# XcodeGen specification for the iPhone app. The Xcode project is generated from this file
+# (`xcodegen generate` in this folder) and is not committed.
+name: LiveCueRemake
+
+options:
+  bundleIdPrefix: com.mahmudkarim
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "26.3"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+    # Swift 5 language mode with complete concurrency checking: data-race findings arrive as warnings,
+    # so they do not cost a CI cycle. The core package is in Swift 6 mode through its own manifest.
+    SWIFT_VERSION: "5.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+
+    # The project is unsigned by default, which is what the device build for LiveContainer needs.
+    # Simulator test runs switch ad hoc signing on from the command line (see .github/workflows/ios.yml).
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGN_IDENTITY: ""
+
+packages:
+  LiveCueCore:
+    path: Core
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    exactVersion: 0.15.6
+  DesertAnt:
+    url: https://github.com/Desert-Ant-Labs/desert-ant-core
+    exactVersion: 3.1.0
+
+targets:
+  LiveCueRemake:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: LiveCueCore
+        product: LiveCueCore
+      - package: FluidAudio
+        product: FluidAudio
+      - package: DesertAnt
+        product: Voz
+    info:
+      # Written by XcodeGen on every generation; not committed.
+      path: Generated/LiveCueRemake-Info.plist
+      properties:
+        CFBundleDisplayName: LiveCue Remake
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Light
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIBackgroundModes:
+          - audio
+        NSMicrophoneUsageDescription: LiveCue Remake listens through the microphone to transcribe the conversation while a session is running.
+        NSCameraUsageDescription: LiveCue Remake uses the camera to scan the pairing code shown on your PC.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mahmudkarim.LiveCueRemake
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: "NO"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+
+  LiveCueRemakeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: LiveCueRemake
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mahmudkarim.LiveCueRemake.UITests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TARGETED_DEVICE_FAMILY: "1"
+        TEST_TARGET_NAME: LiveCueRemake
+
+schemes:
+  LiveCueRemake:
+    build:
+      targets:
+        LiveCueRemake: all
+        LiveCueRemakeUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: LiveCueCore/LiveCueCoreTests
+        - name: LiveCueRemakeUITests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
