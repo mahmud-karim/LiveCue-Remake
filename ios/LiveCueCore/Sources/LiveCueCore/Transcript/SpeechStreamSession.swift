@@ -468,9 +468,9 @@ public actor SpeechStreamSession {
 
     /// Feeds one caption event to the state machine and reports what changed.
     private func apply(_ event: StreamTranscriptEvent, audioProcessedMs: Double?, hasText: Bool) {
-        if audioProcessedMs != nil || hasText {
-            emit(.usage(.update(id: usageID, sentMs: nil, processedMs: audioProcessedMs, hasTranscript: hasText)))
-        }
+        // Every inbound event updates the usage stream: the processed position when the event has one,
+        // and whether it carried text (spec 02 section 9.4).
+        emit(.usage(.update(id: usageID, sentMs: nil, processedMs: audioProcessedMs, hasTranscript: hasText)))
 
         let segment = transcript.apply(event)
         if let segment {
@@ -496,9 +496,11 @@ public actor SpeechStreamSession {
     private func streamCompleted(frameText: String, finalizationMs: Double?) {
         // The negotiation step carries only the finalisation time. The frame's processed position is
         // the last word on how much audio the PC handled, and for a stream without speech the only one.
-        if case .streamComplete(let processed, _)? = RelaySpeechFrame.parse(frameText), let processed {
-            emit(.usage(.update(id: usageID, sentMs: nil, processedMs: processed, hasTranscript: false)))
+        var processed: Double?
+        if case .streamComplete(let position, _)? = RelaySpeechFrame.parse(frameText) {
+            processed = position
         }
+        emit(.usage(.update(id: usageID, sentMs: nil, processedMs: processed, hasTranscript: false)))
 
         if let finalizationMs {
             reportFinalization(milliseconds: finalizationMs)

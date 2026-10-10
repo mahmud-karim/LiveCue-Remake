@@ -213,6 +213,8 @@ final class SpeechStreamSessionMetaTests: XCTestCase {
             "usage firstText 500.0",
             "status firstWords 0.5",
             "usage update sent=- processed=1500.0 text=false",
+            // `speechEnd` carries nothing: the update is sent all the same and changes nothing.
+            "usage update sent=- processed=- text=false",
             "usage update sent=- processed=2000.0 text=true",
             "segment [Hello world.] 0.0 2.0",
             "partial []",

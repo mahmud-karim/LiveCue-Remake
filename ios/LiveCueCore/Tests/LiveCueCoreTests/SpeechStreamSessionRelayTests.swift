@@ -539,7 +539,8 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         let ending = await finishing.value
         XCTAssertEqual(ending, .completed)
         let events = await allEvents(of: session)
-        XCTAssertEqual(describe(events).suffix(3), [
+        XCTAssertEqual(describe(events).suffix(4), [
+            "usage update sent=- processed=- text=false",
             "usage finalization 500.0",
             "status finalized 0.5",
             "usage finish completed=true"
