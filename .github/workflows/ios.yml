@@ -1,0 +1,244 @@
+name: iOS
+
+# Builds and tests the iPhone app on free GitHub-hosted runners. No secrets are used, nothing is
+# signed, and no speech model is downloaded or run.
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - "scripts/ci/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "scripts/ci/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer run for the same branch and trigger replaces the one in progress.
+concurrency:
+  group: ios-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # Every macOS job uses this Xcode and fails at once if the runner image does not have it.
+  # It ships the iOS 26.2 SDK, which the Liquid Glass wrapper needs, and it is installed on both
+  # the macos-26 and the macos-15 image.
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+  PROJECT: ios/LiveCueRemake.xcodeproj
+  SCHEME: LiveCueRemake
+  # What the built app must report. Change these together with ios/project.yml.
+  BUNDLE_ID: com.mahmudkarim.LiveCueRemake
+  APP_VERSION: "1.0.0"
+  APP_BUILD: "1"
+  MINIMUM_IOS: "18.0"
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ANALYTICS: "1"
+
+jobs:
+  ci-scripts:
+    name: CI scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test the helper scripts
+        run: python3 -B -m unittest discover -s scripts/ci/tests -t scripts/ci/tests
+
+      - name: Check shell syntax
+        run: |
+          for script in scripts/ci/*.sh; do
+            bash -n "$script"
+          done
+
+  core-linux:
+    name: Core (Linux)
+    runs-on: ubuntu-latest
+    # The same compiler line as the pinned Xcode (Swift 6.2).
+    container: swift:6.2-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Show the toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build --package-path ios/Core
+
+      - name: Test
+        run: swift test --package-path ios/Core
+
+  simulator-tests:
+    name: Simulator tests (${{ matrix.name }})
+    needs: [ci-scripts, core-linux]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native Liquid Glass.
+          - name: iOS 26
+            runner: macos-26
+            ios-major: 26
+            slug: ios26
+          # The fallback. Only the macos-15 image has iOS 18 simulator runtimes.
+          - name: iOS 18
+            runner: macos-15
+            ios-major: 18
+            slug: ios18
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the pinned Xcode
+        run: bash scripts/ci/require_xcode.sh
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen --version
+          xcodegen generate
+
+      - name: Resolve Swift packages
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME" \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData"; then
+              exit 0
+            fi
+            echo "Package resolution failed (attempt $attempt of 3)."
+            sleep 15
+          done
+          exit 1
+
+      - name: Select a simulator
+        id: simulator
+        run: python3 scripts/ci/select_simulator.py --os-major "${{ matrix.ios-major }}"
+
+      - name: Boot the simulator
+        timeout-minutes: 15
+        run: python3 scripts/ci/boot_simulator.py "${{ steps.simulator.outputs.udid }}"
+
+      - name: Run unit and UI tests
+        timeout-minutes: 35
+        run: |
+          bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild.log test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath artifacts/Tests.xcresult \
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 180 \
+            -maximum-test-execution-time-allowance 300 \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=-
+
+      - name: Summarise the test results
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: xcrun xcresulttool get test-results summary --path artifacts/Tests.xcresult --compact | tee artifacts/test-summary.json
+
+      - name: Export screenshots from the result bundle
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/ci/export_screenshots.py artifacts/Tests.xcresult artifacts/screenshots \
+            --prefix "${{ matrix.slug }}-${{ steps.simulator.outputs.runtime }}"
+
+      - name: Upload the result bundle, log and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: simulator-tests-${{ matrix.slug }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  device-build:
+    name: Device build (unsigned IPA)
+    needs: [ci-scripts, core-linux]
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      APP_NAME: LiveCueRemake
+      IPA_NAME: LiveCue-Remake.ipa
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Require the pinned Xcode
+        run: bash scripts/ci/require_xcode.sh
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen --version
+          xcodegen generate
+
+      - name: Resolve Swift packages
+        timeout-minutes: 15
+        run: |
+          for attempt in 1 2 3; do
+            if xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME" \
+              -derivedDataPath "$RUNNER_TEMP/DerivedData"; then
+              exit 0
+            fi
+            echo "Package resolution failed (attempt $attempt of 3)."
+            sleep 15
+          done
+          exit 1
+
+      - name: Build the Release app for devices, unsigned
+        timeout-minutes: 35
+        run: |
+          bash scripts/ci/xcodebuild_logged.sh artifacts/xcodebuild-device.log build \
+            -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination "generic/platform=iOS" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Package the IPA
+        run: |
+          app="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/$APP_NAME.app"
+          if [[ ! -d "$app" ]]; then
+            echo "::error title=App not built::$app does not exist."
+            exit 1
+          fi
+          echo "Contents of $APP_NAME.app:"
+          ls -la "$app"
+          xcrun lipo -info "$app/$APP_NAME"
+
+          mkdir -p "$RUNNER_TEMP/Package/Payload"
+          ditto "$app" "$RUNNER_TEMP/Package/Payload/$APP_NAME.app"
+          # -y keeps symbolic links, -X leaves out extended attributes: nothing but Payload/ goes in.
+          (cd "$RUNNER_TEMP/Package" && zip -q -r -y -X "$GITHUB_WORKSPACE/artifacts/$IPA_NAME" Payload)
+          ls -la artifacts
+
+      - name: Validate the IPA
+        run: |
+          python3 scripts/ci/validate_ipa.py "artifacts/$IPA_NAME" \
+            --bundle-id "$BUNDLE_ID" --version "$APP_VERSION" --build "$APP_BUILD" \
+            --minimum-os "$MINIMUM_IOS" --device-family 1
+          cd artifacts
+          shasum -a 256 "$IPA_NAME" | tee "$IPA_NAME.sha256"
+
+      - name: Upload the IPA, checksum and build log
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: livecue-remake-ipa
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
