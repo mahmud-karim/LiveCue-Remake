@@ -70,8 +70,10 @@ public interface IRelay : IAsyncDisposable
 public sealed record PairingQr(string Endpoint, bool[][] Modules);
 
 /// <summary>
-/// The pairing payload as text (protocol 4.2). Implemented by the relay object and resolved only by the
-/// console host for <c>--show-pairing</c>. <c>LiveCue.Desktop</c> never references this type; a test proves it.
+/// The pairing payload as text (protocol 4.2). Implemented by the relay object. The relay's own tests read
+/// the accepted token through it; no host resolves it (the console host's <c>--show-pairing</c> reads the
+/// stored pairing through <see cref="StoredPairingExport"/>). <c>LiveCue.Desktop</c> never references this
+/// type; a test proves it.
 /// </summary>
 public interface IPairingExport
 {

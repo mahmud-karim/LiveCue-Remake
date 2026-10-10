@@ -151,7 +151,7 @@ enabled and warnings as errors. No Node.js anywhere. No PowerShell except the tw
 | `LiveCue.IconTool` | Developer tool (WPF, not published) | none | Draws the brand mark from the design system's numbers and writes the `.ico` frames and the iPhone 1024 px PNG. Run by hand when the mark changes. |
 
 Dependency rules, enforced by a test that inspects assembly references: `LiveCue.Relay` references no other
-project; `LiveCue.Hosting` references no WPF assembly; `LiveCue.Desktop` never uses `IPairingExport` (3.4).
+project; `LiveCue.Hosting` references no WPF assembly; `LiveCue.Desktop` never uses `IPairingExport` or `StoredPairingExport` (3.4).
 
 Allowed NuGet packages: the two named above, `xunit`, `xunit.runner.visualstudio`, `Microsoft.NET.Test.Sdk`,
 and `CommunityToolkit.Mvvm` in the desktop project. Any other package needs the orchestrator's approval,
@@ -159,7 +159,7 @@ because the owner allows package restores only, not new tooling.
 
 ### 3.2 Relay library: internal boundaries
 
-The public surface is small: `RelayFactory`, `IRelay`, `IPairingExport`, `PairingMaintenance`,
+The public surface is small: `RelayFactory`, `IRelay`, `IPairingExport`, `PairingMaintenance`, `StoredPairingExport`,
 `RelayOptions`, `RelayDependencies`, the event records of 3.4 and the protocol constants. Everything else is
 internal.
 
@@ -241,7 +241,7 @@ public interface IRelay : IAsyncDisposable
 
 public sealed record PairingQr(string Endpoint, bool[][] Modules);   // square, true = dark, no quiet zone
 
-public interface IPairingExport      // implemented by the relay object; resolved only by the console host
+public interface IPairingExport      // implemented by the relay object; read by the relay's own tests, by no host
 {
     Task<string> GetPairingPayloadAsync(CancellationToken ct);  // the payload text of protocol 4.2
 }
@@ -249,6 +249,11 @@ public interface IPairingExport      // implemented by the relay object; resolve
 public static class PairingMaintenance  // usable while no relay is running (recovery from an unreadable file)
 {
     public static Task ResetStoredPairingAsync(string dataDirectory, CancellationToken ct);
+}
+
+public static class StoredPairingExport // the stored pairing's payload, read without a relay: --show-pairing only
+{
+    public static Task<string?> ReadPayloadAsync(string dataDirectory, string advertisedEndpoint, CancellationToken ct);
 }
 ```
 
@@ -502,7 +507,7 @@ port-in-use text and does not disturb the first.
 ### 3.12 Desktop application
 
 The window follows the design system: one window, custom title bar, a sidebar and pages, Daylight theme,
-light appearance forced, opaque ground, no Mica or Acrylic, default size 1120 x 760 and minimum 900 x 600.
+light appearance forced, opaque ground, no Mica or Acrylic, default size 1240 x 660 and minimum 960 x 620.
 There is no tray icon, no start at sign-in, no device list and no dark theme.
 
 Pages and the functions each must provide (layout is the Windows design's job; the functions are fixed):
@@ -557,7 +562,7 @@ their placeholders again and sets the reply hint to "Activity cleared".
   contains "0.85"; "Show QR" is enabled; the QR tile has drawn modules and a quiet zone; pause and resume
   flip the pause state and label; a fault returns the stopped layout and keeps its text; "Clear activity"
   empties the three areas; the activity cap holds; no visible text contains the synthetic token.
-- With `--screenshots`, renders each scene off-screen to `<scene>.png` at 1120 x 760 and at 900 x 600:
+- With `--screenshots`, renders each scene off-screen to `<scene>.png` at 1240 x 660 and at 960 x 620:
   `live-stopped`, `live-ready`, `live-thinking`, `live-reply`, `live-request-failed`, `live-paused`,
   `pairing-empty`, `pairing-qr`, `pairing-reset-confirm`, `activity-empty`, `activity-filled`,
   `settings-private`, `settings-public`, `settings-blocked`, `fault-port-in-use`.
@@ -573,7 +578,7 @@ GPU check, not the everyday entry point.
 |---|---|
 | (none) | Run the prerequisite checks of 3.11, start the relay with the saved settings, print status lines, stop on Ctrl+C. Exit code 0 after a clean stop. |
 | `--check-only` | Run the checks, print "LiveCue Relay prerequisites passed.", exit 0; or print the failure text and exit 2. |
-| `--show-pairing` | After start, print the pairing payload text and a terminal QR once. **This is the only place the token is ever printed, and only on this explicit request.** It is the source for the phone's paste-in pairing path. |
+| `--show-pairing` | Print the pairing payload text and a terminal QR once, then exit 0. It starts no relay and never binds the relay port, so it works while LiveCue Desktop is running: it reads the settings and the stored pairing (`pairing.json`) and resolves the advertised endpoint the way a start does (`--endpoint` when given, otherwise the mode, ports and prefix of the settings with this PC's Tailscale name). When no pairing has been created yet, the pairing cannot be read or the endpoint cannot be resolved, it prints the reason and exits 2. **This is the only place the token is ever printed, and only on this explicit request.** It is the source for the phone's paste-in pairing path. |
 | `--events json` | Print each relay event as one JSON line instead of text. |
 | `--endpoint <url>`, `--port <n>`, `--data-dir <path>`, `--codex <path>`, `--lab <folder>`, `--mode private|public` | Override settings for this run. With `--endpoint`, the Tailscale checks are skipped. |
 
@@ -1145,7 +1150,7 @@ or model provider; every test uses fixtures. Toolchains are pinned and printed. 
 
 | File | Triggers | Jobs |
 |---|---|---|
-| `ci.yml` | Push to `main`, every pull request, manual dispatch, and `workflow_call` (so the release reuses it). One run per ref; a newer run cancels the older. | `audit`, `core-linux`, `asr-protocol`, `windows`, `ios-tests` (two legs) |
+| `ci.yml` | Push to `main` and to a work-package branch (`wp/**`), manual dispatch, and `workflow_call` (so the release reuses it). One run per ref; a newer run cancels the older. | `audit`, `core-linux`, `asr-protocol`, `windows`, `ios-tests` (two legs) |
 | `release.yml` | Manual dispatch only, input `release_tag` (required) | `checks`, then `ci.yml` as a called workflow, then `ipa`, `windows-publish`, `release` |
 
 ### 7.3 Swift jobs

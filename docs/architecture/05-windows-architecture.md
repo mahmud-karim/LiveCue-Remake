@@ -12,7 +12,8 @@ Rules for reading:
 - A number that the protocol defines is cited by its id (`C-43`) and never restated. A number that only the
   architecture defines is cited by its section. Numbers that this file adds are in the table of section 4.1 and
   have ids `W-nn`.
-- A code block that starts with `// file:` is the exact content of a contract file. Contract files are created
+- A code block that starts with `// file:` is the exact content of a contract file (the `// file:` line names
+  the file and is not part of it). Contract files are created
   by work package WP-W00 and are frozen afterwards: a later package that needs a change stops and asks the
   orchestrator.
 - "The foundation" is WP-W00. Work packages of this file are numbered `WP-Wnn`, with a W, so that they
@@ -42,7 +43,7 @@ now agree.
 | R-01 | Copy pairing text | A "Copy pairing text" button and toast on the Pairing page | A-16: the desktop never holds the pairing text; the console host's `--show-pairing` is its only source | Not built. The button, its toast, its automation id and the "show the QR first" helper line are removed | O | screens 3.2, 6.3, 9, 10; mockup |
 | R-02 | Excluded items | DS still describes a tray icon, a device row, and "Expired" / "New code" QR states | Decisions section 1 item 10 | None is built. The screens and the mockup contained none; nothing to edit | O | none |
 | R-03 | Connection section | "Set up" described loosely; Public mode "not managed by LiveCue" | Architecture 3.9, TS-1 to TS-10 | The section follows the mapping manager exactly: the command shown is the one the manager built, and no mapping is written without a click on a dialog that shows it | O | screens 5.1, 6.2; mockup |
-| R-04 | Window size | Default 1240 x 660, minimum 960 x 620 (also DS section 10 and old AC-WIN-002) | Decisions 5.3 and architecture 3.12, 3.13: 1120 x 760 and 900 x 600, citing DS section 10, which does not say that | Layout: 1240 x 660 default, 960 x 620 minimum. Self-test screenshots use those two sizes. This file supersedes the two numbers in architecture 3.12 and 3.13 | W | decisions section 1 item 10, 5.3 |
+| R-04 | Window size | Default 1240 x 660, minimum 960 x 620 (also DS section 10 and old AC-WIN-002) | Decisions 5.3 and architecture 3.12, 3.13: 1120 x 760 and 900 x 600, citing DS section 10, which does not say that | Layout: 1240 x 660 default, 960 x 620 minimum. Self-test screenshots use those two sizes. Architecture 3.12 and 3.13 now give the same two sizes | O | decisions section 1 item 10, 5.3; architecture 3.12, 3.13 |
 | R-05 | Second instance | The first window comes forward and shows "LiveCue is already running." | WIN-22, AC-SCR-013, architecture 3.11: no single-instance guard; the second window shows the port-in-use text | No guard, no toast. The second instance fails at relay start and says so | W | screens 1.2, 6.3 |
 | R-06 | Start and Tailscale | Start "sets up the Tailscale mapping if the mode needs it" | D-20, TS-9: never at start | Start runs no Tailscale write. A missing mapping is the "connection not set up" state (R-14) | W | screens 2.1, 2.2, 2.6 |
 | R-07 | Prerequisite check | Runs every check, shows all results; status "Cannot start yet. N items need attention."; rows for a Meta credential, the mapping, the relay port and "connection settings" | A-17, architecture 3.11, AC-WIN-003: fixed order, blocking, the first failing check's text is the relay status | Both hold. The six checks of architecture 3.11 are evaluated in that order; a check whose precondition failed is "Not checked"; the status line shows the first failure's architecture text; the list (layout) shows every row in that order with the screen design's title and fix. Rows removed: Meta credential (D-14), mapping (TS-9), relay port (a start fault, not a check). "Connection settings" becomes "Data folder and settings" (check 1). "Cannot start yet" stays as the sidebar's short label only | W | screens 2.3, 2.6; decisions A-17; mockup |
@@ -77,7 +78,8 @@ now agree.
 | R-36 | "The desktop command failed. Please retry." | Listed as a relay problem in Activity | RELAY-D7: there is no command channel | Kept as the activity line for an action of the window that threw (pause, show QR, reset, a mapping call) | W | screens 4.1 |
 
 Two protocol sentences cannot be met to the letter with Kestrel and the framework's WebSocket. Both are
-invisible to a conforming phone; both are flagged for the orchestrator (section 4.3, notes K-1 and K-2).
+invisible to a conforming phone. The orchestrator accepted both, and protocol 5.3 and 10.5 now describe what
+Kestrel does (section 4.3, notes K-1 and K-2).
 
 ---
 
@@ -99,7 +101,7 @@ the `spike/windows` branch.
 | `windows/tests/Shared/DotnetHost.cs` | Finds the `dotnet` host that runs the tests (`DOTNET_HOST_PATH`, else `LIVECUE_DOTNET_EXE`, else `PATH`); linked into every test project | WP-W00, frozen |
 | `windows/tests/Shared/ManualTimeProvider.cs` | A `TimeProvider` the test advances by hand, with timers | WP-W00, frozen |
 | `windows/tests/Shared/TempFolder.cs` | A temporary data folder that is deleted on dispose | WP-W00, frozen |
-| `windows/tests/Shared/LiveFactAttribute.cs` | `[LiveFact("LIVECUE_LIVE_CODEX")]`: skipped unless that variable is `1` | WP-W00, frozen |
+| `windows/tests/Shared/LiveFactAttribute.cs` | `[LiveFact("LIVECUE_LIVE_CODEX")]`: skipped unless that variable is `1`. A live test also carries `[Trait("Category", "Live")]` | WP-W00, frozen |
 | `windows/tests/LiveCue.TestChild/` (`LiveCue.TestChild.csproj`, `Program.cs`) | A console program for process-runner tests: echoes arguments and environment names, reads standard input, writes N bytes, sleeps, spawns a grandchild, plays a stub Codex `app-server` | WP-W00 creates; WP-W03 owns `Program.cs` |
 
 ### 2.2 `windows/src/LiveCue.Relay/`
@@ -112,7 +114,7 @@ the `spike/windows` branch.
 | `Contracts/RelayEvents.cs` | Every event record and its enums | WP-W00, frozen |
 | `Contracts/RelayFaults.cs` | `RelayFaultCode`, `RelayStartException` | WP-W00, frozen |
 | `Contracts/RelayDependencies.cs` | The seam holder | WP-W00, frozen |
-| `Contracts/RelayFactory.cs` | `RelayFactory`, `PairingMaintenance` (one-line forwards) | WP-W00, frozen |
+| `Contracts/RelayFactory.cs` | `RelayFactory`, `PairingMaintenance`, `StoredPairingExport` (one-line forwards) | WP-W00, frozen |
 | `Protocol/ProtocolConstants.cs` | C-01 to C-73, the route deadlines of protocol 6.1, the `W-nn` numbers | WP-W00, frozen |
 | `Protocol/RelayCodes.cs` | Every wire code as a string constant, plus `CLIENT_DISCONNECTED` | WP-W00, frozen |
 | `Protocol/RelayErrors.cs` | `RelayError` and the table code to status to text of protocol 14.1, with pre-built bodies | WP-W00, frozen |
@@ -152,6 +154,7 @@ the `spike/windows` branch.
 | `Pairing/SelfCheck.cs`, `Pairing/SelfCheckClient.cs` | Protocol 4.5 | WP-W02 |
 | `Pairing/PairingService.cs` | `IPairingService`: load or create, verify, show, reset, export, revocation | WP-W02 |
 | `Pairing/StoredPairingReset.cs` | What `PairingMaintenance` forwards to | WP-W02 |
+| `Pairing/StoredPairingPayload.cs` | What `StoredPairingExport` forwards to: the stored pairing's payload text, read without a relay and without writing | WP-W02 |
 | `Catalog/ICatalogSource.cs`, `Catalog/ICatalogReader.cs` | Catalogue contracts | WP-W00, frozen |
 | `Catalog/CodexCatalogSource.cs` | Protocol 12.1 | WP-W03 |
 | `Catalog/CachedCatalogSource.cs`, `Catalog/CatalogReader.cs`, `Catalog/OfferFilter.cs`, `Catalog/AssistantSelection.cs` | Protocol 7.1, 7.2, 7.3 | WP-W03 |
@@ -203,7 +206,7 @@ the `spike/windows` branch.
 | Path | Responsibility | Owner |
 |---|---|---|
 | `LiveCue.Relay.Host.csproj` | `LiveCueRelayHost.exe`; references `LiveCue.Hosting` | WP-W00 |
-| `Program.cs`, `HostProgram.cs`, `HostArguments.cs` | `Main` forwards to `HostProgram.RunAsync(args, services, output, cancel)`, which tests call with fake services; arguments and exit codes of architecture 3.14 | WP-W06 |
+| `Program.cs`, `HostProgram.cs`, `HostArguments.cs` | `Main` forwards to `HostProgram.RunAsync(args, services, output, cancel)`, which tests call with fake services (`services` is a function from the parsed `HostArguments` to `HostingServices`); arguments and exit codes of architecture 3.14 | WP-W06 |
 | `ConsoleEventPrinter.cs` | Events as text lines or JSON lines | WP-W06 |
 | `TerminalQr.cs` | The terminal QR of `--show-pairing` | WP-W06 |
 
@@ -228,8 +231,8 @@ the `spike/windows` branch.
 | `Themes/Metrics.xaml`, `Themes/Typography.xaml`, `Themes/Icons.xaml`, `Themes/Interaction.xaml` | Tokens that do not change with the theme (spike) | WP-W08 |
 | `Themes/Glass.xaml`, `Themes/Buttons.xaml`, `Themes/Navigation.xaml`, `Themes/Status.xaml`, `Themes/Rows.xaml`, `Themes/Chrome.xaml`, `Themes/Supporting.xaml` | Component styles (spike) | WP-W08 |
 | `Themes/Fields.xaml`, `Themes/Dialogs.xaml` | Text field, segmented control, dialog, banner, toast (keys listed in 5.3) | WP-W08 (the foundation adds every key with a plain style) |
-| `Controls/BloomLayer.cs`, `Controls/BrandMark.cs`, `Controls/Icon.cs`, `Controls/ListRow.cs`, `Controls/StatusChip.cs`, `Controls/Pill.cs`, `Controls/TwoColumnPanel.cs`, `Controls/PageLayout.cs`, `Controls/ButtonAssist.cs`, `Controls/ChromeState.cs`, `Controls/Converters.cs` | Shared controls (spike) | WP-W08 |
-| `Controls/StatusIndicatorView.cs`, `Controls/SegmentedControl.cs`, `Controls/Banner.cs`, `Controls/CheckRow.cs`, `Controls/Spinner.cs` | Shared controls the spike lacks | WP-W08 (the foundation adds a minimal class for each) |
+| `Controls/BloomLayer.cs`, `Controls/BrandMark.cs`, `Controls/Icon.cs`, `Controls/ListRow.cs`, `Controls/StatusChip.cs` (with the mark control `StatusMarkView`, renamed from the spike's `StatusMark` because the contract's enum has that name), `Controls/Pill.cs`, `Controls/SplitRowPanel.cs`, `Controls/Glass.cs`, `Controls/ButtonFills.cs`, `Controls/ButtonAssist.cs`, `Controls/ChromeState.cs`, `Controls/Converters.cs` | Shared controls (spike) | WP-W08 |
+| `Controls/StatusIndicatorView.cs`, `Controls/SegmentedControl.cs`, `Controls/Banner.cs`, `Controls/CheckRow.cs`, `Controls/Spinner.cs`, `Controls/TwoColumnPanel.cs`, `Controls/PageLayout.cs` | Shared controls the spike lacks | WP-W08 (the foundation adds a minimal class for each) |
 | `Shell/MainWindow.xaml`, `Shell/MainWindow.xaml.cs` | Chrome, sidebar, page host, dialog and toast layers | WP-W08 |
 | `Shell/ShellViewModel.cs`, `Shell/Navigator.cs`, `Shell/DialogHost.cs`, `Shell/ToastHost.cs`, `Shell/PageTemplates.xaml` | Navigation, dialogs, toasts, page-to-view mapping | WP-W08 |
 | `Session/DesktopSession.cs`, `Session/RelayStatusMachine.cs`, `Session/PresenceTracker.cs`, `Session/StatusTexts.cs` | `IDesktopSession`: events to state | WP-W08 |
@@ -250,7 +253,7 @@ the `spike/windows` branch.
 |---|---|---|
 | `windows/tests/LiveCue.Relay.Tests/LiveCue.Relay.Tests.csproj` | xUnit project | WP-W00 |
 | `…/Support/RelayTestHost.cs` | Starts a real `IRelay` on port 0 with every seam faked; gives an `HttpClient`, a raw socket client and a `ClientWebSocket` factory | WP-W00, frozen |
-| `…/Support/Fakes/*.cs` | `FakeAnswerBackend`, `FakeCatalogSource`, `FakeLabRuntime`, `FakeLabSocketConnector`, `FakePairingProtector`, `InMemoryPairingFiles`, `FakeSelfCheckClient`, `FakeProcessRunner`, `EventCollector`: one file each, behaving as protocol section 15 describes its fakes | WP-W00, frozen |
+| `…/Support/Fakes/*.cs` | `FakeAnswerBackend`, `FakeCatalogSource`, `FakeLabRuntime`, `FakeLabSocketConnector`, `FakeLocalModelController`, `FakePairingProtector`, `InMemoryPairingFiles`, `FakeSelfCheckClient`, `FakeProcessRunner`, `EventCollector`: one file each, behaving as protocol section 15 describes its fakes | WP-W00, frozen |
 | `…/Support/RawHttp.cs`, `…/Support/TestTokens.cs`, `…/Support/Bodies.cs` | Hand-written HTTP/1.1 requests over a socket; tokens of shape C-02; the standard assist and summary bodies | WP-W00, frozen |
 | `…/Contracts/*.cs` | Constants, error table, event shape (I-07), dependency rules | WP-W00 |
 | `…/Edge/*.cs`, `…/Host/*.cs` | Protocol 15.1, 15.2; I-01 to I-06 | WP-W01 |
@@ -259,10 +262,10 @@ the `spike/windows` branch.
 | `…/LocalModel/*.cs` | Protocol 15.5 | WP-W04 |
 | `…/Speech/*.cs` | Protocol 15.6 | WP-W05 |
 | `…/Conformance/*.cs` | Cross-area sweeps and the security list (test plan section 4) | WP-W13 |
-| `windows/tests/LiveCue.Hosting.Tests/LiveCue.Hosting.Tests.csproj`, `…/Support/*.cs` (`FakeTailscale.cs`, `FakeHostFileSystem.cs`, `InMemorySettingsStore.cs`, `FakeRelay.cs`, `ServeStatusFixtures.cs`) | Project and shared fakes | WP-W00, frozen |
+| `windows/tests/LiveCue.Hosting.Tests/LiveCue.Hosting.Tests.csproj`, `…/Support/*.cs` (`FakeTailscale.cs`, `FakeHostFileSystem.cs`, `InMemorySettingsStore.cs`, `FakeRelay.cs`, `ServeStatusFixtures.cs`) | Project and shared fakes. The project also references `LiveCue.Relay.Host` (the console host's tests) and links the relay tests' `FakeProcessRunner.cs` | WP-W00, frozen |
 | `…/Settings/*.cs`, `…/Codex/*.cs`, `…/Prerequisites/*.cs`, `…/Endpoint/*.cs`, `…/Supervisor/*.cs`, `…/ConsoleHost/*.cs`, `…/LiveSmoke/CodexLiveTests.cs` | Hosting core tests and the opt-in Codex smoke | WP-W06 |
 | `…/Tailscale/*.cs` | TS-1 to TS-10 and the parsers | WP-W07 |
-| `windows/tests/LiveCue.Desktop.Tests/LiveCue.Desktop.Tests.csproj`, `…/Support/*.cs` (`FakeSession.cs`, `ImmediateDispatcher.cs`, `FakeClipboard.cs`, `FakeLauncher.cs`, `RecordingDialogHost.cs`, `StaThread.cs`) | Project and shared fakes | WP-W00, frozen |
+| `windows/tests/LiveCue.Desktop.Tests/LiveCue.Desktop.Tests.csproj`, `…/Support/*.cs` (`FakeSession.cs`, `ImmediateDispatcher.cs`, `FakeClipboard.cs`, `FakeLauncher.cs`, `RecordingDialogHost.cs` (with `RecordingNavigator` and `RecordingToastHost`), `StaThread.cs`) | Project and shared fakes | WP-W00, frozen |
 | `…/Session/*.cs`, `…/Shell/*.cs`, `…/Theme/*.cs` | State machines, navigation, resource keys | WP-W08 |
 | `…/Live/*.cs`, `…/Activity/*.cs` | Live and Activity view models, the log bounds | WP-W09 |
 | `…/Pairing/*.cs`, `…/Settings/*.cs` | Pairing and Settings view models, both dialogs | WP-W10 |
@@ -276,11 +279,12 @@ the `spike/windows` branch.
 | `scripts/audit_public_source.py`, `scripts/audit-allowlist.txt` | The public-source audit (test plan section 6) | WP-W14 |
 | `scripts/tests/test_audit_public_source.py` | Its unit tests | WP-W14 |
 | `scripts/ci/changed_areas.py`, `scripts/ci/check_release_version.py`, `scripts/ci/verify_release_assets.py`, `scripts/ci/tests/test_*.py` for each | CI helpers and their unit tests | WP-W14 |
-| `scripts/publish-windows.ps1` | Publishes both executables into one folder, adds `asr\`, the licence and the notices, checks the result, zips and checksums | WP-W14 |
+| `scripts/publish-windows.ps1` | Publishes both executables into one folder, adds `asr\`, the licence and the notices, checks the result, zips and checksums | WP-W00 writes a first version; WP-W14 owns it |
 | `scripts/ci/select_simulator.py`, `boot_simulator.py`, `require_xcode.sh`, `generate_project.sh`, `xcodebuild_logged.sh`, `check_test_results.py`, `export_screenshots.py`, `validate_ipa.py` and their tests | iPhone CI helpers (from `spike/ios-ci`) | the iPhone side |
 | `scripts/verify-pc-asr.ps1` | The manual GPU check (protocol P2-M01 to M03) | WP-W12 |
 | `scripts/smoke/openrouter_catalogue.py` | The opt-in public catalogue fetch (test plan section 3) | WP-W12 |
-| `.github/workflows/ci.yml` | The foundation writes the `windows` job; WP-W14 completes the file | WP-W00, then WP-W14 |
+| `.github/workflows/windows.yml` | The `windows` job of the test plan, on pushes to `main` and to `wp/**` branches and by hand, until WP-W14 folds every workflow into `ci.yml` | WP-W00, then WP-W14 |
+| `.github/workflows/ci.yml` | Every job of the test plan; takes the `windows` job over from `windows.yml` | WP-W14 |
 | `.github/workflows/release.yml`, `.github/actions/ios-simulator-tests/action.yml` | Release; the one simulator test definition | WP-W14 |
 
 ---
@@ -289,7 +293,10 @@ the `spike/windows` branch.
 
 Everything in this section crosses a project or work-package boundary. The foundation creates each file
 exactly as written, with the stub bodies shown, and the solution compiles and its tests pass before any other
-package starts. Visibility rule: a type is `public` only when another assembly needs it. Seams are `internal`
+package starts. Five of the files then get their real bodies from the foundation itself and hold more than
+their block shows, with the declarations as printed: `RelayFactory.cs` (its forwards), `RelayErrors.cs` (the
+whole table, and `All`), `RouteTable.cs` (the ten `Rows`, `Row(id)` and `IsRequestIdShape`),
+`ProtocolConstants.cs` and `HostingFactory.cs` (`Create`). Visibility rule: a type is `public` only when another assembly needs it. Seams are `internal`
 and reach the tests through `InternalsVisibleTo`; the one public seam is the process runner, because the
 hosting library runs the Tailscale and Codex command lines through the same runner (one implementation of
 "no shell, hidden, argument list, time limit, tree kill").
@@ -431,8 +438,10 @@ public interface IRelay : IAsyncDisposable
 public sealed record PairingQr(string Endpoint, bool[][] Modules);
 
 /// <summary>
-/// The pairing payload as text (protocol 4.2). Implemented by the relay object and resolved only by the
-/// console host for <c>--show-pairing</c>. <c>LiveCue.Desktop</c> never references this type; a test proves it.
+/// The pairing payload as text (protocol 4.2). Implemented by the relay object. The relay's own tests read
+/// the accepted token through it; no host resolves it (the console host's <c>--show-pairing</c> reads the
+/// stored pairing through <see cref="StoredPairingExport"/>). <c>LiveCue.Desktop</c> never references this
+/// type; a test proves it.
 /// </summary>
 public interface IPairingExport
 {
@@ -669,10 +678,29 @@ public static class PairingMaintenance
     public static Task ResetStoredPairingAsync(string dataDirectory, CancellationToken ct)
         => throw new NotImplementedException();
 }
+
+/// <summary>
+/// The pairing payload of the stored pairing, read without a relay: what the console host's
+/// <c>--show-pairing</c> prints. It binds no port and only reads, so it may be called while a relay (the
+/// desktop app) runs on the same folder. <c>LiveCue.Desktop</c> never references this type; a test proves it.
+/// </summary>
+public static class StoredPairingExport
+{
+    /// <summary>
+    /// Reads <c>pairing.json</c> in <paramref name="dataDirectory"/>, decrypts the token and returns the
+    /// payload text of protocol 4.2 for <paramref name="advertisedEndpoint"/> in canonical form. Returns
+    /// null when no pairing file exists. The file is never modified. Throws <see cref="ArgumentException"/>
+    /// for an endpoint that fails the grammar of protocol 4.3, and <see cref="IOException"/> with a fixed
+    /// message when the file exists and cannot be read.
+    /// </summary>
+    public static Task<string?> ReadPayloadAsync(string dataDirectory, string advertisedEndpoint, CancellationToken ct)
+        => throw new NotImplementedException();
+}
 ```
 
-The foundation's real bodies are `Core.RelayHost.Create(options, dependencies ?? new RelayDependencies())` and
-`Pairing.StoredPairingReset.RunAsync(dataDirectory, protector: null, files: null, ct)`.
+The foundation's real bodies are `Core.RelayHost.Create(options, dependencies ?? new RelayDependencies())`,
+`Pairing.StoredPairingReset.RunAsync(dataDirectory, protector: null, files: null, ct)` and
+`Pairing.StoredPairingPayload.ReadAsync(dataDirectory, advertisedEndpoint, protector: null, files: null, ct)`.
 
 **`Protocol/ProtocolConstants.cs`** (`public static class ProtocolConstants`, namespace
 `LiveCue.Relay.Protocol`). It is the only C# file in which a protocol number is written. Its values are those
@@ -701,8 +729,15 @@ names:
 | `AudioSampleRate`, `AudioFrameBytes` | C-70, C-71 | `AllowanceBaseBytes`, `AllowanceBytesPerMs` | C-72 |
 | `LabBacklogBytes` | C-73 | `HealthDeadline` … `CancelDeadline` (one per route) | protocol 6.1 |
 
-The two patterns C-03 and C-06 are checked by hand-written functions in `Edge/RouteTable.cs` and
-`Catalog/OfferFilter.cs`, not by `Regex`.
+Members beyond the table: `MinBodyBytesPerSecond` and `MinBodyRateGrace` (protocol 5.1), `MaxJsonDepth`
+(protocol 5.4), `LabRelayProtocol` (protocol 9.2), `ForbiddenPort` (47831, which a relay never binds), and the
+numbers of section 4.1: `EventChannelCapacity` and `DroppedEventReportInterval` (W-01), `StopBudget` (W-02),
+`MaxPhoneQueueFrames` (W-03), `PhoneWriteStall` (W-04), `MaxStateFileBytes` (W-05), `MaxProbeBodyBytes` (W-06),
+`MaxSelfChecks` (W-07), `KilledProcessWait` (W-08), `FolderDeleteAttempts` and `FolderDeleteGap` (W-09),
+`DesktopTick` (W-10), `WindowCloseWait` (W-11), `SelfTestWatchdog` (W-12).
+
+The two patterns C-03 and C-06 are checked by hand-written functions in `Edge/RouteTable.cs`
+(`IsRequestIdShape`) and `Catalog/OfferFilter.cs` (`IsModelIdShape`), not by `Regex`.
 
 **`Protocol/RelayCodes.cs`** (`public static class RelayCodes`): one `public const string` per code of
 protocol 14.1, named in Pascal case (`Unauthorized = "UNAUTHORIZED"`), plus
@@ -2280,7 +2315,9 @@ Static text helpers with fixed signatures (WP-W06 and WP-W07 own the files):
 `PrerequisiteTexts.Failure(PrerequisiteId id)` returns the status-line text of architecture 3.11;
 `PrerequisiteTexts.StartFault(RelayFaultCode code, int port)` returns the step 7 texts;
 `MappingTexts.Effect(MappingAction action, string? endpoint, int relayPort)`;
-`MappingTexts.Refusal(MappingRefusal refusal, int httpsPort, string path)`.
+`MappingTexts.Refusal(MappingRefusal refusal, int httpsPort, string path)`. `PrerequisiteTexts` and
+`MappingTexts` are `public static` classes in namespace `LiveCue.Hosting`, because the desktop shows their texts;
+the classes behind `HostingFactory.Create` are `internal`, and `Processes.ProcessRunner` is `public`.
 
 ### 3.8 Desktop: services and the session
 
@@ -3044,8 +3081,8 @@ Notes on what Kestrel does and cannot do:
 
 | Id | Fact | Consequence |
 |---|---|---|
-| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. **For the orchestrator:** protocol 5.3 should read "besides `Content-Length`, `Date` and the connection headers" |
-| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. **For the orchestrator:** protocol 10.5 says "ping"; either accept this or reword it to "keep-alive frame". Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
+| K-1 | Kestrel adds a `Date` header to every response and has no switch for it | Every relay response carries `Date` next to the headers of protocol 5.3. The three 401 answers are identical in every byte the relay writes; `Date` varies with the clock only, never with the failing step. P2-008 is tested against the allowlist `Content-Type`, `Cache-Control`, `X-Content-Type-Options`, `Content-Length`, `Date`, `Connection`. Accepted by the orchestrator: protocol 5.3 now reads "besides `Content-Length`, `Date` and the connection headers" |
+| K-2 | The framework WebSocket sends a real Ping only in the mode that also aborts the socket when no Pong answers, and it skips Pings while data arrives. Without that mode it sends an unsolicited Pong frame every interval | The keep-alive frame of C-57 is an unsolicited Pong, and nothing is required of the phone. A phone ignores it exactly as it would answer a Ping invisibly. Accepted by the orchestrator: protocol 10.5 now says "keep-alive frame" and names the unsolicited Pong. Hand-written WebSocket framing on an internet edge was rejected as the larger risk |
 | K-3 | The framework WebSocket has no maximum message size | `PhoneSocket` receives into a buffer of C-20 plus one byte and stops at the first byte beyond C-20 |
 | K-4 | After a response to a request whose body the application did not read, Kestrel reads and discards the rest of the body unless the connection is closing | Every response written before the body was completely read carries `Connection: close`. No relay code and no Kestrel code reads a body before E-3 passes |
 | K-5 | A body below the minimum data rate makes the body read throw `BadHttpRequestException` | `BodyReader` turns it into `408 REQUEST_TIMEOUT` when the response has not started; otherwise Kestrel's bare 408 stands. Both are allowed by protocol 5.1 |
@@ -3140,7 +3177,7 @@ unprotects to exactly C-02 ASCII characters of the token alphabet; their SHA-256
 **Plaintext in memory.** The token is not kept between uses. It exists as a byte buffer only inside `Create`,
 `Load` (to verify), `Show`, `Reset`, `GetPayload` and a running self-check, and every buffer is cleared with
 `CryptographicOperations.ZeroMemory` in a `finally`. The only `string` that ever holds it is the return value
-of `GetPayloadAsync` (console host, `--show-pairing`).
+of `GetPayloadAsync` and of `StoredPairingPayload.ReadAsync` (console host, `--show-pairing`).
 
 **Payload and matrix.** The payload bytes are `{"endpoint":"` + canonical endpoint + `","token":"` + token +
 `"}`; both values consist of characters that need no JSON escaping, so no serialiser is involved and the text
@@ -3165,6 +3202,11 @@ C-49 token; result `NotVerified` when it returns false or times out, otherwise `
 
 **`PairingMaintenance`** forwards to `StoredPairingReset.RunAsync`, which creates a token and writes the file
 with the production protector and files, replacing whatever was there.
+
+**`StoredPairingExport`** forwards to `StoredPairingPayload.ReadAsync`, which reads and verifies the file as in
+Load with the production protector and files, never writes, and returns the payload text for the canonical
+form of the endpoint it is given, or null when there is no file. An unreadable file is `IOException` with a
+fixed message. It needs no relay, so it works while one runs on the same folder.
 
 ### 4.8 Catalogue (`Catalog/`)
 
@@ -3561,6 +3603,11 @@ address" when the name is unknown.
 | 7 | State `Running` | |
 | 8 | Unless an endpoint override is in force: `IMappingManager.InspectAsync` | `ConnectionInspected` |
 
+A start fault that happens before a relay exists (no endpoint in step 4, or a relay port of 47831, which never
+reaches a relay) is published as `RelayEventForwarded(RelayFaulted)` with the step 7 text, so that a host can
+follow events alone. The events a relay publishes during its own start are forwarded as soon as its
+`StartAsync` returns, in order and before anything else; the pump forwards every later one.
+
 When the pump forwards `RelayStopped(Fault)`, the supervisor disposes that instance and sets State `Stopped`.
 `StopAsync` calls the relay's `StopAsync`, waits for the pump to finish, disposes the instance.
 `ProductionRelayFactory.Create` calls `RelayFactory.Create(options, new RelayDependencies { Clock, Processes })`.
@@ -3570,9 +3617,12 @@ print usage, exit 2); build `HostingServices`; `--check-only`: `CheckAsync`, pri
 prerequisites passed." and exit 0, or print the failure text and exit 2. Otherwise `StartAsync`: a
 prerequisite failure prints its text and exits 2; a relay fault prints its text and exits 3. Then print each
 event (`ConsoleEventPrinter`: one text line, or with `--events json` one JSON object with `type` and the
-record's members, enums as their names). With `--show-pairing`, after `RelayStarted`, cast the relay to
-`IPairingExport`, print the payload text on one line and the terminal QR (two modules per character row using
-half-block characters, four-module quiet zone) once. Ctrl+C: `StopAsync`, exit 0. The host never prints the
+record's members, enums as their names). With `--show-pairing` nothing is started and no port is bound, so it works
+while the desktop app runs: run the checks (the Codex results are ignored), take the endpoint override or
+resolve the endpoint from the report's settings and DNS name exactly as step 4 does, call
+`StoredPairingExport.ReadPayloadAsync(dataFolder, endpoint)`, print the payload text on one line and the
+terminal QR (two modules per character row using half-block characters, four-module quiet zone) once, and
+exit 0. No pairing file, an unreadable one, or no endpoint prints a fixed text and exits 2. Ctrl+C: `StopAsync`, exit 0. The host never prints the
 payload without that flag and has no reset argument.
 
 ---
@@ -3917,8 +3967,9 @@ special code: its relay start fails with `PortInUse` and its window shows that t
 **Isolation, by construction.** The composition root is called with `HostingOverrides` in which every
 outward-facing part is scripted: `IRelayFactory` returns `ScriptedRelay`; `ISettingsStore` is in memory;
 `IPrerequisiteChecker` and `IMappingManager` return what the scene needs; `ITailscaleCli` is never reached;
-`IProcessRunner` and `IHostFileSystem` are instances that record every call and fail the self-test if one is
-made; `IClipboard` and `IExternalLauncher` are recording fakes. The real `RelaySupervisor`, the real
+`IProcessRunner` and `IHostFileSystem` are instances that record what is asked of them, and the self-test
+fails if a process is started or a file is read or written (the supervisor's question whether a bundled
+`asr\` folder exists is answered "no" and is not a failure); `IClipboard` and `IExternalLauncher` are recording fakes. The real `RelaySupervisor`, the real
 `DesktopSession`, the real view models, views and theme are used. So no port is bound, no command runs,
 the data folder is neither read nor written, and no network is used. The only files written are the
 screenshots and the log, and only with `--screenshots`.
@@ -4014,16 +4065,16 @@ projects, so that nothing is missing:
 | Area | First version |
 |---|---|
 | Contract files | Exactly as section 3, including `ProtocolConstants`, `RelayCodes`, `RelayErrors`, `FixedTexts`, `RouteTable`, `SpeechLease`, `MappingCommand`, complete |
-| Relay edge and host | A working minimum taken from the spike: listener on loopback, P-3, P-4, P-6, P-7, P-11 with `RelayException` handling, `BodyReader` rules 1, 2 and 4, `ResponseWriter`, `RelayHost` start, stop, pause flag and event channel. No deadlines, gauges, gate or presence nonce yet |
+| Relay edge and host | A working minimum taken from the spike: listener on loopback, P-1 to P-9 and P-11 with `RelayException` handling (the spike already had E-1, E-5, E-6 and presence), `BodyReader` rules 1, 2 and 4, `ResponseWriter`, `RelayHost` start, stop, pause flag and event channel. No deadlines, gauges, gate or presence nonce yet |
 | Routes 1 and 2 | Complete |
 | Pairing | A stub that creates a token in memory at start, verifies it, exports the payload, returns a fixed 21 x 21 matrix, and on reset replaces the token and cancels the revocation token (so the answer and speech packages can test a reset on their own branches) |
 | Catalogue, answers, PC model, speech | Stubs with the fixed constructors: the catalogue returns the fake source's entries unfiltered or an empty list; assist and summary answer `500 ASSISTANT_FAILED`; route 9 answers `404 REQUEST_NOT_FOUND`; the PC model reports MSG-2 and refuses with `LAB_NOT_CONFIGURED`; the speech bridge sends `LAB_NOT_CONFIGURED` and closes with 1008 |
 | Process runner | A stub that returns `StartFailed` |
 | Hosting | `HostingFactory.Create` complete; an in-memory settings store; a checker that passes when an endpoint override is given and otherwise fails check 4; a Tailscale CLI that reports "not installed"; a mapping manager that inspects as `Unknown` and refuses; a supervisor with the full step order of 4.16 |
 | Console host | Arguments parsed; runs the supervisor; prints events as text |
-| Desktop | The spike's window moved to `Shell/`; every style key of 5.3; stub view models that implement the interfaces with fixed values; a session that forwards Start and Stop; the app starts and shows the four pages |
+| Desktop | The spike's window moved to `Shell/`; every style key of 5.3; first-version view models that implement the interfaces (the relay state, the controls and the addresses follow the session; everything else is fixed); a session that forwards the commands and follows the supervisor's events for the relay state; the app starts and shows the four pages |
 | Tests | `Shared/`, every `Support/` folder with its fakes, `LiveCue.TestChild`, and the foundation tests of the test plan (section 1.1 there) |
-| CI | `.github/workflows/ci.yml` with the `windows` job of the test plan |
+| CI | `.github/workflows/windows.yml` with the `windows` job of the test plan, and a first version of `scripts/publish-windows.ps1` |
 
 **Provides.** Every contract. **Consumes.** Nothing.
 
@@ -4049,7 +4100,7 @@ touches no Windows source and can run beside any of them.
 | WP-W08 | Desktop core: chrome, navigation, session, theme | Every desktop file marked WP-W08, tests `Session/`, `Shell/`, `Theme/` | `IRelaySupervisor`, `IMappingManager`, page view-model interfaces (stubs) | `IDesktopSession`, `IShellViewModel`, `INavigator`, `IDialogHost`, `IToastHost`, every style key | Section 2.6 | 5.1 to 5.4 and 5.9 to 5.12 implemented; the contrast dictionary has the same keys as Daylight; the window matches the mockup's shell at both sizes | L |
 | WP-W09 | Live and Activity pages | `Live/`, `Activity/`, `Text/LiveText.cs`, `Text/ActivityText.cs`, tests `Live/`, `Activity/` | `IDesktopSession` (`FakeSession`), style keys | `ILiveViewModel`, `IActivityViewModel` | Section 2.7 | 5.5 and 5.7 implemented; every string of screens sections 2 and 4 is present verbatim | M |
 | WP-W10 | Pairing and Settings pages and both dialogs | `Pairing/`, `Settings/`, `Controls/QrCodeView.cs`, `Text/PairingText.cs`, `Text/SettingsText.cs`, tests `Pairing/`, `Settings/` | `IDesktopSession` (`FakeSession`), `HostingServices`, style keys | `IPairingViewModel`, `ISettingsViewModel`, the two dialog view models | Section 2.8 | 5.6, 5.8 and the dialogs of 5.9 implemented; the test that only the mapping dialog references `ExecuteMappingAsync` passes | L |
-| WP-W14 | CI, the audit, release | `scripts/` except the iPhone helpers and the WP-W12 files, `.github/` | The `windows` job of WP-W00; the iPhone helpers | `ci.yml`, `release.yml`, the audit | Test plan sections 5 and 6 | A pull request that touches only `windows/` starts no macOS job; the audit passes on the tree and on history, or its findings are listed for the orchestrator | M |
+| WP-W14 | CI, the audit, release | `scripts/` except the iPhone helpers and the WP-W12 files, `.github/` | The `windows` job of WP-W00; the iPhone helpers | `ci.yml`, `release.yml`, the audit | Test plan sections 5 and 6 | A push to a work-package branch that touches only `windows/` starts no macOS job; the audit passes on the tree and on history, or its findings are listed for the orchestrator | M |
 
 ### 6.4 Wave 2: three packages
 
