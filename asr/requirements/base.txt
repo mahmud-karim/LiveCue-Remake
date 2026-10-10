@@ -1,0 +1,8 @@
+# The service itself. Installed in both images and by the tests.
+# Versions are those of docs/spec/03-relay.md section 9.3.
+fastapi==0.135.1
+uvicorn==0.41.0
+websockets==16.0
+# FastAPI's WebSocket layer. Pinned so the images run the version the
+# protocol tests ran against.
+starlette==1.7.0

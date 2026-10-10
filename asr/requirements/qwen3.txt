@@ -1,0 +1,2 @@
+# Qwen3 image only. Brings vLLM with it.
+qwen-asr[vllm]==0.0.6

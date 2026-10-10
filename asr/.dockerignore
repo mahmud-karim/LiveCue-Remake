@@ -1,0 +1,5 @@
+# The images hold dependencies only, so the build needs nothing but the pinned
+# requirement files. Everything else stays out of the build context, above all
+# private/ (model weights) and any local virtual environment.
+*
+!requirements
