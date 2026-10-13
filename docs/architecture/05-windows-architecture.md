@@ -3490,6 +3490,13 @@ Three layers, composed as `CatalogReader` over `CachedCatalogSource` over the so
 | `OfferFilter` (protocol 7.1) | Drop hidden entries and ids that fail C-06 (`gpt-` followed by one or more of lower-case letters, digits, `.`, `-`, and nothing else; at most `ModelIdMaxLength` characters in all). Keep efforts that are in C-05, in order, without duplicates; for ids in C-07 remove `none` and put it first. Drop an entry left with no effort. `Name` is the display name when it is a non-empty string, otherwise the id |
 | `AssistantSelection.Validate` (protocol 7.3) | `assistant` absent, not an object, or `model` or `reasoningEffort` absent or not a string: `INVALID_ASSISTANT`. An offer with that id (ordinal) whose list contains that effort (ordinal): accepted. Otherwise `ASSISTANT_SELECTION_UNAVAILABLE` |
 
+As built (WP-W03): `CodexCatalogSource` also holds its own clock timer of C-44 for the attempt, so an
+attempt ends on the relay's clock even with a session that would not; `error` counts as present whatever
+its value, `null` included; the `id` of a reply must be a JSON number. A caller that leaves between two
+attempts of `CatalogReader` ends at once (the gap is a delay of the relay's clock under the caller's token).
+What `AssistantSelection` accepts is handed on as the catalogue's own two strings, never the request's.
+`OfferFilter` writes an effort as the protocol's own text of C-05.
+
 ### 4.9 Answers and the Codex run (`Answers/`)
 
 `AnswerCoordinator.HandleAsync`, the check order of protocol 8.2:
@@ -3503,8 +3510,32 @@ Three layers, composed as `CatalogReader` over `CachedCatalogSource` over the so
 | R-5 | `AssistantSelection` shape check | `400 INVALID_ASSISTANT` |
 | R-6 | `Catalog.ReadAsync(Work)` | `AssistantNotice`, then `503 ASSISTANT_CATALOG_UNAVAILABLE` |
 | R-7 | Selection is in the catalogue | `AssistantNotice`, then `400 ASSISTANT_SELECTION_UNAVAILABLE` |
-| | Publish `RequestStarted` (`Transcript`, `PartialTranscript`, `Instruction` are the body's members when they are strings; `PayloadJson` is the compact body). Register the run in `RunRegistry` under its id (compared ordinally, so letter case matters) with a token source linked to `Work` | |
+| | Publish `RequestStarted` (`Transcript`, `PartialTranscript`, `Instruction` are the body's members when they are strings; `PayloadJson` is the compact body) | |
 | R-8 | `IAnswerBackend.RunAsync`; then `AnswerValidator` | see below |
+
+As built (WP-W03), four details around these steps:
+
+- **The compact body.** Right after R-3 the body is re-written compactly (`WireJson.Compact`). A body that
+  parses but cannot be written again (a string or a member name that holds half of a surrogate pair as an
+  escape) is `400 INVALID_JSON`, before R-4. No such text reaches the prompt or an event.
+- **Registration for route 9.** The request is registered in `RunRegistry` under its id (compared
+  ordinally, so letter case matters) as soon as R-5 has passed, before the catalogue is read, with a token
+  source linked to `Work`. A cancel that arrives while the catalogue is still being read is therefore
+  answered truthfully: `200 cancelled`, and the request ends `409 REQUEST_CANCELLED` with no request event
+  (none had started). Before R-4 the id is not known, and a cancel is `404 REQUEST_NOT_FOUND`.
+- **Cancellation is one decision.** When the run has ended, the coordinator closes the registration and
+  reads "did route 9 cancel this id" in one step under the registry's lock. Route 9 answers `200 cancelled`
+  only while the registration is open. A request that route 9 cancelled always ends `409 REQUEST_CANCELLED`,
+  even when its run returned a valid answer in the same instant (the answer is discarded); a request whose
+  outcome is decided is no longer found by route 9. The two answers can never disagree.
+- **The slot and the response.** The slot is left, and the outcome event is published, before the response
+  is written, so the phone's next request can never be `ASSISTANT_BUSY` because of the one it just got an
+  answer to.
+
+The deadline: the coordinator holds its own clock timer of C-43 counted from P-1, linked with `Work`. The
+edge's `Work` carries the same deadline (4.4); both fire at the same instant and give the same answer. The
+coordinator's timer makes the one deadline of protocol 8.4 hold whatever the edge does, with the body read
+and the catalogue check inside it.
 
 Outcomes of R-8, first match wins; each publishes one `RequestFailed` with the same code unless it says
 otherwise:
@@ -3515,12 +3546,19 @@ otherwise:
 | Cause `ClientAborted` | none | `CLIENT_DISCONNECTED` |
 | Cause `RelayStopping` | none | `RELAY_STOPPING` |
 | Cause `PairingRevoked` | `401 UNAUTHORIZED` | `UNAUTHORIZED` |
-| Cause `DeadlineExceeded` | `504 ASSISTANT_TIMEOUT` | `ASSISTANT_TIMEOUT` |
-| Backend returned null, or the output fails validation | `500 ASSISTANT_FAILED` | `ASSISTANT_FAILED` |
+| Cause `DeadlineExceeded` (the edge's token or the coordinator's own timer) | `504 ASSISTANT_TIMEOUT` | `ASSISTANT_TIMEOUT` |
+| Backend returned null, threw, or the output fails validation | `500 ASSISTANT_FAILED` | `ASSISTANT_FAILED` |
 | Valid output | `200`; publishes `RequestCompleted` instead | |
 
-A deadline, abort or revocation before `RequestStarted` was published escapes to the pipeline (4.4) and
-publishes no request event.
+A cancelled request is thus never reported as a failure or as a time-out, and neither of those as cancelled.
+A backend that throws anything but a cancellation also raises `Diagnostic("answers", "The answer run failed
+unexpectedly.", exception)`; the request still gets its one `RequestFailed`. The message of a
+`CLIENT_DISCONNECTED` event, which has no row in the error table, is "The phone disconnected before the
+answer was ready."
+
+A cancel, deadline, abort or revocation before `RequestStarted` was published gives the same response as in
+the table and publishes no request event. For the two causes without a response the coordinator lets an
+`OperationCanceledException` escape, and the pipeline ends the connection (4.4).
 
 **Timings** (protocol 8.3), all from the clock's timestamps: `requestReadMs` from the body result;
 `codexMs` around `RunAsync`; `relayTotalMs` from P-1 to the return of `RunAsync`; each rounded to one decimal;
@@ -3550,23 +3588,127 @@ exactly.
 7. `finally`: delete the folder recursively (W-09). A folder that survives (a crash, a kill, three failed
    deletes) is removed by the next relay start (4.2 step 5).
 
+As built: step 2 creates `TempRoot` itself when it does not exist yet; a file of the drawn name fails the run
+like a folder does, and what was already there is never deleted. In step 7 one try takes the read-only
+attribute off everything in the folder when the first deletion is refused, and deletes again; a link inside
+the folder is removed as a link and never followed. The gap between tries is a timer of the relay's clock.
+
 **Containment of the answer run** (protocol 12.6). `Answers/CodexArguments.cs` holds the containment
-arguments as one fixed list. The builder of WP-W03 fills that list and this table in the same pull request
-(the one place where a wave 1 package edits this document): read `codex --help`, `codex exec --help` and
-the feature list they name on the build PC, add an argument for every switch that turns off a tool, a
-feature or a network capability, and write down what has no switch. Reading help output runs no model call.
-Nothing below was verified by the reviewers or by this document: every row marked "to fill" is the
-builder's to establish.
+arguments as one fixed list, `CodexArguments.Containment`. The builder of WP-W03 filled that list and this
+record together (the one place where a wave 1 package edits this document), and
+`CodexAnswerBackendTests.The_argument_list_is_exact` holds the list a second time, so the two cannot drift
+apart unnoticed.
+
+How it was established. On the build PC, with the newest `codex.exe` under
+`%LOCALAPPDATA%\OpenAI\Codex\bin\`, these were run and nothing else: `codex --version`, `codex --help`,
+`codex exec --help`, the help of `features`, `features list`, `debug`, `debug prompt-input`, `mcp`,
+`sandbox` and `app-server`, and `codex features list` itself, alone, with `--disable <name>` and with
+`-c <key>=<value>`. `features list` prints every feature with its stage and effective state and calls no
+model. It refuses an unknown feature name and a value of the wrong type for a known setting, which is how
+each name and each key below was confirmed to exist in this version; run against an empty folder as
+`CODEX_HOME` it gave the same states as against the owner's own, so the states below are this version's
+defaults. **No model request was made, nothing was signed in or out, and no configuration was changed.**
+What a switch does *inside a run* is therefore not verified by anything below: that is what the live
+containment check (L-4) is for, and it has not been run yet.
 
 | Item | Value |
 |---|---|
-| Codex version the list was read from | to fill (the text `codex --version` prints) |
+| Codex version the list was read from | `codex-cli 0.160.1` |
 | Always passed | `--sandbox read-only`, `--disable shell_tool`, `--ephemeral`, `--ignore-user-config`, `--ignore-rules`, `--skip-git-repo-check` |
-| Containment arguments, in order | to fill: one row per switch, with the capability it turns off (at least: patch application, image viewing by local path, web search, configured tool servers, project instruction files, wherever that version has a switch) |
-| Capabilities with **no** switch in that version | to fill; each one is a residual risk named in architecture 6.5 |
-| Is an unknown `--disable` name an error or only a warning? | to fill. If it is only a warning, a renamed feature would silently come back; say so here |
-| Does `--ignore-user-config` also drop the owner's retention or analytics choices? | to fill |
-| Result of the live containment check (test plan L-4) for that version | to fill: date and PASS or FAIL, never the canary value |
+| Containment arguments, in order | The 34 `--disable` switches and 13 `-c` settings of the two tables below |
+| Capabilities with **no** switch in that version | The list under "No switch" below; each one is a residual risk for architecture 6.5 |
+| Is an unknown `--disable` name an error or only a warning? | **An error.** `codex features list --disable no_such_feature` ends with exit code 1 and "Unknown feature flag". The same switch written as `-c features.no_such_feature=false` is accepted silently, which is why every feature is switched with `--disable` and none with `-c`. The option is the same one on `codex exec`, but whether `exec` also refuses could only be seen in a run. Consequence when it does: a later Codex that drops one of the 35 names fails every answer (`ASSISTANT_FAILED`) until the list is brought up to date; it never comes back unnoticed. A feature in the stage "removed" is still a known name |
+| Does `--ignore-user-config` also drop the owner's retention or analytics choices? | **Yes.** Its help text is "Do not load `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`". The owner's `[analytics]`, `[feedback]`, `[otel]`, `[history]` and `[windows]` sandbox choices live in that file and do not apply to an answer run. The careful value of each of the first four is therefore passed explicitly (second table). The Windows sandbox choice has no value that could be passed without changing the system; see "No switch" |
+| Result of the live containment check (test plan L-4) for that version | **Not run.** The builder was told not to run it. Until it has passed for `codex-cli 0.160.1`, this record is a reading of help output and not a checked property. How to run it: the summary of `CodexContainmentLiveTests` in `windows/tests/LiveCue.Relay.Tests/Answers/` (it is `[LiveFact("LIVECUE_LIVE_CONTAINMENT")]`, category `Live`, never part of an ordinary or CI run) |
+
+Feature switches, in the order they are passed. Each is `--disable <name>`. "Default" is the state
+`features list` reports for 0.160.1 without any switch; every feature here has the stage "stable".
+
+| # | `--disable` | Default | What it turns off |
+|---|---|---|---|
+| (always) | `shell_tool` | on | The shell command tool. Confirmed off in the listing |
+| 1 | `unified_exec` | on | The second command tool (commands in a terminal session). **Accepted, and has no effect in 0.160.1: the listing still reports it on.** See "No switch" |
+| 2 | `unified_exec_tty` | on | The terminal mode of that tool |
+| 3 | `shell_snapshot` | on | Reading the owner's shell environment for commands |
+| 4 | `view_image` | on | Image viewing by local path |
+| 5 | `image_generation` | on | Image generation |
+| 6 | `apps` | on | Apps (connectors): tool servers that come with the account |
+| 7 to 10 | `plugins`, `plugin_sharing`, `remote_plugin`, `recommended_plugins` | on, on, on, off | Plugins, which bring tools, tool servers and hooks, local or fetched |
+| 11 | `hooks` | on | Commands run on events |
+| 12, 13 | `skill_search`, `skill_mcp_dependency_install` | on | Searching for skills, and installing the tool servers a skill asks for |
+| 14, 15 | `tool_suggest`, `tool_call_mcp_elicitation` | on | Offering to install tools; tool servers asking questions back |
+| 16 | `memories` | off | Reading and writing memory files in the Codex home |
+| 17, 18 | `multi_agent`, `multi_agent_v2` | on, off | Starting further agents |
+| 19, 20 | `goals`, `sleep_tool` | on | The goal tool and the sleep tool |
+| 21 to 24 | `browser_use`, `browser_use_external`, `browser_use_full_cdp_access`, `computer_use` | on | Driving a browser; driving the desktop |
+| 25 to 29 | `in_app_browser`, `in_app_chat`, `in_app_dictation`, `in_app_local_automation`, `in_app_updates` | on | Features of the Codex desktop application, local automation and self-update among them |
+| 30 | `realtime_conversation` | on | The realtime voice connection |
+| 31 | `code_mode_host` | on | The local code-execution host |
+| 32, 33 | `workspace_dependencies`, `worktrees` | on | Installing a workspace's dependencies; managed Git worktrees |
+| 34 | `daemon_auto_start` | on | Starting the shared background server, which would outlive the run |
+
+Settings, in the order they are passed after the features. Each is `-c <key>=<value>`; a string value
+holds its double quotes as characters of the argument, like the two `-c` values of protocol 12.2.
+
+| # | `-c` | What it turns off |
+|---|---|---|
+| 1 | `web_search="disabled"` | Web search (the other values are `cached`, `indexed`, `live`). `--search` is never passed |
+| 2 | `project_doc_max_bytes=0` | Project instruction files (`AGENTS.md` from the working folder upwards) |
+| 3 | `apps._default.enabled=false` | Every app that is not named: configured tool servers of the account |
+| 4 | `skills.bundled.enabled=false` | The skills that come with Codex |
+| 5 | `allow_login_shell=false` | A command asking for a login shell, which loads the owner's shell profile |
+| 6 | `shell_environment_policy.inherit="none"` | Passing Codex's own environment on to a command, should one run after all |
+| 7, 8 | `analytics.enabled=false`, `feedback.enabled=false` | Usage data and feedback upload |
+| 9 to 11 | `otel.exporter="none"`, `otel.trace_exporter="none"`, `otel.metrics_exporter="none"` | Telemetry export |
+| 12 | `check_for_update_on_startup=false` | The update check |
+| 13 | `history.persistence="none"` | The prompt history file (`--ephemeral` covers the session files) |
+
+Left on deliberately, with their stage "stable" and default on: `auth_elicitation`, `secret_auth_storage`
+(switching these off could keep Codex from its own sign-in), `enable_request_compression`,
+`unbounded_connection_retries`, `system_proxy_fallback`, `fast_mode` (how Codex reaches its model service;
+none is a tool), `compaction_image_budget`, `content_item_kinds`, `mentions_v2`,
+`guardian_reuse_parent_compaction` (message handling), and `guardian_approval` and `write_stdin_approval`
+(approval safeguards: off would remove a check, not a capability). The features in the stages "under
+development", "experimental", "deprecated" and "removed" (about a hundred names) are not passed: the first
+three stages are all off by default, a "removed" name no longer switches anything, the one file that could
+turn a feature on is not loaded, and naming them would make every answer fail on the day a Codex update
+drops a name. The price is stated plainly: **when a Codex update turns such a feature on by default, this
+list does not switch it off.** That is what the version warning of the desktop and a new run of L-4 are
+for. The whole list as it stands in `CodexArguments.cs` was given to `codex features list` once more at the
+end: exit code 0, and `unified_exec` the only named feature still reported on.
+
+No switch in `codex-cli 0.160.1` (residual risks; the orchestrator carries them into architecture 6.5):
+
+1. **The second command tool, `unified_exec`.** `--disable unified_exec` and
+   `-c features.unified_exec=false` are both accepted and the feature stays on; no other setting found in
+   the help switches it. Whether `--disable shell_tool` alone keeps the model from being offered the
+   terminal tool cannot be read from help output. This is the first thing L-4 has to show, and the most
+   likely way for a prompt injection to read a file. If the check fails here, the answer area must not be
+   used with this Codex.
+2. **Patch application.** No feature and no setting switches the patch tool off (`apply_patch_freeform` is
+   in the stage "removed"). What bounds it is `--sandbox read-only`, which refuses the write; it reads
+   nothing.
+3. **All configured tool servers at once.** There is no "no tool servers" switch. The `[mcp_servers]` of the
+   owner are in the file that `--ignore-user-config` skips, and apps and plugins are switched off above.
+   `-c mcp_servers={}` is accepted, but whether an empty table removes the entries of another configuration
+   layer is not known, so it is not passed. A system-wide or managed Codex configuration, if the PC has
+   one, is still read.
+4. **The owner's own instruction file and skills in the Codex home.** `project_doc_max_bytes=0` covers
+   project files only. Whether the user-level `AGENTS.md` and the skills under the Codex home are still
+   shown to the model with `--ignore-user-config` cannot be read from help output. They are the owner's own
+   text, not an attacker's, but their content would be part of the prompt.
+5. **The environment context.** Codex tells the model its working folder, which is under the data folder and
+   so holds the Windows account name. `include_environment_context` exists as a setting; it is not passed,
+   because it is neither a tool nor a network capability and its effect on a run could not be checked.
+6. **The Windows sandbox mode.** `[windows] sandbox` (`elevated`, `unelevated`, `mxc`) is in the file that is
+   not loaded. Whether `--sandbox read-only` is then enforced by the operating system for a command is not
+   known. Nothing relies on it: the design counts on no command tool being offered at all (item 1).
+7. **The shared background server.** `codex exec` has no `--no-daemon`; `daemon_auto_start` is switched off.
+   Whether `exec` would use a server that is already running (started by the owner's Codex application,
+   with the owner's own configuration) cannot be read from help output.
+8. **Whether the run works at all with these 47 switches**, and whether the allowlisted environment is
+   enough for Codex to find its sign-in. `codex --version` and `codex features list` do start and read their
+   configuration with exactly the allowlist; a model request was not made. L-1 and L-4 show both.
 
 The environment of the run is the `CodexAllowlist` policy (4.13). The read-only sandbox and the empty
 working folder stay, and neither is counted as protecting the owner's files (protocol 12.6).
@@ -3848,6 +3990,27 @@ copies the thirteen names of protocol 11.5; `CodexAllowlist` copies those thirte
 `CODEX_HOME`, `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY` and `NO_PROXY` (protocol 12.6). The lists are two
 `static readonly` arrays in that file and are written nowhere else.
 
+As built (WP-W03):
+
+- Each redirected stream has a thread of its own (the pipes of a child are synchronous handles), so a child
+  that fills one pipe never stops the relay's wait on another.
+- With an output limit above zero a run ends as `Exited` when standard output has ended **and** the process
+  has exited, so the output is complete. With a limit of zero the output is read and thrown away, and the
+  run ends when the process exits, whatever a descendant still holds open.
+- `Cancelled` wins over `TimedOut` when both apply. A run whose token is already cancelled starts nothing.
+- A process that cannot be placed in the job although `KillWithApplication` is set is killed at once and
+  reported as `StartFailed`: nothing runs that could outlive the application.
+- After a normal exit the runner kills nothing: what the process started stays in the job and ends with the
+  application. Only time-out, cancellation, overflow and dispose kill the tree.
+- A line session counts every byte of standard output against the limit. When the limit or the time limit
+  is passed, the lines that had arrived are still read, and the read after them throws; a write to a
+  session whose process is gone throws `ProcessFailedException` (`Exited`, or the session's own failure).
+- The wait of W-08 is a timer of the runner's clock. With a clock that a test moves by hand it never fires,
+  and the runner waits until the killed process has really gone.
+- `LiveCue.TestChild` has the modes `spawn` (a grandchild, for tree kills) and stand-ins for
+  `codex app-server` and `codex exec`. A test reaches them through the production runner by starting the
+  program with the dotnet host and appending `--stub <scenario> --report <file>` to the real arguments.
+
 ### 4.14 Hosting: settings, discovery, prerequisites
 
 **`settings.json`** (architecture 3.5): UTF-8, two-space indent, the twelve members in the order of the
@@ -3926,6 +4089,30 @@ needs the mapping manager and applies to one mode only. The containment warning 
 check was last run for `<w>`." (with "Codex's version could not be read" in place of the first clause when
 the version is null, and "the containment check has not been run yet" when nothing was recorded), then
 "Run the containment check, then choose Mark as checked in Settings."
+
+**Settled by the build (WP-W06)**, where the text above left a choice open:
+
+- `settings.json` is written without a byte-order mark, with line feeds and one final line feed, like
+  `pairing.json`. A byte-order mark in front of a file is accepted when it is read.
+- "Wrong JSON type" and "wrong value" are told apart, so that as much of a damaged file as possible stays
+  `Invalid` (which keeps the ledger) rather than `Unreadable` (which keeps nothing). `Unreadable`: not a JSON
+  object; a member of the ten of the first format missing; a member, or a member of a ledger entry, of the
+  wrong JSON type; a ledger entry that is not an object or lacks one of its five members. `Invalid`: a number
+  that is not a 32-bit integer (`OutOfRange`, `NotAllowed` or `UnsupportedVersion` by its field); a mode text
+  other than the two words (`NotAllowed`); a ledger entry whose mode is neither word or whose `createdAt` is
+  not an ISO 8601 time (`BadFormat`, that entry only).
+- A ledger `target` must be the port in its plain decimal form: `http://127.0.0.1:047841` is `BadFormat`.
+- `createdAt` is stored as UTC to the second. An entry that is saved and loaded again therefore differs from
+  the one in memory by its fraction of a second: code that looks for "this entry" in the ledger of a later
+  load compares mode, port, path and target, or builds its entries with whole seconds.
+- The "letters" and "digits" of the Codex version text are the ASCII ones.
+- `LabFolderResolver` holds a lab folder given for one run (the console host's `--lab`) to the same rule as
+  the setting.
+- `CodexLocator`: the configured path must be absolute; an entry of `PATH` that is not an absolute path is
+  skipped (it would depend on the current folder); `%LOCALAPPDATA%` is read through
+  `IHostFileSystem.GetEnvironmentVariable`, the only source the seam offers.
+- `ReadVersionAsync` and `IsSignedInAsync` answer "unknown" and "not signed in" for a path the process runner
+  refuses to start, instead of throwing.
 
 ### 4.15 Hosting: the mapping manager (`Tailscale/`)
 
@@ -4094,6 +4281,44 @@ mode, and in JSON mode it leaves out the members `Transcript`, `PartialTranscrip
 is given. Third, a start that returns `ExposedInPrivateMode` prints its text and exits 2, like a
 prerequisite failure. Fourth, a stale containment check (`ContainmentCheckIsStale`) prints its warning line
 once after the checks and changes no exit code.
+
+**Settled by the build (WP-W06)**, where the text above left a choice open:
+
+- Supervisor. The three inspections of a start (step 4a, the one after `PortInUse`, step 8) are made for the
+  settings in force for that run, the overrides of the run applied: the exposure report is about the port the
+  relay really asks for. `InspectConnectionAsync` on demand uses the saved settings. A start that arrives
+  while a stored-pairing reset holds the gate waits for it; one that arrives while another start or a stop is
+  under way returns `AlreadyRunning` at once. `StopAsync` gives the relay W-02 plus one second, on the
+  supervisor's clock, for its stop and its dispose together, and then abandons that instance.
+- `EndpointResolver` removes one trailing dot from the name and nothing else: a name with a space or a line
+  break gives null.
+- `HostProgram.RunAsync(args, services, output, cancel)`: `output` is a `HostOutput(Writer, IsRedirected)`.
+- Exit codes: 0 after a clean stop, a passed `--check-only` and a shown pairing; 2 for a usage error, a failed
+  prerequisite, the refusal of check 6a and a pairing that cannot be shown; 3 for a relay start fault and for
+  a relay that stops by itself while the host runs (the host then ends instead of waiting for Ctrl+C; it
+  never restarts the relay).
+- Arguments. `--data-dir`, `--codex` and `--lab` are made absolute against the current folder. A `--data-dir`
+  that is the previous LiveCue's `%LOCALAPPDATA%\LiveCue` folder, or lies inside it, is a usage error.
+- Text lines. A `RelayFaulted` event prints `Relay fault: <CODE>.`; the text of architecture 3.11 is the
+  host's last line. `PhoneSeen` prints "iPhone seen." once until another line is printed. `--check-only`
+  prints its result line first and the containment warning after it.
+- JSON lines (`--events json`): `type` is the record's name, then `at`, then the record's other members in
+  camel case; an event of the relay is written as itself, not wrapped in `RelayEventForwarded`. So that every
+  line of a run is one JSON object, the host's own lines are objects too:
+  `{"type":"Warning","message":…}` for the containment warning and
+  `{"type":"Failure","message":…,"exitCode":…}` for the text it ends with. `--check-only` and
+  `--show-pairing` print text in either form.
+- `--show-pairing`: a failed check other than the two Codex checks prints its text of architecture 3.11; no
+  endpoint prints "The PC address could not be resolved."; no pairing file prints "No pairing has been
+  created yet. Start LiveCue once, then run this again."; an unreadable one prints the text that
+  architecture 3.11 gives for `PAIRING_STORE_UNREADABLE`. The line for a redirected output on the default
+  folder is "The pairing is shown only in an interactive console. Run --show-pairing in a terminal window,
+  without redirecting its output."
+- Terminal QR. `TerminalQr` encodes the payload text itself, with the parameters of `QrMatrix.Encode` (4.7)
+  and the QR package the relay already ships, because the relay's public surface hands out a matrix only from
+  a running relay. Light modules are the written characters and dark modules are left empty, so that the
+  code is the right way round on a dark terminal. For this one run the console is switched to UTF-8 and
+  switched back; a redirected output keeps its encoding.
 
 ---
 
@@ -4751,6 +4976,14 @@ the workflow's restore step (`--locked-mode`).
 - `RunRegistry` compares ids ordinally (A-13); `ModelsRoute` writes the shape of 4.6 (A-07).
 - Changed test names in test plan 1.4 (P2-064); adds P2-065, ST-03 (two tests), ST-13 (two tests), ST-15
   (`WorkFolderTests`, except the start-time case).
+- As built: the containment table of 4.9 is filled for `codex-cli 0.160.1`. **L-4 was not run** (the
+  builder was told not to make a model request); 4.9 says so in its last row. The package adds a live
+  containment check of its own, `LiveCue.Relay.Tests/Answers/CodexContainmentLiveTests.cs`, which needs
+  nothing of the hosting library: it finds the newest `codex.exe` of the per-user installation (or the file
+  `LIVECUE_CODEX_EXE` names) and starts a relay through `RelayFactory`. The file of the same name in
+  `LiveCue.Hosting.Tests/LiveSmoke/` stays WP-W06's; until it exists, the relay-side test is L-4.
+- As built: `Contracts/SmokeTests.cs` (foundation) had two assertions on the stand-in answers of routes 7
+  and 8 (`500 ASSISTANT_FAILED`); they now expect the real `200`.
 
 **WP-W04 PC model control**
 
