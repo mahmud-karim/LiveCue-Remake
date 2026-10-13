@@ -12,6 +12,8 @@ actor FixtureAnswerService: AnswerService, OpenRouterKeyVerifying {
 
     private let mode: TestMode
     private let clock: any AppClock
+    /// The sessions whose first answer has already failed (`-assist-fails-once`).
+    private var failedSessions: Set<UUID> = []
 
     init(provider: AssistantProvider, mode: TestMode, clock: any AppClock) {
         self.provider = provider
@@ -19,31 +21,67 @@ actor FixtureAnswerService: AnswerService, OpenRouterKeyVerifying {
         self.clock = clock
     }
 
+    /// The Codex catalogue waits 8 s first with `-pc-catalog-slow`.
     func loadCatalogue() async throws -> [AssistantModelOption] {
-        // STUB(WP-08)
-        provider == .codex ? FixtureValues.codexCatalogue : FixtureValues.openRouterCatalogue
+        switch provider {
+        case .codex:
+            if mode.pcCatalogSlow {
+                try await clock.sleep(seconds: FixtureValues.catalogueSlowSeconds)
+            }
+            return FixtureValues.codexCatalogue
+        case .openrouter:
+            return FixtureValues.openRouterCatalogue
+        }
     }
 
+    /// The partial text, 0.4 s, then the fixed answer. With `-assist-fails-once` the first call for each
+    /// session id fails instead, after the partial text was shown.
     func answer(
         _ request: AssistRequest,
         onProgress: @escaping @Sendable (String) async -> Void
     ) async throws -> AssistResponse {
-        // STUB(WP-08)
-        throw OpenRouterError.unavailable
+        await onProgress(FixtureValues.partialAnswer)
+        try await clock.sleep(seconds: FixtureValues.assistPartialSeconds)
+
+        if mode.assistFailsOnce, !failedSessions.contains(request.sessionId) {
+            failedSessions.insert(request.sessionId)
+            throw OpenRouterError.unavailable
+        }
+
+        var response = AssistResponse(
+            detectedQuestion: provider == .codex ? FixtureValues.segmentText : AssistantTurn.latestConversation,
+            answer: FixtureValues.answer,
+            details: FixtureValues.details,
+            // No marker: the app owns it for both services.
+            memory: SessionMemory(summary: FixtureValues.answer, facts: [], openQuestions: [], throughSegmentId: nil)
+        )
+        var execution = FixtureValues.execution
+        if let assistant = request.assistant {
+            execution.model = assistant.model
+            execution.reasoningEffort = assistant.reasoningEffort
+        }
+        if provider == .openrouter {
+            execution.usage = FixtureValues.openRouterUsage
+        }
+        response.execution = execution
+        return response
     }
 
     func summarize(_ request: SummaryRequest) async throws -> SummaryResponse {
-        // STUB(WP-08)
-        throw OpenRouterError.unavailable
+        SummaryResponse(
+            title: FixtureAnswerService.summaryTitle,
+            summary: FixtureValues.answer,
+            keyPoints: [FixtureValues.details],
+            actionItems: []
+        )
     }
 
-    func cancel(requestId: UUID) async {
-        // STUB(WP-08)
-    }
+    /// Nothing is kept in flight here, so there is nothing to cancel.
+    func cancel(requestId: UUID) async {}
 
-    func verify(key: String) async throws {
-        // STUB(WP-08)
-    }
+    func verify(key: String) async throws {}
+
+    static let summaryTitle = "Local transcription"
 }
 
 struct FixtureAnswerServices: AnswerServiceProviding {
@@ -56,7 +94,6 @@ struct FixtureAnswerServices: AnswerServiceProviding {
     }
 
     func service(for provider: AssistantProvider) -> any AnswerService {
-        // STUB(WP-08)
         switch provider {
         case .codex: return codex
         case .openrouter: return openRouter

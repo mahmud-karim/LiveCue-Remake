@@ -2183,6 +2183,36 @@ Helper types owned by WP-08, used only inside `Session/`:
 }
 ```
 
+What the declarations leave open, as built by WP-08. No declaration changes; the members named here are
+internal additions.
+
+- `SessionController.dependencies` is internal, so that the two extension files can read it. The state
+  changes of the Assist pipeline are methods of `SessionController.swift` (`clearAssistCard`,
+  `showAssistPrecondition`, `beginAssist`, `setAssistStage`, `transcribePendingAudio`, `rememberAssist`,
+  `showStreamedAnswer`, `saveAnswer`, `failAssist`, `endAssist`); nothing outside `Session/` calls them.
+  `waitUntilSettled()` returns when every transcriber event emitted so far was applied and no save is
+  queued or running; the app never needs it, tests wait with it.
+- The usage of the session in progress is observable state of its own and is copied into `session` at each
+  save, so a usage event redraws the cost and nothing else. `estimatedCost` reads it.
+- A `failed` of the current generation that arrives while the phase is still `connecting` or `resuming` is
+  kept (T-20). When the start call throws it is forgotten; when the start call returned it is applied
+  right after T-04 or T-12, as T-09 or T-10.
+- `level` goes to 0 as soon as the phase leaves `listening` (at T-06, T-10 and T-14), not only at T-07, so
+  that it is 0 whenever the session is not listening.
+- Ending a session, and a failed start, put the observable state back to that of no session (partial,
+  level, elapsed time, status, notice, streamed text, Assist error, latest turn, retry memory). The three
+  counters only ever rise.
+- A precondition of step 2 sets `assistError` and leaves `assistFailedCount` alone: the Assist did not
+  start. A cancellation changes neither. `showStreamedAnswer` and `saveAnswer` drop what names another
+  session, or arrives when no Assist is running.
+- `SessionPersistence` stamps a save with `clock.now()` when it hands it to the store. A save the store
+  refuses is dropped; the next one carries the whole session again.
+- The summary keeps the session as it was saved at Stop and writes that copy back with the reply's title
+  and notes. `cancelSummary` forgets the summary first, so a reply that still arrives is dropped.
+- Both live services also cancel their request when the calling task is cancelled.
+- `FixtureAnswerService` throws its one failure of `assistFailsOnce` after the 0.4 s wait, so the partial
+  text is on screen first. Its `cancel` does nothing: it keeps nothing in flight.
+
 #### 3.2.8 State owners
 
 ```swift
@@ -3074,7 +3104,7 @@ save has been made. Guards are checked synchronously on entry, and the phase is 
 | T-17 | any with a session | tick, every 1 s | | `elapsedSeconds = floor(clock.now() − startedAt)`; save. | same |
 | T-18 | any phase in which `g` is current (`connecting`, `listening`, `pausing`, `resuming`, `ending`) | event `status`, `partial`, `segment`, `usage`, `lastChunk`, `level` with generation `g` | `level` only in `listening` | Apply (4.1.3). | same |
 | T-19 | any | event whose generation is not `g`, or any event after `g` was retired | | Dropped. | same |
-| T-20 | any except `listening` | event `failed` | | Ignored; the call in progress reports its own outcome. | same |
+| T-20 | any except `listening` | event `failed` | | Ignored; the call in progress reports its own outcome. One case is kept instead of ignored: a `failed` of generation `g` in `connecting` or `resuming` can belong to a start that has already returned (3.2.5, as built). If the start throws, it is forgotten; if the start returned, it is applied right after T-04 or T-12, as T-09 or T-10. | same |
 | T-21 | any with a session | `assist()`, `retrySameText()` | not assisting, not transitioning | 4.3. `assisting` is an overlay; the phase does not change. | same |
 | T-22 | any | the app goes to the background or the phone locks | | Nothing. With an active audio session the process keeps running (background mode `audio`); the tick, capture and polling continue. | same |
 | T-23 | any | the app becomes active | | `relay.appBecameActive()`. The next tick recomputes the elapsed time from the wall clock. | same |
@@ -3288,7 +3318,7 @@ Launch order: `LaunchConfiguration.current`; `AppEnvironment.make` (in fixture m
 |---|---|
 | `FixtureTranscriber.start` | Status "Listening"; for a streaming provider `usage(.begin)`; emits the fixture segment (start = the stream offset, end = offset + 3); starts a 1 s loop that, while started, emits `usage(.update)` adding 1,000 ms sent and processed with `hasTranscript` true, and `level(0.4)`. On-device providers emit no usage. |
 | `FixtureTranscriber.finalize` | Stops the loop; streaming: `usage(.finish(completed: true))`; status "Paused". `transcribePending` returns 0. |
-| `FixtureAnswerService.answer` | `onProgress(partialAnswer)`; sleep 0.4 s; return the fixed answer with detected question = the fixture segment (Codex) or the sentinel (OpenRouter), the details, a memory, and `execution` echoing the request's selection with the fixture timings; OpenRouter adds the fixture usage. With `assistFailsOnce`, the first call for each session id throws `OpenRouterError.unavailable` after the progress call. |
+| `FixtureAnswerService.answer` | `onProgress(partialAnswer)`; sleep 0.4 s; return the fixed answer with detected question = the fixture segment (Codex) or the sentinel (OpenRouter), the details, a memory, and `execution` echoing the request's selection with the fixture timings; OpenRouter adds the fixture usage. With `assistFailsOnce`, the first call for each session id throws `OpenRouterError.unavailable` after the progress call and the 0.4 s wait. |
 | `FixtureAnswerService.loadCatalogue` | The Codex or OpenRouter fixture catalogue; Codex waits 8 s first with `pcCatalogSlow`. `verify(key:)` returns at once. `summarize` returns a fixed summary. |
 | `FixtureRelayGateway.health` | Success; with `pcOffline`, `RelayFailure.local(.unreachable)`, which is what a PC that is switched off gives (protocol 13.6 row 5) |
 | `FixtureRelayGateway` PC model | Starts `stopped` (MSG-3; MSG-1 is never sent on the wire). Start: `starting` (MSG-6) for 1 s, or 6 s with `pcModelSlowStart`, then `ready` (MSG-4); with `pcModelStartError`, `error` (MSG-8) instead. Stop: `stopping` (MSG-7) for 1 s, then `stopped` (MSG-3). `elapsedSeconds` counts whole seconds of the running operation. |
