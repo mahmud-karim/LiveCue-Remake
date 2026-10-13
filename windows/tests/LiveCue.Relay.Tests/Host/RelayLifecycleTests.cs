@@ -1,7 +1,9 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Text;
 using LiveCue.Relay.Core;
 using LiveCue.Relay.Tests.Edge;
 using LiveCue.Relay.Tests.Support;
@@ -364,20 +366,11 @@ public sealed class RelayLifecycleTests
         // ends the stop.
         await using var host = await RelayTestHost.StartAsync();
         var port = host.Port;
-        using var blocker = new ManualResetEventSlim();
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        host.Catalog.Loader = () =>
-        {
-            entered.TrySetResult();
-            blocker.Wait(TimeSpan.FromSeconds(30));
-            return FakeCatalogSource.Fixture;
-        };
+        var release = HoldAnswerRuns(host);
 
         try
         {
-            using var raw = await host.OpenRawAsync();
-            await raw.SendAsync(host.RawHead("GET /v1/models HTTP/1.1"));
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            using var raw = await SendStubbornRequestAsync(host);
             var watch = Stopwatch.StartNew();
             await host.Relay.StopAsync(CancellationToken.None);
             var stopTook = watch.Elapsed;
@@ -391,7 +384,7 @@ public sealed class RelayLifecycleTests
         }
         finally
         {
-            blocker.Set();
+            release.TrySetResult();
         }
     }
 
@@ -400,20 +393,11 @@ public sealed class RelayLifecycleTests
     {
         // The same stubborn request; this time the relay's clock passes C-58 and then W-02.
         await using var host = await RelayTestHost.StartAsync();
-        using var blocker = new ManualResetEventSlim();
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        host.Catalog.Loader = () =>
-        {
-            entered.TrySetResult();
-            blocker.Wait(TimeSpan.FromSeconds(30));
-            return FakeCatalogSource.Fixture;
-        };
+        var release = HoldAnswerRuns(host);
 
         try
         {
-            using var raw = await host.OpenRawAsync();
-            await raw.SendAsync(host.RawHead("GET /v1/models HTTP/1.1"));
-            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            using var raw = await SendStubbornRequestAsync(host);
             var timersBefore = host.Clock.ScheduledTimers;
             var watch = Stopwatch.StartNew();
             var stop = host.Relay.StopAsync(CancellationToken.None);
@@ -428,7 +412,50 @@ public sealed class RelayLifecycleTests
         }
         finally
         {
-            blocker.Set();
+            release.TrySetResult();
+        }
+    }
+
+    /// <summary>
+    /// Makes every answer run of <paramref name="host"/> ignore its token: it ends only when the returned
+    /// source is completed. An answer run is the one piece of work a request awaits to its end (the
+    /// coordinator waits for the backend, whose real implementation kills its process when told to). A
+    /// catalogue read cannot play this part: it runs under the relay's stopping token on its own task,
+    /// and a caller's token ends that caller's wait (W-design 4.8), so a request that waits for one ends
+    /// at once however stubborn the source is.
+    /// </summary>
+    private static TaskCompletionSource HoldAnswerRuns(RelayTestHost host)
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.Backend.Handler = async (_, _) =>
+        {
+            await release.Task;
+            return null;
+        };
+        return release;
+    }
+
+    /// <summary>Sends an answer request and returns once its run, held as above, has started.</summary>
+    private static async Task<RawHttp> SendStubbornRequestAsync(RelayTestHost host)
+    {
+        var edge = ((RelayHost)host.Relay).Edge!;
+        var body = Bodies.Assist();
+        var raw = await host.OpenRawAsync();
+        try
+        {
+            await raw.SendAsync(
+                host.RawHead("POST /v1/assist HTTP/1.1", ("Content-Length", Encoding.UTF8.GetByteCount(body).ToString(CultureInfo.InvariantCulture)))
+                + body);
+            await host.Backend.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            // The request is inside the pipeline, which is what a stop waits for.
+            Assert.Equal(1, edge.Gauge.InFlight);
+            return raw;
+        }
+        catch
+        {
+            raw.Dispose();
+            throw;
         }
     }
 
