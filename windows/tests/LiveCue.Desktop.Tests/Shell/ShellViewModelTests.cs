@@ -12,8 +12,9 @@ namespace LiveCue.Desktop.Tests.Shell;
 /// <summary>
 /// The window's view model over a <see cref="FakeSession"/> (test plan 2.6): navigation, Escape, the
 /// sidebar card, the dialog and toast layers, the first render and the bounded close. The tests of the
-/// foundation's page view models at the end of this file stay until the page packages (WP-W09, WP-W10)
-/// replace them with the tests of sections 2.7 and 2.8.
+/// foundation's Pairing and Settings view models at the end of this file stay until their page package
+/// (WP-W10) replaces them with the tests of section 2.8; those of Live and Activity are in the folders
+/// Live and Activity (section 2.7).
 /// </summary>
 public sealed class ShellViewModelTests
 {
@@ -205,66 +206,6 @@ public sealed class ShellViewModelTests
     }
 
     [Fact]
-    public void The_live_page_shows_the_controls_of_each_state_and_forwards_its_commands()
-    {
-        var parts = new Parts();
-        var live = parts.Shell.Live;
-
-        Assert.Equal("Stopped", live.RelayStatus.Text);
-        Assert.True(live.IsStartVisible);
-        Assert.False(live.AreRunningControlsVisible);
-        Assert.Equal("Start relay", live.StartLabel);
-        Assert.Equal("Shown when the relay is running", live.PcAddress);
-        Assert.False(live.HasPcAddress);
-        Assert.Equal("Your next question will appear here.", live.TranscriptText);
-
-        live.StartRelayCommand.Execute(null);
-        parts.Session.State = RelayUiState.Checking;
-        Assert.True(live.IsStartBusy);
-        Assert.Equal("Checking Codex and Tailscale…", live.RelayStatus.Text);
-
-        parts.Session.AdvertisedEndpoint = "https://pc.example.test:11443/";
-        parts.Session.State = RelayUiState.Ready;
-        Assert.False(live.IsStartVisible);
-        Assert.True(live.AreRunningControlsVisible);
-        Assert.Equal("Pause relay", live.PauseResumeLabel);
-        Assert.Equal("https://pc.example.test:11443/", live.PcAddress);
-
-        live.PauseResumeCommand.Execute(null);
-        parts.Session.IsPaused = true;
-        parts.Session.State = RelayUiState.Paused;
-        Assert.Equal("Resume relay", live.PauseResumeLabel);
-        Assert.Equal("New requests from the iPhone are refused until you resume.", live.RelayStatusCaption);
-
-        live.CopyPcAddressCommand.Execute(null);
-        live.StopRelayCommand.Execute(null);
-        live.OpenSettingsCommand.Execute(null);
-
-        Assert.Equal((1, 1, 1), (parts.Session.StartCalls, parts.Session.TogglePauseCalls, parts.Session.StopCalls));
-        Assert.Equal("https://pc.example.test:11443/", parts.Clipboard.Last);
-        Assert.Equal("Copied", parts.Shell.ToastText);
-        Assert.Equal(AppPage.Settings, parts.Shell.SelectedPage);
-
-        // A toast leaves by itself.
-        parts.Clock.Advance(TimeSpan.FromSeconds(4));
-        Assert.Null(parts.Shell.ToastText);
-    }
-
-    [Fact]
-    public void A_fault_text_is_the_status_and_stays_with_the_stopped_layout()
-    {
-        var parts = new Parts();
-        var live = parts.Shell.Live;
-
-        parts.Session.FaultCode = Relay.RelayFaultCode.PortInUse;
-        parts.Session.StateText = "Port 47841 is already in use.";
-        parts.Session.State = RelayUiState.Faulted;
-
-        Assert.Equal(new StatusIndicator(StatusMark.Alert, StatusTone.Danger, "Port 47841 is already in use."), live.RelayStatus);
-        Assert.True(live.IsStartVisible);
-    }
-
-    [Fact]
     public void Show_qr_waits_for_the_relay_and_then_for_the_connection()
     {
         var parts = new Parts();
@@ -351,58 +292,6 @@ public sealed class ShellViewModelTests
         Assert.Equal("Remove", removal.ConfirmLabel);
         Assert.True(removal.IsDestructive);
         Assert.Equal("tailscale serve --https=11443 --set-path=/ off", removal.CommandText);
-    }
-
-    [Fact]
-    public void The_activity_page_logs_the_start_messages_and_diagnostics_and_clears()
-    {
-        var parts = new Parts();
-        var activity = parts.Shell.Activity;
-        var at = parts.Clock.GetUtcNow();
-
-        Assert.True(activity.IsEmpty);
-        Assert.Equal(string.Empty, activity.EntryCountText);
-        Assert.False(activity.ClearActivityCommand.CanExecute(null));
-
-        parts.Session.RaiseRelayEvent(new Relay.RelayStarted(at, "https://pc.example.test:10000/livecue/", 47841, Relay.ConnectionMode.Public, 2, "1.0.0", false));
-        parts.Session.RaiseRelayEvent(new Relay.Diagnostic(at, "edge", "A request failed unexpectedly. (InvalidOperationException)"));
-        parts.Session.RaiseMessage(new SessionMessage(at, SessionMessageKind.Error, "The desktop command failed. Please retry."));
-
-        Assert.Equal(
-            [
-                "Relay started. Waiting for your iPhone.",
-                "Public mode: your iPhone needs internet, not the Tailscale VPN. Pair using this PC address.",
-                "Relay diagnostic: A request failed unexpectedly. (InvalidOperationException)",
-                "The desktop command failed. Please retry.",
-            ],
-            activity.Entries.Select(entry => entry.Message));
-        Assert.All(activity.Entries, entry => Assert.Equal("09:00:00", entry.TimeText));
-        Assert.Equal("4 entries", activity.EntryCountText);
-        Assert.StartsWith("09:00:00 Relay started.", activity.Text, StringComparison.Ordinal);
-
-        activity.ClearActivityCommand.Execute(null);
-        Assert.True(activity.IsEmpty);
-        Assert.Equal(1, parts.Session.ClearActivityCalls);
-
-        parts.Session.RaiseMessage(new SessionMessage(at, SessionMessageKind.Info, "one"));
-        Assert.Equal("1 entry", activity.EntryCountText);
-        parts.Session.RaiseSignal(SessionSignal.RelayStarting);
-        Assert.True(activity.IsEmpty);
-    }
-
-    [Fact]
-    public void The_activity_log_is_bounded_and_keeps_the_newest_entries()
-    {
-        var log = new ActivityLog(TimeProvider.System);
-
-        for (var index = 0; index < ActivityLog.Capacity + 25; index++)
-        {
-            log.Add("entry " + index);
-        }
-
-        Assert.Equal(ActivityLog.Capacity, log.Entries.Count);
-        Assert.Equal("entry 25", log.Entries[0].Message);
-        Assert.Equal("entry " + (ActivityLog.Capacity + 24), log.Entries[^1].Message);
     }
 
     [Fact]
