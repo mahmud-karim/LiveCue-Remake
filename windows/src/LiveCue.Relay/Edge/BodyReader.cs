@@ -87,6 +87,13 @@ internal static class BodyReader
             state?.MarkConnectionLost();
             throw new OperationCanceledException(context.ClientAborted);
         }
+        catch (IOException)
+        {
+            // Framing the server core could not read and reports as a plain I/O failure: a chunk size
+            // beyond any number. It is the caller's mistake like any other bad framing, never an internal
+            // error; the body stays unread, so the answer closes the connection (W-design K-4).
+            return Failed(RelayErrors.InvalidRequest);
+        }
 
         // From here on the connection holds no unread byte of this request (W-design K-4).
         state?.MarkBodyRead();
