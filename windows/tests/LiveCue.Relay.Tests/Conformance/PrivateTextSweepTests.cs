@@ -379,3 +379,123 @@ public sealed class DiagnosticTests
         PrivateText.AssertAbsent(relay, diagnostics.Select(PrivateText.Serialise));
     }
 }
+
+/// <summary>
+/// Conversation text is the most private thing the relay handles. It may be in exactly the events that
+/// exist to show it to the owner (a request's start and completion, a final speech segment) and in the
+/// answer to the phone that sent it. This sweep puts a marker into every text a phone and the lab can
+/// send, lets the requests end in every way, and looks for the marker everywhere else.
+/// </summary>
+public sealed class ConversationTextSweepTests
+{
+    private const string Spoken = "conversation-canary-4d1f";
+    private const string Heard = "lab-canary-93ab";
+
+    [Fact]
+    public async Task Conversation_text_is_only_in_the_events_and_answers_that_are_meant_to_carry_it()
+    {
+        var relay = await ConformanceRelay.StartAsync();
+        try
+        {
+            var answers = new List<string>();
+            var body = $$"""{"requestId":"request-0001","assistant":{"model":"gpt-stand-in","reasoningEffort":"low"},"transcript":"{{Spoken}} one","partialTranscript":"{{Spoken}} two","instruction":"{{Spoken}} three","memory":{"summary":"{{Spoken}} four","facts":["{{Spoken}} five"]} }""";
+
+            // Served, failed, too large, without output; then cancelled, and in flight at a reset.
+            foreach (var scenario in (string[])["ok", "fail", "big", "no-output"])
+            {
+                relay.Codex.ExecScenario = scenario;
+                answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", body)).Body);
+                answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/session-summary", body)).Body);
+            }
+
+            relay.Codex.ExecScenario = "hang";
+            var run = relay.Codex.ExecReportFiles.Count;
+            var cancelled = relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", body);
+            await relay.Codex.ReadExecReportAsync(run);
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Delete, "/v1/requests/request-0001")).Body);
+            answers.Add((await cancelled).Body);
+            var revoked = relay.ExchangeAsync(HttpMethod.Post, "/v1/session-summary", body);
+            await relay.Codex.ReadExecReportAsync(run + 1);
+            await relay.Relay.ResetPairingAsync(CancellationToken.None);
+            answers.Add((await revoked).Body);
+            await relay.ReadTokenAsync();
+
+            // Refused before a run: the text is in the body, and the body is never looked at or kept.
+            relay.Codex.ExecScenario = "ok";
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", body.Replace("gpt-stand-in", "gpt-other", StringComparison.Ordinal))).Body);
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", body.Replace("request-0001", "a b", StringComparison.Ordinal))).Body);
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/pair/verify", body)).Body);
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/local-model/start", body)).Body);
+            answers.Add((await relay.ExchangeAsync(relay.Request(HttpMethod.Post, "/v1/assist", body, token: TestTokens.WellFormedUnknown))).Body);
+            await relay.Relay.SetAcceptingAsync(false);
+            answers.Add((await relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", body)).Body);
+            await relay.Relay.SetAcceptingAsync(true);
+
+            // A stream: partial text, an unknown event and a lab error that all hold the lab's marker; one
+            // final segment.
+            relay.LabSockets.AutoRespond = false;
+            var frames = new List<string>();
+            using (var phone = await relay.OpenReadyStreamAsync())
+            {
+                var lab = relay.LabSockets.Current;
+                lab.Enqueue($$"""{"type":"transcript","transcript":"{{Heard}} partial","debug":"{{Heard}} debug"}""");
+                lab.Enqueue($$"""{"type":"audioProgress","text":"{{Heard}} progress"}""");
+                lab.Enqueue($$"""{"type":"speechComplete","turnId":1,"transcript":"{{Heard}} final"}""");
+                lab.Enqueue($$"""{"type":"error","message":"{{Heard}} error"}""");
+                frames.AddRange((await phone.ReadToEndAsync()).Frames);
+            }
+
+            await relay.Relay.StopAsync(CancellationToken.None);
+            await relay.Events.Completion.WaitAsync(TimeSpan.FromSeconds(15));
+            var events = relay.Events.Snapshot();
+
+            // What the phone said is in the start event of each request that began, and nowhere else: not
+            // in a failure, a notice, a diagnostic or a model or stream status, and not in any answer.
+            Assert.Equal(10, events.OfType<RequestStarted>().Count());
+            Assert.All(events.OfType<RequestStarted>(), started =>
+            {
+                Assert.Equal(Spoken + " one", started.Transcript);
+                Assert.Contains(Spoken + " five", started.PayloadJson, StringComparison.Ordinal);
+            });
+            foreach (var other in events.Where(item => item is not RequestStarted))
+            {
+                Assert.False(
+                    PrivateText.Serialise(other).Contains(Spoken, StringComparison.Ordinal),
+                    $"A {other.GetType().Name} event carries what the phone said.");
+            }
+
+            Assert.All(answers, answer => Assert.DoesNotContain(Spoken, answer, StringComparison.Ordinal));
+            Assert.Equal(2, events.OfType<RequestCompleted>().Count());
+            Assert.Equal(8, events.OfType<RequestFailed>().Count());
+
+            // What the lab heard: the phone gets the partial and the final text, and nothing of the debug
+            // member, the unknown event or the error text. The desktop gets the final segment only.
+            Assert.Equal(
+                [
+                    $$"""{"type":"transcript","transcript":"{{Heard}} partial"}""",
+                    $$"""{"type":"speechComplete","turnId":1,"transcript":"{{Heard}} final"}""",
+                    """{"type":"error","code":"LAB_INFERENCE_FAILED","message":"PC speech inference failed."}""",
+                ],
+                frames.Where(frame => !frame.Contains("\"loading\"", StringComparison.Ordinal) && !frame.Contains("\"ready\"", StringComparison.Ordinal)));
+            Assert.Equal(Heard + " final", Assert.Single(events.OfType<SpeechText>()).Text);
+            foreach (var other in events.Where(item => item is not SpeechText))
+            {
+                Assert.False(
+                    PrivateText.Serialise(other).Contains(Heard, StringComparison.Ordinal),
+                    $"A {other.GetType().Name} event carries what the lab heard.");
+            }
+
+            // And nothing of either is left in a file.
+            foreach (var file in relay.DataFiles())
+            {
+                var text = await File.ReadAllTextAsync(Path.Combine(relay.DataDirectory, file));
+                Assert.DoesNotContain(Spoken, text, StringComparison.Ordinal);
+                Assert.DoesNotContain(Heard, text, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            await relay.DisposeAsync();
+        }
+    }
+}

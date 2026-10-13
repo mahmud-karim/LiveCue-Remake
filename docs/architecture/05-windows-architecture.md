@@ -5356,7 +5356,8 @@ the workflow's restore step (`--locked-mode`).
 - As built: the relay never reads a Codex version text (that is the hosting library's), so the sweeps
   look instead for anything the stand-in Codex process printed.
 - As built, production code changed by this package: `Edge/BodyReader.cs` (4.5, the chunk size that
-  overflows). Test code outside `Conformance/`: `Speech/LabSocketConnectorTests.cs` (the test that hung).
+  overflows). Test code outside `Conformance/`: `Speech/LabSocketConnectorTests.cs` (the test that hung)
+  and `Speech/SpeechLimiterTests.cs` (a count that depended on how far the lab writer had got).
 - **Open, for the orchestrator (WP-W13-1):** no limit bounds the write of a response the caller does not
   read. Test plan S-23 expected Kestrel's response rate limit to do it; at its default that limit allows
   minutes to more than an hour. Two tests in `SlowClientTests` are skipped for it. Three further findings

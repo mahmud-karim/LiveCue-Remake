@@ -566,6 +566,99 @@ public sealed class EdgeSecurityTests(ITestOutputHelper output)
     }
 
     [Theory]
+    [InlineData("Bearer {T}=")]
+    [InlineData("Bearer {T}%0A")]
+    [InlineData("Bearer {T}\\n")]
+    [InlineData("Bearer {T}\u2028")]
+    [InlineData("Bearer {T}\u0085")]
+    [InlineData("Bearer {T}\u00a0")]
+    [InlineData("Bearer {T}\u000b")]
+    [InlineData("Bearer {T}\u0000")]
+    [InlineData("Bearer {T}.")]
+    [InlineData("Bearer {T} {T}")]
+    [InlineData("Bearer {T},Bearer {T}")]
+    [InlineData("Bearer {T}, Bearer {T}")]
+    [InlineData("Bearer\t{T}")]
+    [InlineData("Bearer  {T}")]
+    [InlineData("Bearer{T}")]
+    [InlineData("bearer {T}")]
+    [InlineData("BEARER {T}")]
+    [InlineData("Basic {T}")]
+    [InlineData("Token {T}")]
+    [InlineData("{T}")]
+    [InlineData("Bearer \"{T}\"")]
+    [InlineData("Bearer {t}")]
+    [InlineData("Bearer {T-1}")]
+    [InlineData("Bearer {T+1}")]
+    [InlineData("Bearer {64}")]
+    [InlineData("Bearer {HASH}")]
+    [InlineData("Bearer ")]
+    [InlineData("")]
+    public async Task The_accepted_token_with_anything_added_changed_or_taken_away_is_refused(string form)
+    {
+        // S-32 with the accepted token itself as the starting point: every way of writing it that is not
+        // exactly "Bearer " and its 43 characters. A trailing line break cannot be sent in a header value
+        // at all (it ends the header); what can follow the token instead is tried here. The answer is the
+        // fixed 401, or the server core's bare 400 for bytes no header value may hold. Never a served request.
+        await using var relay = await ConformanceRelay.StartAsync();
+        var token = relay.Token;
+        var swapped = string.Concat(token.Select(character => char.IsLower(character) ? char.ToUpperInvariant(character) : char.ToLowerInvariant(character)));
+        var file = await File.ReadAllTextAsync(Path.Combine(relay.DataDirectory, "pairing.json"));
+        using var pairing = System.Text.Json.JsonDocument.Parse(file);
+        var value = form
+            .Replace("{T-1}", token[..^1], StringComparison.Ordinal)
+            .Replace("{T+1}", token + "A", StringComparison.Ordinal)
+            .Replace("{T}", token, StringComparison.Ordinal)
+            .Replace("{t}", swapped, StringComparison.Ordinal)
+            .Replace("{64}", Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(token)), StringComparison.Ordinal)
+            .Replace("{HASH}", pairing.RootElement.GetProperty("tokenHash").GetString(), StringComparison.Ordinal);
+        Assert.NotEqual(TestTokens.Bearer(token), value);
+
+        foreach (var route in RouteTable.Rows)
+        {
+            (string, string)[] headers = route.Id == RouteId.Speech
+                ? [("Authorization", value), .. Wire.UpgradeHeaders, ("X-LiveCue-Speech-Model", "nemotron")]
+                : [("Authorization", value), ("X-LiveCue-Protocol", "2")];
+            using var raw = await relay.OpenRawAsync();
+            await raw.SendAsync(System.Text.Encoding.UTF8.GetBytes(Wire.Head(relay.Port, $"{route.Method} {Wire.TargetOf(route)} HTTP/1.1", headers)));
+            var response = await Wire.ReadRawAsync(raw);
+
+            Assert.NotNull(response);
+            if (Wire.StatusLine(response).StartsWith("HTTP/1.1 400 ", StringComparison.Ordinal))
+            {
+                Assert.Equal(string.Empty, Wire.BodyOf(response));
+            }
+            else
+            {
+                Wire.AssertFixed401(Wire.WithoutDate(response));
+            }
+        }
+
+        await relay.Events.SettleAsync();
+        Assert.Empty(relay.Events.OfType<PhoneSeen>());
+        Assert.Empty(relay.Codex.Requests);
+        Assert.Equal(0, relay.LabSockets.ConnectCalls);
+    }
+
+    [Theory]
+    [InlineData("Bearer {T}")]
+    [InlineData("   Bearer {T}")]
+    [InlineData("Bearer {T}   ")]
+    [InlineData("\tBearer {T}\t")]
+    public async Task White_space_around_the_header_value_is_not_part_of_it(string form)
+    {
+        // The other side of the test above, so that it cannot pass for the wrong reason: HTTP itself
+        // defines optional white space around a header value as not belonging to it, and the server core
+        // removes it before the relay sees the value. These are the accepted token and are served.
+        await using var relay = await ConformanceRelay.StartAsync();
+        var response = await Wire.ExchangeAsync(
+            relay.Port,
+            Wire.Head(relay.Port, "GET /v1/health HTTP/1.1", ("Authorization", form.Replace("{T}", relay.Token, StringComparison.Ordinal)), ("X-LiveCue-Protocol", "2")));
+
+        Assert.Equal("HTTP/1.1 200 OK", Wire.StatusLine(response!));
+    }
+
+    [Theory]
     [InlineData(ConnectionMode.Private)]
     [InlineData(ConnectionMode.Public)]
     public async Task A_funnel_marked_request_follows_the_mode_on_every_route(ConnectionMode mode)
