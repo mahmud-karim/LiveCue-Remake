@@ -13,6 +13,8 @@ actor OpenRouterAnswerService: AnswerService, OpenRouterKeyVerifying {
 
     private let client: OpenRouterClient
     private let secrets: any SecretStoring
+    /// The answers in flight, by request id.
+    private var answers: [UUID: Task<AssistResponse, any Error>] = [:]
 
     init(client: OpenRouterClient, secrets: any SecretStoring) {
         self.client = client
@@ -20,29 +22,42 @@ actor OpenRouterAnswerService: AnswerService, OpenRouterKeyVerifying {
     }
 
     func loadCatalogue() async throws -> [AssistantModelOption] {
-        // STUB(WP-08)
-        throw OpenRouterError.unavailable
+        try await client.models()
     }
 
     func answer(
         _ request: AssistRequest,
         onProgress: @escaping @Sendable (String) async -> Void
     ) async throws -> AssistResponse {
-        // STUB(WP-08)
-        throw OpenRouterError.unavailable
+        guard let key = secrets.read(.openRouterAPIKey) else {
+            throw OpenRouterError.missingKey
+        }
+        // Without a model the id is empty, and the client throws `.noModel` before anything is sent.
+        let model = request.assistant?.model ?? ""
+        let option = AssistantModelOption(id: model, name: model, reasoningEfforts: ["default"])
+        let client = self.client
+        let task = Task { () async throws -> AssistResponse in
+            try await client.assist(request, option: option, key: key, throughSegmentId: nil, onUpdate: onProgress)
+        }
+        answers[request.requestId] = task
+        defer { answers[request.requestId] = nil }
+        // A caller that is cancelled cancels the request too.
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     func summarize(_ request: SummaryRequest) async throws -> SummaryResponse {
-        // STUB(WP-08)
         throw OpenRouterError.unavailable
     }
 
     func cancel(requestId: UUID) async {
-        // STUB(WP-08)
+        answers[requestId]?.cancel()
     }
 
     func verify(key: String) async throws {
-        // STUB(WP-08)
-        throw OpenRouterError.unavailable
+        try await client.verifyKey(key)
     }
 }

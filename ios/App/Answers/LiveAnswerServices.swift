@@ -12,7 +12,6 @@ struct LiveAnswerServices: AnswerServiceProviding {
     }
 
     func service(for provider: AssistantProvider) -> any AnswerService {
-        // STUB(WP-08)
         switch provider {
         case .codex: return codex
         case .openrouter: return openRouter
