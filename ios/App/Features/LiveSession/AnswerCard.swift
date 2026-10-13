@@ -36,9 +36,8 @@ struct AnswerCard: View {
     var body: some View {
         Card(prominent: isLatest) {
             header
-            texts
+            content
             if hasTiming {
-                footer
                 DisclosureRow("Timing & usage", isExpanded: $showsTiming, identifier: timingIdentifier) {
                     TimingView(turn: turn)
                 }
@@ -74,7 +73,30 @@ struct AnswerCard: View {
         }
     }
 
-    /// The question, the answer and the details, closer together than the parts of the card.
+    /// The question and the answer, then the detail toggle and the footer directly under them: one
+    /// child of the card, so that its controls, which keep their full targets, sit close to the text.
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            texts
+            if !turn.details.isEmpty {
+                LCButton(
+                    showsDetails ? "Hide detail" : "More detail",
+                    systemImage: showsDetails ? "chevron.up" : "chevron.down",
+                    kind: .quiet,
+                    action: toggleDetails
+                )
+                if showsDetails {
+                    AnswerDetailsText(details: turn.details)
+                        .padding(.bottom, theme.space.s2)
+                }
+            }
+            if hasTiming {
+                footer
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var texts: some View {
         VStack(alignment: .leading, spacing: theme.space.s2) {
             if let question = AnswerFormat.visibleQuestion(of: turn) {
@@ -87,19 +109,7 @@ struct AnswerCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
                 .accessibilityIdentifier(isLatest ? "assistant-answer" : "previous-assistant-answer")
-            if !turn.details.isEmpty {
-                LCButton(
-                    showsDetails ? "Hide detail" : "More detail",
-                    systemImage: showsDetails ? "chevron.up" : "chevron.down",
-                    kind: .quiet,
-                    action: toggleDetails
-                )
-                if showsDetails {
-                    AnswerDetailsText(details: turn.details)
-                }
-            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// The total time and the reported cost on the latest card (an earlier card has its time in the

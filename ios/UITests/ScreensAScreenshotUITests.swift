@@ -159,9 +159,13 @@ final class ScreensAScreenshotUITests: XCTestCase {
         UITestSupport.waitFor("assistant-provider-openrouter").tap()
 
         // A made-up key for the fixture service, typed like a person would.
+        // The field is tapped at its centre and the text goes to whatever has the keyboard: on iOS 26 a
+        // secure field is not reported as hittable.
         let field = UITestSupport.waitFor("openrouter-key")
-        field.tap()
-        field.typeText("fixture-openrouter-key")
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        // A simulator with a hardware keyboard shows none on screen, so this only gives focus time to settle.
+        _ = XCUIApplication().keyboards.firstMatch.waitForExistence(timeout: 5)
+        XCUIApplication().typeText("fixture-openrouter-key")
         UITestSupport.waitFor("save-openrouter-key").tap()
         UITestSupport.waitFor("verify-openrouter-key")
 

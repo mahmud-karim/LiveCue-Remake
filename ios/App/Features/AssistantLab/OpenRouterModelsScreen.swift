@@ -29,7 +29,11 @@ struct OpenRouterModelsScreen: View {
         }
         .navigationTitle("OpenRouter models")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $model.searchText, prompt: "Search models")
+        .searchable(
+            text: $model.searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search models"
+        )
     }
 
     private func row(for option: AssistantModelOption) -> some View {
