@@ -49,19 +49,10 @@ internal static class ShellText
     /// <summary>W-design 5.12: the display affinity call failed on this build of Windows.</summary>
     public const string CaptureExclusionUnavailable = "This version of Windows cannot hide the window from screen capture.";
 
-    // The results of "Set up connection…" and "Remove…" as activity lines (screens 4.1; W-design 4.15).
+    // What a mapping command that worked says in the activity (screens 4.1). Every other outcome has
+    // the mapping manager's own text (W-design 4.15, MappingTexts).
     public const string MappingSetUp = "Tailscale mapping set up.";
     public const string MappingRemoved = "Tailscale mapping removed.";
-    public const string MappingSetUpFailed = "Tailscale HTTPS setup failed. Check that Tailscale is connected.";
-    public const string MappingRemovalFailed = "Tailscale could not remove the mapping. Check that Tailscale is connected.";
-    public const string MappingTimedOut =
-        "Tailscale did not finish in time. Run the command shown above in a terminal to see Tailscale's own instructions. The first use of HTTPS or Funnel on a tailnet must be approved in the Tailscale admin console.";
-    public const string MappingNotVerified =
-        "Tailscale reported success, but the mapping is not in its configuration. Choose Check again.";
-    public const string MappingLedgerNotSaved =
-        "The mapping changed, but LiveCue could not save its settings. LiveCue will treat the mapping as not its own.";
-    public const string MappingOthersChanged =
-        "Warning: other entries of Tailscale's serve configuration changed during this command. LiveCue repaired nothing. Review them with: tailscale serve status";
 
     /// <summary>The diagnostic line for an event whose handling threw (WIN-10). Only the type name is shown.</summary>
     public static string EventNotShown(Exception exception) =>
@@ -72,22 +63,17 @@ internal static class ShellText
         $"{DiagnosticPrefix}The window handled an unexpected error ({exception.GetType().Name}).";
 
     /// <summary>
-    /// The activity line of one mapping result (W-design 4.15). A refusal has the manager's own text;
-    /// null when there is nothing to say.
+    /// The activity line of one mapping result: the session's own line for a command that worked, the
+    /// mapping manager's text for a refusal or a failure, and null when there is nothing to say.
     /// </summary>
     public static string? MappingOutcome(MappingPlan plan, MappingResult result)
     {
-        var removal = plan.Action is MappingAction.RemovePrivate or MappingAction.RemovePublic;
-        return result.Outcome switch
+        if (result.Outcome == Hosting.MappingOutcome.Done)
         {
-            Hosting.MappingOutcome.Done => removal ? MappingRemoved : MappingSetUp,
-            Hosting.MappingOutcome.Refused when result.Refusal != MappingRefusal.None =>
-                MappingTexts.Refusal(result.Refusal, plan.Command.HttpsPort, plan.Command.Path),
-            Hosting.MappingOutcome.CommandFailed => removal ? MappingRemovalFailed : MappingSetUpFailed,
-            Hosting.MappingOutcome.CommandTimedOut => MappingTimedOut,
-            Hosting.MappingOutcome.NotVerified => MappingNotVerified,
-            Hosting.MappingOutcome.LedgerNotSaved => MappingLedgerNotSaved,
-            _ => null,
-        };
+            return plan.Action is MappingAction.RemovePrivate or MappingAction.RemovePublic ? MappingRemoved : MappingSetUp;
+        }
+
+        var text = MappingTexts.Failure(result, plan);
+        return text.Length == 0 ? null : text;
     }
 }

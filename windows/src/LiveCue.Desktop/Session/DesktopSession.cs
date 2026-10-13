@@ -370,7 +370,7 @@ internal sealed class DesktopSession : IDesktopSession, IDisposable
 
                 if (result.OthersChanged)
                 {
-                    Raise(SessionMessageKind.Warning, ShellText.MappingOthersChanged);
+                    Raise(SessionMessageKind.Warning, MappingTexts.OthersChanged);
                 }
 
                 return result;
