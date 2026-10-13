@@ -11,7 +11,9 @@ struct AssistantModelPanel: View {
             if model.showsPairFirst {
                 pairFirst
             } else {
-                selection
+                if showsSelection {
+                    selection
+                }
                 rows
             }
         }
@@ -23,6 +25,11 @@ struct AssistantModelPanel: View {
         case .codex: return "PC assistant"
         case .openrouter: return "OpenRouter assistant"
         }
+    }
+
+    /// Nothing is drawn for a model that was not chosen yet, so the panel has no empty line.
+    private var showsSelection: Bool {
+        !model.selectedModelID.isEmpty || model.reasoningCaption != nil
     }
 
     /// Codex with nothing paired: the message and the way to the Pairing screen, nothing else.

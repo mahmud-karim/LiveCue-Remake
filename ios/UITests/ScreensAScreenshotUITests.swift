@@ -100,6 +100,14 @@ final class ScreensAScreenshotUITests: XCTestCase {
         UITestSupport.waitFor("assistant-provider")
         XCUIApplication().swipeUp()
         shot("wp10-assistant-recent-comparisons")
+
+        // The first comparison opens its run details. Its row is titled with the model that answered.
+        let comparison = XCUIApplication().buttons["gpt-5.6-sol"].firstMatch
+        if comparison.waitForExistence(timeout: 5) {
+            comparison.tap()
+            UITestSupport.waitFor("response-timing")
+            shot("wp10-run-details")
+        }
     }
 
     @MainActor
