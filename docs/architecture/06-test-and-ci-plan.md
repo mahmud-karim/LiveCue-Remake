@@ -352,6 +352,17 @@ list and plays the status documents of a scenario ("before", "after"). No test r
 | The contrast dictionary has exactly the keys of Daylight; every key of W-design 5.3 exists | `ResourceKeyTests.Key_sets_match`; `…Every_listed_key_exists` (WP-W00) | Windows |
 | Automation ids are unique and equal screens section 9 | `AutomationIdTests.Ids_are_unique` (WP-W00) | any |
 | Architecture 3.1: the desktop assembly has no reference to `IPairingExport` or `StoredPairingExport` (metadata scan) | `DependencyRuleTests.Desktop_never_references_pairing_export` (WP-W00) | any |
+| The window's chrome, sidebar geometry at both sizes, key bindings, the dialog layer (scrim, focus in and back, no default destructive button) and the toast layer, on the real window off-screen | `MainWindowTests` (`Ui`) | Windows |
+| Every component style draws under Daylight, the contrast theme, transparency off and 150% text; text is crisp and shadows sit on caster layers only | `ComponentGalleryTests.Every_component_draws_with_its_style` (`Ui`) | Windows |
+| The theme slot, the solid twins of DS 6.3 and the text scale of DS 6.1 | `ThemeManagerTests` (`Ui`) | Windows |
+
+Added by WP-W08. The session tests use `FakeSupervisor`, `StubRelay`, `FakeMappings` and `SessionHarness`
+(`Session/SessionFakes.cs`) on `UiThread`, a real single-thread dispatcher, so that a test can see which
+thread a call or an event arrived on. The `Ui` tests share one WPF application on a thread of its own
+(`Support/WpfApp.cs`), run in the xUnit collection `Ui` one after another, and lay their windows out at
+96 DPI on any PC (`Support/ProcessDpi.cs`). With the environment variable `LIVECUE_TEST_SHOTS` set to a
+folder they also write their scenes as PNG files (the component gallery in four looks, the reset dialog, the
+toast); without it they write nothing.
 
 ### 2.7 Live and Activity (WP-W09), folders `Live/`, `Activity/`
 

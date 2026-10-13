@@ -236,6 +236,7 @@ the `spike/windows` branch.
 | `Themes/Fields.xaml`, `Themes/Dialogs.xaml` | Text field, segmented control, dialog, banner, toast (keys listed in 5.3) | WP-W08 (the foundation adds every key with a plain style) |
 | `Controls/BloomLayer.cs`, `Controls/BrandMark.cs`, `Controls/Icon.cs`, `Controls/ListRow.cs`, `Controls/StatusChip.cs` (with the mark control `StatusMarkView`, renamed from the spike's `StatusMark` because the contract's enum has that name), `Controls/Pill.cs`, `Controls/SplitRowPanel.cs`, `Controls/Glass.cs`, `Controls/ButtonFills.cs`, `Controls/ButtonAssist.cs`, `Controls/ChromeState.cs`, `Controls/Converters.cs` | Shared controls (spike) | WP-W08 |
 | `Controls/StatusIndicatorView.cs`, `Controls/SegmentedControl.cs`, `Controls/Banner.cs`, `Controls/CheckRow.cs`, `Controls/Spinner.cs`, `Controls/TwoColumnPanel.cs`, `Controls/PageLayout.cs` | Shared controls the spike lacks | WP-W08 (the foundation adds a minimal class for each) |
+| `Controls/Motion.cs` | The movements of DS 7.1 (an offset or an opacity that travels to a new value) and the "animations off" rule of DS 6.7, for styles and for the window's layers | WP-W08 |
 | `Shell/MainWindow.xaml`, `Shell/MainWindow.xaml.cs` | Chrome, sidebar, page host, dialog and toast layers | WP-W08 |
 | `Shell/ShellViewModel.cs`, `Shell/Navigator.cs`, `Shell/DialogHost.cs`, `Shell/ToastHost.cs`, `Shell/PageTemplates.xaml` | Navigation, dialogs, toasts, page-to-view mapping | WP-W08 |
 | `Session/DesktopSession.cs`, `Session/RelayStatusMachine.cs`, `Session/PresenceTracker.cs`, `Session/StatusTexts.cs` | `IDesktopSession`: events to state | WP-W08 |
@@ -4383,7 +4384,9 @@ them) and effects through `StaticResource` inside `Daylight.xaml` only.
 sheen, the edge stroke and the content and has no `Effect`, so text keeps ClearType. No element with an
 `Effect`, an `OpacityMask` or a `BitmapCache` has a text descendant; a test walks the visual tree of every
 self-test scene and fails on one (DS section 11 item 6). Rules W-1 and W-2 of DS 3.5 hold: nothing
-translucent floats over scrolling content, and panels never overlap panels.
+translucent floats over scrolling content, and panels never overlap panels. The `Padding` of a glass
+surface (panel, card, dialog card, read-only field) is its inset token measured from the surface's outer
+edge, as in the mockups: the 1 px stroke lies inside it.
 
 **Component style keys.** The foundation makes every key exist (the spike's style where it has one, otherwise
 a plain style); WP-W08 gives each its DS appearance. Pages use only these keys and the token keys.
@@ -4398,6 +4401,21 @@ a plain style); WP-W08 gives each its DS appearance. Pages use only these keys a
 | `Indicator` (style of `StatusIndicatorView`) | 4.22 | `Spinner` | 4.13 |
 | `Log.Text`, `Page.Scroller`, `Divider`, implicit `ToolTip` and `ScrollBar` styles | 4.23 | `Chrome.CaptionCapsule`, `Chrome.CaptionButton`, `Chrome.CaptionButton.Close`, `Chrome.Wordmark` | 3.5 |
 | `Focus.Pill`, `Focus.Row` | 6.6 | `EmptyState` | 4.14 |
+
+Notes on these keys as built (WP-W08):
+
+- `EmptyState` centres the page's content; the 64 px icon tile inside it is the helper key `EmptyState.Tile`
+  (a `ContentControl` around one 28 px `Icon`).
+- A `CheckBox` has one look, the toggle of DS 4.5, through an implicit style; `ListRow`, `CheckRow`,
+  `StatusChip`, `StatusIndicatorView`, `Banner`, `SegmentedControl`, `Spinner`, `ToolTip` and `ScrollBar`
+  take their styles implicitly as well, so a page names a key only where it has a choice.
+- `Field.Text` shows its `Tag` as the placeholder and draws focus and `Validation.HasError` as a 2 px
+  outline; the label above and the error line below belong to the page.
+- `ButtonAssist.Icon`, `ButtonAssist.IconBrush` and `ButtonAssist.IsBusy` give a button its leading glyph
+  and its busy face (a spinner in place of the glyph, full opacity, no pointer input).
+- A `Banner` without a body takes no room, so `Model="{Binding Failure}"` needs no visibility binding.
+- A `ListRow` draws its hairline above itself: the first row of a group sets `ShowSeparator="False"`. A
+  `CheckRow` does the same, and leaves the line out by itself for the first item of an `ItemsControl`.
 
 ### 5.4 The session: events to state (`Session/DesktopSession.cs`)
 
@@ -4435,7 +4453,13 @@ throws raises `SessionMessage(Error, "The desktop command failed. Please retry."
 back to `Stopped`, raises `SessionMessage(Info, "Pairing reset. Every iPhone must pair again.")` and sets the
 "show the QR when the connection is ready" flag. `ExecuteMappingAsync` turns its result into messages
 (4.15 texts): one for the outcome, and a `Warning` for `OthersChanged`; a `Done` result stores the new
-inspection, which can trigger the automatic first QR.
+inspection, which can trigger the automatic first QR. The line of a `Done` result is "Tailscale mapping set
+up." or "Tailscale mapping removed." (`Info`); a refusal is a `Warning` with its 4.15 text.
+
+Order (as built). The result of a command is applied on the UI thread after every event that the call
+published, through the same task that posts the events: a start that returns `ExposedInPrivateMode` is
+never shown before its own `CheckingStarted`. The containment warning of a start that passes its checks is
+raised after `Signal(RelayStarting)`, so that the activity log, which that signal clears, keeps it.
 
 **Status texts** (`Session/StatusTexts.cs`; screens 2.3 and 1.3, decisions 6.2):
 
@@ -5044,6 +5068,8 @@ the workflow's restore step (`--locked-mode`).
 - `MainWindow` and `Interop/NativeMethods.cs`: the display affinity follows the saved setting (5.12).
 - `HideFromCaptureToggle` is a `CheckBox` drawn with row styles that 5.3 already lists; no new style key.
 - Adds: ST-06 (`CaptureExclusionTests`), ST-08 and ST-10 (the two `DesktopSessionTests`).
+- As built: `AppServices.Toasts` exposes the toast layer as `IToastHost`; a page change fades the outgoing
+  page for 100 ms and then fades the incoming one in (5.2 says "cross-fades"; DS 7.1 has the two steps).
 
 **WP-W09 Live and Activity**
 
