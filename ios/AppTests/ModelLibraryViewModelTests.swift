@@ -69,6 +69,49 @@ final class ModelLibraryViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testTheEntryOfAppleNamesNoSizeAndHasNothingToUnload() async throws {
+        let engine = FakeSystemSpeech(answer: .needsDownload)
+        let owners = TestOwners(provider: .apple, systemSpeech: engine)
+        let model = ModelLibraryViewModel(speech: owners.speech, models: owners.models, app: owners.app, clock: owners.clock)
+
+        XCTAssertEqual(model.model, TranscriptionModel.apple)
+        XCTAssertEqual(model.model?.displayName, "Apple live captions")
+        XCTAssertEqual(model.descriptionText, "English live captions · built into iOS")
+        XCTAssertEqual(model.packageLabel, "Built into iOS")
+        XCTAssertFalse(model.showsVozUsageSentence)
+        XCTAssertFalse(model.isLoaded)
+        XCTAssertEqual(model.mainButtonTitle, "Download & use")
+        XCTAssertFalse(model.showsUnload)
+
+        // "Download & use": the system installs its asset; nothing is loaded into the app.
+        await model.prepare()
+        XCTAssertTrue(model.isLoaded)
+        XCTAssertNil(model.block)
+        XCTAssertEqual(model.statusLine, "Ready")
+        XCTAssertEqual(model.mainButtonTitle, "Check again")
+        XCTAssertFalse(model.showsUnload, "The recogniser belongs to the system.")
+        XCTAssertNil(owners.app.alertMessage)
+        let installs = await engine.installCount
+        XCTAssertEqual(installs, 1)
+    }
+
+    @MainActor
+    func testAFailedAppleDownloadShowsTheBlockAndTheAlert() async {
+        let engine = FakeSystemSpeech(answer: .needsDownload)
+        await engine.setInstall(steps: [halfway], failure: LoaderFailure())
+        let owners = TestOwners(provider: .apple, systemSpeech: engine)
+        let model = ModelLibraryViewModel(speech: owners.speech, models: owners.models, app: owners.app, clock: owners.clock)
+
+        await model.prepare()
+
+        XCTAssertFalse(model.isLoaded)
+        XCTAssertEqual(model.block?.failed, true)
+        XCTAssertEqual(model.statusLine, "Preparation failed")
+        XCTAssertEqual(owners.app.alertMessage, "The model files could not be downloaded.")
+        XCTAssertEqual(model.mainButtonTitle, "Download & use")
+    }
+
+    @MainActor
     func testAStreamingProviderHasNoEntry() async {
         for provider in [SpeechProvider.meta, .nemotron, .qwen3] {
             let model = Rig(provider: provider).model

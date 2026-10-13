@@ -8,6 +8,28 @@ final class OnDeviceUITests: XCTestCase {
         executionTimeAllowance = 600
     }
 
+    /// D-28: Apple speech is the sixth provider. In the test seam its language asset is installed, so
+    /// choosing it needs no download and Home offers Start.
+    @MainActor
+    func testAppleSpeechIsChosenAndReadyWithoutADownload() throws {
+        let app = UITestWalk.launchToHome()
+
+        UITestWalk.openTranscription()
+        XCTAssertTrue(UITestSupport.element("provider-apple").appears(within: UITestSupport.timeout), "Apple speech is not listed.")
+        UITestWalk.selectProvider("provider-apple")
+        XCTAssertFalse(UITestSupport.element("provider-meta").isSelected, "Meta stayed selected.")
+        XCTAssertTrue(UITestWalk.button("Model Library").appears(within: UITestSupport.timeout), "Apple speech has no Model Library row.")
+        XCTAssertFalse(UITestSupport.element("meta-key-settings").exists, "The Meta API key row stayed for Apple speech.")
+        shot("d28-transcription-apple")
+
+        // Ready as it is: Start, not the download link.
+        UITestWalk.openTab("Live")
+        UITestWalk.waitFor("start-session")
+        XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a download for Apple speech.")
+        XCTAssertEqual(app.alerts.count, 0, "An alert appeared.")
+        shot("d28-home-apple")
+    }
+
     /// T12. AC-IOS-009, 026, 075, 145, 150.
     @MainActor
     func testConversationThenModelDownload() throws {

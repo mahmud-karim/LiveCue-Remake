@@ -77,7 +77,7 @@ final class UserDefaultsPreferencesStoreTests: XCTestCase {
             XCTAssertEqual(defaults.string(forKey: "speechProvider"), provider.rawValue)
             XCTAssertEqual(store.speechProvider, provider)
         }
-        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet"])
+        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet", "apple"])
     }
 
     @MainActor

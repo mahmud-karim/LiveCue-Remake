@@ -638,12 +638,18 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         XCTAssertTrue(factory.makeTranscriber(for: .qwen3) is RelayTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .voz) is VozTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .parakeet) is ParakeetTranscriber)
+        XCTAssertTrue(factory.makeTranscriber(for: .apple) is AppleTranscriber)
         for provider in SpeechProvider.allCases {
             XCTAssertEqual(factory.makeTranscriber(for: provider).provider, provider)
         }
 
         // Nothing is loaded: an on-device transcriber says what is missing.
-        for (provider, text) in [(SpeechProvider.voz, "Prepare Voz first."), (SpeechProvider.parakeet, "Prepare Parakeet first.")] {
+        let missing = [
+            (SpeechProvider.voz, "Prepare Voz first."),
+            (SpeechProvider.parakeet, "Prepare Parakeet first."),
+            (SpeechProvider.apple, "Prepare Apple speech first.")
+        ]
+        for (provider, text) in missing {
             let transcriber = factory.makeTranscriber(for: provider)
             do {
                 try await transcriber.start(TranscriberStart(generation: UUID(), streamOffsetSeconds: 0))

@@ -16,10 +16,10 @@ final class TranscriptionViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testTheFiveProvidersAreListedInCatalogueOrder() async {
+    func testTheSixProvidersAreListedInCatalogueOrder() async {
         let model = makeModel(TestOwners())
 
-        XCTAssertEqual(model.providers, [.meta, .nemotron, .qwen3, .voz, .parakeet])
+        XCTAssertEqual(model.providers, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple])
         XCTAssertEqual(
             model.providers.map(\.pickerTitle),
             [
@@ -27,7 +27,8 @@ final class TranscriptionViewModelTests: XCTestCase {
                 "Nemotron 3.5 · PC live",
                 "Qwen3 1.7B · PC live",
                 "Voz · iPhone on Assist",
-                "Parakeet · iPhone live"
+                "Parakeet · iPhone live",
+                "Apple · iPhone live"
             ]
         )
         XCTAssertEqual(model.selected, .meta)
@@ -93,6 +94,73 @@ final class TranscriptionViewModelTests: XCTestCase {
         await owners.gateway.setStatus(.success(ready))
         await owners.relay.checkHealthNow()
         XCTAssertEqual(model.setup.rows, [.pcSpeechModel(value: "Ready")])
+    }
+
+    // MARK: - Apple (D-28)
+
+    @MainActor
+    func testAppleCannotBeChosenOnAnOlderSystemAndSaysWhy() async {
+        // No system recogniser: iOS 18 to 25.
+        let owners = TestOwners()
+        let model = makeModel(owners)
+
+        XCTAssertEqual(model.unavailableReason(for: .apple), "Requires iOS 26 or later")
+        for provider in SpeechProvider.allCases where provider != .apple {
+            XCTAssertNil(model.unavailableReason(for: provider), provider.rawValue)
+        }
+
+        model.select(.apple)
+        await SpeechTest.settle()
+        XCTAssertEqual(model.selected, .meta, "The choice stays.")
+        XCTAssertEqual(owners.preferences.speechProvider, .meta)
+
+        // The others can still be chosen.
+        model.select(.parakeet)
+        XCTAssertEqual(model.selected, .parakeet)
+    }
+
+    @MainActor
+    func testAppleIsReadyAtOnceWhenItsAssetIsKnownToBeInstalled() async {
+        let owners = TestOwners(systemSpeech: FakeSystemSpeech(known: .installed))
+        let model = makeModel(owners)
+        XCTAssertNil(model.unavailableReason(for: .apple))
+
+        model.select(.apple)
+        XCTAssertEqual(model.selected, .apple)
+        XCTAssertEqual(owners.preferences.speechProvider, .apple, "The choice is saved.")
+        XCTAssertEqual(model.selectedTitle, "Apple · iPhone")
+        XCTAssertEqual(model.setup.rows, [.modelLibrary(value: "Ready"), .benchmark])
+        XCTAssertEqual(model.explanation, "Audio is transcribed on this iPhone. Only text is sent to your PC.")
+    }
+
+    @MainActor
+    func testTheSystemIsAskedBeforeAppleIsChosenForTheFirstTime() async {
+        let engine = FakeSystemSpeech(answer: .needsDownload)
+        let owners = TestOwners(systemSpeech: engine)
+        let model = makeModel(owners)
+        XCTAssertNil(model.unavailableReason(for: .apple), "Nothing is known before the system was asked.")
+        let asked = await engine.availabilityCount
+        XCTAssertEqual(asked, 0, "The system is not asked until Apple is wanted.")
+
+        model.select(.apple)
+        await SpeechTest.waitUntil { model.selected == .apple }
+        XCTAssertEqual(owners.models.systemSpeechAvailability, .needsDownload)
+        XCTAssertEqual(model.setup.rows, [.modelLibrary(value: "Not downloaded"), .benchmark])
+        XCTAssertFalse(owners.readiness.speechReady)
+    }
+
+    @MainActor
+    func testAnIPhoneThatCannotRunAppleSpeechKeepsItsChoice() async {
+        let engine = FakeSystemSpeech(answer: .unavailable(reason: "Not supported on this iPhone"))
+        let owners = TestOwners(systemSpeech: engine)
+        let model = makeModel(owners)
+
+        model.select(.apple)
+        await SpeechTest.waitUntil { model.unavailableReason(for: .apple) != nil }
+        await SpeechTest.settle()
+        XCTAssertEqual(model.unavailableReason(for: .apple), "Not supported on this iPhone")
+        XCTAssertEqual(model.selected, .meta)
+        XCTAssertEqual(owners.models.statusLine, "Prepare a model", "The status line stays the selected provider's.")
     }
 
     // MARK: - The lock
