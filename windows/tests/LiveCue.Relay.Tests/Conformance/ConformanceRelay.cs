@@ -51,6 +51,19 @@ internal sealed class ConformanceOptions
     /// <summary>Replaces the fake lab runtime (<see cref="ConformanceRelay.Lab"/> is then unused).</summary>
     public ILabRuntime? LabRuntime { get; set; }
 
+    /// <summary>
+    /// True: the production lab runtime runs. Its launcher scripts are requested from the process runner,
+    /// which records the request and starts nothing (see <see cref="ScriptedCodexRunner.LabScript"/>), and
+    /// its health probe dials <see cref="LabPort"/>, which must then be a stub of the test's own.
+    /// </summary>
+    public bool ProductionLabRuntime { get; set; }
+
+    /// <summary>The lab port in the options. Nothing dials it unless the production runtime runs.</summary>
+    public int LabPort { get; set; } = 47842;
+
+    /// <summary>The advertised endpoint handed to the relay; a reserved test name.</summary>
+    public string Endpoint { get; set; } = RelayTestHost.Endpoint;
+
     /// <summary>Replaces the fake lab socket connector (<see cref="ConformanceRelay.LabSockets"/> is then unused).</summary>
     public ILabSocketConnector? LabSocketConnector { get; set; }
 }
@@ -91,12 +104,12 @@ internal sealed class ConformanceRelay : IAsyncDisposable
 
         Options = new RelayOptions(
             Port: 0,
-            AdvertisedEndpoint: RelayTestHost.Endpoint,
+            AdvertisedEndpoint: options.Endpoint,
             Mode: options.Mode,
             DataDirectory: DataDirectory,
             CodexExecutablePath: options.CodexFound ? RelayTestHost.FakeCodexPath : null,
             LabFolder: options.LabConfigured ? _other.Combine("asr") : null,
-            LabPort: 47842,
+            LabPort: options.LabPort,
             RelayVersion: RelayTestHost.RelayVersion,
             WarmCatalogOnStart: options.WarmCatalogOnStart);
 
@@ -105,7 +118,7 @@ internal sealed class ConformanceRelay : IAsyncDisposable
             Clock = clock,
             Processes = Codex,
             SelfCheckClient = SelfCheck,
-            LabRuntime = options.LabRuntime ?? Lab,
+            LabRuntime = options.ProductionLabRuntime ? null : options.LabRuntime ?? Lab,
             LabSocketConnector = options.LabSocketConnector ?? LabSockets,
         });
         Events = new EventCollector(Relay.Events);
@@ -357,6 +370,8 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
     private readonly Lock _gate = new();
     private readonly List<ProcessRequest> _requests = [];
     private readonly List<string> _execReports = [];
+    private readonly List<string> _catalogReports = [];
+    private readonly List<ProcessRequest> _labRequests = [];
     private int _next;
 
     public ScriptedCodexRunner(ProcessRunner real, string reportFolder)
@@ -371,6 +386,37 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
 
     /// <summary>What <c>codex app-server</c> plays next: ok, early-exit, silent, flood or error.</summary>
     public string CatalogScenario { get; set; } = "ok";
+
+    /// <summary>
+    /// What a launcher script "returns". The script is never started: a request for PowerShell is
+    /// recorded in <see cref="LabRequests"/> and answered with this result. The default is exit code 0.
+    /// </summary>
+    public Func<ProcessRequest, ProcessResult> LabScript { get; set; } =
+        _ => new ProcessResult(ProcessOutcome.Exited, 0, ReadOnlyMemory<byte>.Empty);
+
+    /// <summary>Every request for a launcher script, as the relay made it. None was started.</summary>
+    public IReadOnlyList<ProcessRequest> LabRequests
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _labRequests];
+            }
+        }
+    }
+
+    /// <summary>The report file of each app-server run, in order: its process id, then every line it received.</summary>
+    public IReadOnlyList<string> CatalogReportFiles
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return [.. _catalogReports];
+            }
+        }
+    }
 
     /// <summary>
     /// When it returns an exception, the runner throws it instead of starting anything: a collaborator
@@ -406,8 +452,21 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
         }
     }
 
-    public Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct) =>
-        _real.RunAsync(Redirect(request), ct);
+    public Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken ct)
+    {
+        if (string.Equals(request.FileName, LabScripts.PowerShellPath, StringComparison.OrdinalIgnoreCase))
+        {
+            lock (_gate)
+            {
+                _labRequests.Add(request);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(LabScript(request));
+        }
+
+        return _real.RunAsync(Redirect(request), ct);
+    }
 
     public Task<IProcessSession> StartSessionAsync(ProcessRequest request, CancellationToken ct) =>
         _real.StartSessionAsync(Redirect(request), ct);
@@ -467,6 +526,7 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
             else if (IsMode(request, "app-server"))
             {
                 scenario = CatalogScenario;
+                _catalogReports.Add(report);
             }
             else
             {

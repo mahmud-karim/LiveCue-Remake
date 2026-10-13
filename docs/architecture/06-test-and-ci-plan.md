@@ -235,6 +235,12 @@ Every seam is faked, every relay area is the real one.
 | Every row of protocol 6.1 | `EndToEndRouteTests.Each_route_once_with_valid_input` | H | any |
 | Section 4 | The security list | see there | |
 
+As built (WP-W13): the table of every relay-side statement and every item of section 4, with the tests that
+prove each and what was found, is `windows/tests/LiveCue.Relay.Tests/Conformance/Coverage.md`.
+`CoverageTableTests` keeps it true. The tests of this section run against `ConformanceRelay`, in which the
+seams of the catalogue, the answers and pairing are not faked either. S-23 is not met as written: see the
+open defect WP-W13-1 there.
+
 ---
 
 ## 2. Hosting and desktop tests

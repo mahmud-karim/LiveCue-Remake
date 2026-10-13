@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using LiveCue.Relay.Answers;
+using LiveCue.Relay.Processes;
 using LiveCue.Relay.Protocol;
 using LiveCue.Relay.Tests.Edge;
 using LiveCue.Relay.Tests.Processes;
@@ -183,6 +184,43 @@ public sealed class InjectionTests
 
         await AssertUsualRunAsync(relay, 0, AnswerKind.Assist);
         await AssertUsualRunAsync(relay, 1, AnswerKind.Summary);
+    }
+
+    [Fact]
+    public async Task The_real_child_sees_none_of_the_parents_secrets()
+    {
+        // Protocol P2-064 and S-44, through the listener and a real child: with a variable of the
+        // application, a variable named like a secret and a model API key in the relay's own environment,
+        // the process started for an answer sees none of the three, and no name outside the allowlist.
+        string[] names = ["LIVECUE_CONFORMANCE_CANARY", "MY_SECRET_TOKEN", "OPENAI_API_KEY"];
+        var before = names.Select(Environment.GetEnvironmentVariable).ToArray();
+        try
+        {
+            foreach (var name in names)
+            {
+                Environment.SetEnvironmentVariable(name, "synthetic-canary-value");
+            }
+
+            await using var relay = await ConformanceRelay.StartAsync();
+            Assert.Equal(200, (await relay.ExchangeAsync(HttpMethod.Post, "/v1/assist", ConformanceRelay.AnswerBody())).Status);
+            Assert.Equal(200, (await relay.ExchangeAsync(HttpMethod.Get, "/v1/models")).Status);
+
+            var report = await relay.Codex.ReadExecReportAsync();
+            Assert.All(names, name => Assert.DoesNotContain(name, report.EnvironmentNames, StringComparer.OrdinalIgnoreCase));
+            Assert.DoesNotContain(report.EnvironmentNames, name => name.Contains("SECRET", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(report.EnvironmentNames, name => name.Contains("TOKEN", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(report.EnvironmentNames, name => name.Contains("API_KEY", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain("synthetic-canary-value", report.Prompt, StringComparison.Ordinal);
+            await AssertUsualRunAsync(relay, 0, AnswerKind.Assist);
+            Assert.All(relay.Codex.Requests, request => Assert.Equal(EnvironmentPolicy.CodexAllowlist, request.Environment));
+        }
+        finally
+        {
+            for (var index = 0; index < names.Length; index++)
+            {
+                Environment.SetEnvironmentVariable(names[index], before[index]);
+            }
+        }
     }
 
     /// <summary>
