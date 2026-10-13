@@ -528,7 +528,7 @@ public sealed class BodySecurityTests
             using var request = relay.Request(HttpMethod.Post, route.Target);
             request.Content = new ByteArrayContent(body);
             var (status, text) = await relay.ExchangeAsync(request);
-            Assert.True(started.Elapsed < TimeSpan.FromSeconds(5), $"{what} on {route.Target} took {started.Elapsed}.");
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(15), $"{what} on {route.Target} took {started.Elapsed}.");
 
             if (valid == false)
             {

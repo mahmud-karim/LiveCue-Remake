@@ -222,7 +222,9 @@ public sealed class EdgeSecurityTests(ITestOutputHelper output)
         // After a reset the old token is one more token that is not accepted.
         await relay.Relay.ResetPairingAsync(CancellationToken.None);
         Assert.Equal(idle, await ProbeAsync(old));
-        var (afterReset, _) = await hanging.WaitAsync(TimeSpan.FromSeconds(30));
+        // (The relay's clock is the manual one here. Ending the run can need it to move: when the folder
+        // of the killed process is still held for a moment, the next attempt to delete it waits on the clock.)
+        var (afterReset, _) = await CatalogueStatementTests.PumpAsync(clock, hanging);
         Assert.Equal(401, afterReset);
         phones.ForEach(phone => phone.Dispose());
     }
