@@ -6,20 +6,25 @@
              Focusable="False">
 
   <!--
-    Pairing (docs/design/03-windows-screens.md, section 3; mockup win-pairing-shown). The layout is
-    the spike's: the QR panel, the panel beside it, and the separate reset panel. First version: the
-    tile shows its placeholder; the code, the countdown and the verification notice arrive with the
-    page (W-design 5.6).
+    Pairing (docs/design/03-windows-screens.md, section 3; mockups win-pairing-shown and
+    win-pairing-reset; W-design 5.6).
+
+      left panel    the QR tile, as wide as the code needs and never under 304; under it the time left
+      right panel   title, hint, Show QR and Hide QR, the PC address, the verification notice, footnote
+      reset panel   by itself at the bottom, so it cannot be mistaken for part of normal pairing
+
+    The tile is opaque white with nothing over the code, or the code stops scanning (design system
+    4.15). The window holds the QR's modules and nothing else: there is no pairing text here, and no
+    control that copies one (decision A-16). At the minimum height the page scrolls rather than
+    squeeze the tile or the reset panel.
   -->
-  <DockPanel>
-
-    <Grid DockPanel.Dock="Top" MinHeight="{DynamicResource SizePageHeader}" Margin="4,0,4,16">
-      <TextBlock Text="Pairing" Style="{DynamicResource Type.Display}" VerticalAlignment="Center" />
-    </Grid>
-
-    <!-- At the minimum height the page scrolls rather than squeeze the tile or the reset panel. -->
-    <ScrollViewer Style="{DynamicResource Page.Scroller}">
-      <StackPanel Margin="{DynamicResource InsetScrollerContent}">
+  <ui:PageLayout Title="Pairing">
+    <!--
+      The bar's 12 are always kept free in the window's own inset (16 - 12 = 4 at the right), so the
+      panels are as wide as on every other page and do not move when the page starts to scroll.
+    -->
+    <ScrollViewer x:Name="PageScroller" Style="{DynamicResource Page.Scroller}" VerticalScrollBarVisibility="Visible">
+      <StackPanel Margin="16,8,4,16">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -27,62 +32,148 @@
             <ColumnDefinition Width="*" />
           </Grid.ColumnDefinitions>
 
-          <!-- Left panel: the QR tile. Always opaque white with nothing on top, or the code stops scanning (4.15). -->
-          <ContentControl Style="{DynamicResource Glass.Panel}" Width="{DynamicResource SizeQrPanel}">
-            <Grid Height="264"
-                  AutomationProperties.AutomationId="{x:Static app:AutomationIds.PairingQr}"
-                  AutomationProperties.Name="Pairing QR code"
-                  AutomationProperties.ItemStatus="{Binding QrAutomationStatus}">
-              <Border CornerRadius="{DynamicResource RadiusCard}"
-                      Background="{DynamicResource SurfaceQrBrush}"
-                      Effect="{DynamicResource ShadowRaised}" />
-              <Border CornerRadius="{DynamicResource RadiusCard}"
-                      BorderBrush="{DynamicResource StrokeRaisedBrush}"
-                      BorderThickness="1"
-                      Padding="12">
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                  <Border Width="64"
-                          Height="64"
-                          CornerRadius="{DynamicResource RadiusCard}"
-                          Background="{DynamicResource AccentTintBrush}"
-                          HorizontalAlignment="Center">
-                    <ui:Icon Glyph="{StaticResource Icon.Qr}"
-                             Width="28"
-                             Height="28"
-                             Foreground="{DynamicResource AccentTextBrush}"
-                             HorizontalAlignment="Center"
+          <!-- Left panel: the QR tile and the line under it. -->
+          <ContentControl x:Name="QrPanel" Style="{DynamicResource Glass.Panel}" MinWidth="{DynamicResource SizeQrPanel}">
+            <StackPanel HorizontalAlignment="Left">
+
+              <Grid x:Name="QrTile" HorizontalAlignment="Left">
+                <Border CornerRadius="{DynamicResource RadiusCard}"
+                        Background="{DynamicResource SurfaceQrBrush}"
+                        Effect="{DynamicResource ShadowRaised}" />
+                <!-- 12 from the tile's outer edge: the stroke lies inside it. -->
+                <Border CornerRadius="{DynamicResource RadiusCard}"
+                        BorderBrush="{DynamicResource StrokeRaisedBrush}"
+                        BorderThickness="1"
+                        Padding="11">
+                  <Grid MinWidth="240" MinHeight="240">
+
+                    <!-- The code. Without a matrix it draws nothing and only says "hidden". -->
+                    <ui:QrCodeView x:Name="Qr"
+                                   Modules="{Binding QrModules}"
+                                   ModuleBrush="{DynamicResource QrModuleBrush}"
+                                   QuietBrush="{DynamicResource SurfaceQrBrush}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   AutomationProperties.AutomationId="{x:Static app:AutomationIds.PairingQr}"
+                                   AutomationProperties.Name="Pairing QR code"
+                                   AutomationProperties.ItemStatus="{Binding QrAutomationStatus}" />
+
+                    <!-- Nothing to show: the glyph and why. -->
+                    <StackPanel x:Name="QrPlaceholder" VerticalAlignment="Center" HorizontalAlignment="Center">
+                      <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding TileFace}" Value="Code">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding TileFace}" Value="Generating">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </StackPanel.Style>
+                      <ui:Icon Glyph="{StaticResource Icon.Qr}"
+                               Width="28"
+                               Height="28"
+                               Foreground="{DynamicResource InkSecondaryBrush}"
+                               HorizontalAlignment="Center" />
+                      <TextBlock Text="Your pairing code"
+                                 Style="{DynamicResource Type.Label}"
+                                 Foreground="{DynamicResource InkSecondaryBrush}"
+                                 HorizontalAlignment="Center"
+                                 Margin="0,12,0,0" />
+                      <TextBlock Text="{Binding PlaceholderLine}"
+                                 Style="{DynamicResource Type.Caption}"
+                                 Foreground="{DynamicResource InkSecondaryBrush}"
+                                 HorizontalAlignment="Center"
+                                 TextAlignment="Center"
+                                 TextWrapping="Wrap"
+                                 TextTrimming="None"
+                                 MaxWidth="216"
+                                 Margin="0,6,0,0" />
+                    </StackPanel>
+
+                    <!-- A show or a reset waits for the relay. -->
+                    <Grid x:Name="QrSpinner" HorizontalAlignment="Center" VerticalAlignment="Center">
+                      <Grid.Style>
+                        <Style TargetType="Grid">
+                          <Setter Property="Visibility" Value="Collapsed" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding TileFace}" Value="Generating">
+                              <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </Grid.Style>
+                      <ui:Spinner Width="20"
+                                  Height="20"
+                                  Foreground="{DynamicResource AccentFillBrush}"
+                                  AutomationProperties.Name="Creating the QR" />
+                    </Grid>
+                  </Grid>
+                </Border>
+              </Grid>
+
+              <!--
+                The time left: a neutral chip with the clock glyph, a warning chip in the last 30
+                seconds. A capsule that brings its own base, like every chip (design system 4.12).
+              -->
+              <Grid x:Name="CountdownChip"
+                    HorizontalAlignment="Left"
+                    Margin="0,12,0,0"
+                    MinHeight="{DynamicResource ChipHeight}"
+                    Visibility="{Binding CountdownText, Converter={StaticResource NullToVisibility}}">
+                <Border ui:Pill.IsPill="True" Background="{DynamicResource SurfaceRaisedBrush}" />
+                <Border ui:Pill.IsPill="True" Padding="{DynamicResource ChipPadding}">
+                  <Border.Style>
+                    <Style TargetType="Border">
+                      <Setter Property="Background" Value="{DynamicResource StatusOfflineTintBrush}" />
+                      <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusOfflineBrush}" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCountdownWarning}" Value="True">
+                          <Setter Property="Background" Value="{DynamicResource StatusWarningTintBrush}" />
+                          <Setter Property="TextElement.Foreground" Value="{DynamicResource StatusWarningBrush}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Border.Style>
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ui:Icon Glyph="{StaticResource Icon.Clock}"
+                             Width="14"
+                             Height="14"
+                             Margin="0,0,6,0"
                              VerticalAlignment="Center" />
-                  </Border>
-                  <TextBlock Text="Your pairing code"
-                             Style="{DynamicResource Type.Headline}"
-                             HorizontalAlignment="Center"
-                             Margin="0,12,0,0" />
-                  <TextBlock Text="{Binding PlaceholderLine}"
-                             Style="{DynamicResource Type.Caption}"
-                             Foreground="{DynamicResource InkSecondaryBrush}"
-                             HorizontalAlignment="Center"
-                             Margin="0,2,0,0" />
-                </StackPanel>
-              </Border>
-            </Grid>
+                    <TextBlock Text="{Binding CountdownText}"
+                               Style="{DynamicResource Type.Caption}"
+                               FontWeight="SemiBold"
+                               Typography.NumeralAlignment="Tabular"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+            </StackPanel>
           </ContentControl>
 
-          <!-- Right panel: title, hint, buttons, PC address, footnote. -->
-          <ContentControl Grid.Column="2" Style="{DynamicResource Glass.Panel}">
-            <StackPanel>
-              <TextBlock Text="Pair your iPhone" Style="{DynamicResource Type.Title}" />
+          <!-- Right panel: title, hint, buttons, PC address, verification notice, footnote. -->
+          <ContentControl x:Name="PairPanel" Grid.Column="2" Style="{DynamicResource Glass.Panel}">
+            <StackPanel MaxWidth="{DynamicResource SizeReadingMax}" HorizontalAlignment="Left">
+              <TextBlock Text="Pair your iPhone"
+                         Style="{DynamicResource Type.Title}"
+                         AutomationProperties.HeadingLevel="Level2" />
               <TextBlock Text="{Binding Hint}"
                          Style="{DynamicResource Type.Body}"
                          TextWrapping="Wrap"
                          TextTrimming="None"
-                         MaxWidth="{DynamicResource SizeReadingMax}"
-                         HorizontalAlignment="Left"
                          Margin="0,8,0,0"
+                         AutomationProperties.LiveSetting="Polite"
                          AutomationProperties.AutomationId="{x:Static app:AutomationIds.PairingHint}" />
 
+              <!-- The two buttons stay on one line at every width (screens section 7). -->
               <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                 <Button Style="{DynamicResource Button.Primary}"
                         ui:ButtonAssist.Icon="{StaticResource Icon.Qr}"
+                        ui:ButtonAssist.IconSize="18"
+                        ui:ButtonAssist.IsBusy="{Binding IsShowQrBusy}"
                         Content="Show QR"
                         Command="{Binding ShowQrCommand}"
                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.ShowQrButton}" />
@@ -92,21 +183,73 @@
                         Command="{Binding HideQrCommand}"
                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.HideQrButton}" />
               </StackPanel>
-              <!-- Why Show QR is disabled, when it is. The line keeps its height when empty, so nothing below moves. -->
+
+              <!-- Why Show QR is disabled, while it is. -->
               <TextBlock Text="{Binding ShowQrCaption}"
                          Style="{DynamicResource Type.Caption}"
                          Foreground="{DynamicResource InkSecondaryBrush}"
-                         Margin="2,6,0,0" />
+                         TextWrapping="Wrap"
+                         TextTrimming="None"
+                         Margin="2,8,0,0"
+                         Visibility="{Binding ShowQrCaption, Converter={StaticResource NullToVisibility}}" />
 
               <TextBlock Text="PC address"
                          Style="{DynamicResource Type.Caption}"
                          FontWeight="SemiBold"
                          Foreground="{DynamicResource InkSecondaryBrush}"
-                         Margin="2,10,0,6" />
+                         Margin="2,16,0,6" />
+              <!-- 4 above and below: the field stays 44 high for one line and for two, and grows after that. -->
               <ContentControl Style="{DynamicResource Field.ReadOnly}"
+                              Padding="14,4"
+                              AutomationProperties.Name="PC address"
                               AutomationProperties.AutomationId="{x:Static app:AutomationIds.PairingAddressField}">
-                <TextBlock Text="{Binding PcAddress}" Style="{DynamicResource Type.Mono}" />
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+
+                  <!--
+                    The address the QR advertises; until the relay has run once, what it will be. A long
+                    address wraps: it is never cut off.
+                  -->
+                  <TextBlock x:Name="AddressText"
+                             Text="{Binding PcAddress}"
+                             Style="{DynamicResource Type.Mono}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding HasPcAddress, Converter={StaticResource BooleanToVisibility}}" />
+                  <TextBlock Text="Shown when the relay is running"
+                             Style="{DynamicResource Type.Mono}"
+                             Foreground="{DynamicResource InkSecondaryBrush}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             VerticalAlignment="Center"
+                             Visibility="{Binding HasPcAddress, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}" />
+
+                  <!-- 36 in a field of 44: the button adds no height. -->
+                  <Button Grid.Column="1"
+                          Style="{DynamicResource Button.Icon.Quiet}"
+                          Width="36"
+                          Height="36"
+                          Margin="6,0,-9,0"
+                          VerticalAlignment="Center"
+                          ui:ButtonAssist.Icon="{StaticResource Icon.Copy}"
+                          ui:ButtonAssist.IconSize="18"
+                          Foreground="{DynamicResource InkSecondaryBrush}"
+                          Command="{Binding CopyAddressCommand}"
+                          ToolTip="Copy PC address"
+                          AutomationProperties.Name="Copy PC address"
+                          Visibility="{Binding HasPcAddress, Converter={StaticResource BooleanToVisibility}}" />
+                </Grid>
               </ContentControl>
+
+              <!-- What the relay found when it tried its own advertised address, after each QR display. -->
+              <ui:Banner Model="{Binding VerifyNotice}"
+                         Command="{Binding OpenSettingsCommand}"
+                         Margin="0,12,0,0"
+                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.PairingVerifyNotice}" />
 
               <TextBlock Text="Pairing codes are private. Codes hide after 2 minutes. Showing the QR again keeps existing pairings valid."
                          Style="{DynamicResource Type.Caption}"
@@ -118,17 +261,20 @@
           </ContentControl>
         </Grid>
 
-        <!-- Reset pairing: a separate panel, so it cannot be mistaken for part of normal pairing. -->
-        <ContentControl Style="{DynamicResource Glass.PanelCompact}" Padding="20,16" Margin="0,16,0,0">
+        <!-- Reset pairing: a separate panel. The only destructive action of the app; it always asks first. -->
+        <ContentControl x:Name="ResetPanel" Style="{DynamicResource Glass.PanelCompact}" Padding="20,16" Margin="0,16,0,0">
           <DockPanel>
             <Button DockPanel.Dock="Right"
                     Style="{DynamicResource Button.Destructive}"
                     Margin="16,0,0,0"
+                    VerticalAlignment="Center"
                     Content="Reset pairing…"
                     Command="{Binding ResetPairingCommand}"
                     AutomationProperties.AutomationId="{x:Static app:AutomationIds.ResetPairingButton}" />
             <StackPanel VerticalAlignment="Center">
-              <TextBlock Text="Reset pairing" Style="{DynamicResource Type.Headline}" />
+              <TextBlock Text="Reset pairing"
+                         Style="{DynamicResource Type.Headline}"
+                         AutomationProperties.HeadingLevel="Level2" />
               <TextBlock Text="Creates a new pairing code. Every iPhone paired with this PC stops working until it scans the new QR."
                          Style="{DynamicResource Type.Caption}"
                          Foreground="{DynamicResource InkSecondaryBrush}"
@@ -139,5 +285,5 @@
         </ContentControl>
       </StackPanel>
     </ScrollViewer>
-  </DockPanel>
+  </ui:PageLayout>
 </UserControl>
