@@ -216,7 +216,7 @@ public sealed class PrivateTextSweepTests
         // the phone with a command the relay does not know, so that every stream ends with an error frame.
         for (var stream = 0; stream < streams; stream++)
         {
-            await UntilSettledAsync(relay);
+            await EndToEndRouteTests.UntilSettledAsync(relay);
             if (what == "the lab says private things")
             {
                 relay.LabSockets.FirstMessage = stream switch
@@ -263,7 +263,7 @@ public sealed class PrivateTextSweepTests
         }
 
         // The model status after the failures, and what the desktop was told.
-        await UntilSettledAsync(relay);
+        await EndToEndRouteTests.UntilSettledAsync(relay);
         await DriveAsync(relay, relay.Request(HttpMethod.Get, "/v1/local-model"), seen);
         await relay.Relay.ResetPairingAsync(CancellationToken.None);
         await relay.Relay.StopAsync(CancellationToken.None);
@@ -308,23 +308,6 @@ public sealed class PrivateTextSweepTests
                 Assert.Contains(seen, text => text.Contains("\"code\":\"LAB_NOT_CONFIGURED\"", StringComparison.Ordinal));
                 Assert.Empty(relay.Codex.Requests);
                 break;
-        }
-    }
-
-    /// <summary>Waits until no model operation runs: the status is neither "starting" nor "stopping".</summary>
-    private static async Task UntilSettledAsync(ConformanceRelay relay)
-    {
-        var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-        while (true)
-        {
-            var (_, body) = await relay.ExchangeAsync(HttpMethod.Get, "/v1/local-model");
-            if (EndToEndRouteTests.StateOf(body) is not ("starting" or "stopping"))
-            {
-                return;
-            }
-
-            Assert.True(DateTime.UtcNow < until, "A model operation never ended: " + body);
-            await Task.Delay(10);
         }
     }
 

@@ -13,6 +13,19 @@ using LiveCue.TestSupport;
 
 namespace LiveCue.Relay.Tests.Conformance;
 
+/// <summary>
+/// The defects this sweep found and did not fix, as the reason of the test that is skipped for each. A
+/// skipped test here states the behaviour the protocol or the test plan asks for and fails when it is run.
+/// </summary>
+internal static class OpenDefects
+{
+    public const string UnreadResponseHoldsTheGauge =
+        "Open defect WP-W13-1: a response the caller does not read is a write that waits, and nothing bounds that wait "
+        + "but the server core's response rate limit (minutes for small answers, more than an hour for a large one). "
+        + "With the token the request keeps its place at the gauge (C-31) meanwhile; without it the connection keeps "
+        + "its place at C-30. Needs a ruling: a limit for writing a response.";
+}
+
 /// <summary>What a conformance test may change about the relay before it is created.</summary>
 internal sealed class ConformanceOptions
 {
@@ -135,12 +148,7 @@ internal sealed class ConformanceRelay : IAsyncDisposable
         {
             await relay.Relay.StartAsync(CancellationToken.None);
             relay.Port = relay.Relay.BoundPort;
-            relay.Client.Dispose();
-            relay.Client = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false })
-            {
-                BaseAddress = new Uri($"http://127.0.0.1:{relay.Port}"),
-                Timeout = TimeSpan.FromSeconds(90),
-            };
+            relay.DropClientConnections();
             await relay.ReadTokenAsync();
             return relay;
         }
@@ -149,6 +157,20 @@ internal sealed class ConformanceRelay : IAsyncDisposable
             await relay.DisposeAsync();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Closes the connections the client keeps for reuse and starts with none, so that a test can count
+    /// the relay's open connections down to zero.
+    /// </summary>
+    public void DropClientConnections()
+    {
+        Client.Dispose();
+        Client = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false })
+        {
+            BaseAddress = new Uri($"http://127.0.0.1:{Port}"),
+            Timeout = TimeSpan.FromSeconds(90),
+        };
     }
 
     /// <summary>Reads the accepted token again through <see cref="IPairingExport"/> (after a reset).</summary>

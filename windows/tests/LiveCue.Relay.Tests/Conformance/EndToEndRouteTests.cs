@@ -186,6 +186,23 @@ public sealed class EndToEndRouteTests
         }
     }
 
+    /// <summary>Waits until no model operation runs: the status is neither "starting" nor "stopping".</summary>
+    internal static async Task UntilSettledAsync(ConformanceRelay relay)
+    {
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (true)
+        {
+            var (_, body) = await relay.ExchangeAsync(HttpMethod.Get, "/v1/local-model");
+            if (StateOf(body) is not ("starting" or "stopping"))
+            {
+                return;
+            }
+
+            Assert.True(DateTime.UtcNow < until, "A model operation never ended: " + body);
+            await Task.Delay(10);
+        }
+    }
+
     /// <summary>
     /// A model command right after a stream ended: the lease is given back a moment after the phone has
     /// seen its close frame, so MODEL_BUSY may be answered once more.
