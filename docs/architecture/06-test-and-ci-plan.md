@@ -406,6 +406,8 @@ the toast); without it they write nothing.
 | Mapping dialog: shows the plan's text verbatim; `Done` closes; every other outcome stays with its text | `MappingDialogTests.Outcome_cases` | any |
 | **TS-9: only `MappingDialogViewModel` references `IDesktopSession.ExecuteMappingAsync`** (metadata scan of the desktop assembly) | `MappingDialogTests.Only_the_dialog_can_execute` | any |
 | Loaded-model row from events | `SettingsViewModelTests.Loaded_model_cases` | any |
+| As built: the reset hint; the Codex rows and "Mark as checked"; the address, the two notices, the lab rows and About; a removal's own texts | `PairingViewModelTests.A_reset_shows_the_new_qr_with_its_own_hint`; `SettingsViewModelTests.Assistant_rows_and_mark_as_checked`, `.Address_notices_speech_rows_and_about`; `MappingDialogTests.A_removal_shows_its_own_texts` | any |
+| As built: every state of screens 3, 5 and 6 in the real window over a `FakeSession`, at both window sizes: the texts shown, the automation ids, the QR on whole pixels with its quiet zone (every module of a synthetic matrix compared), the panels that grow with a larger code, the two columns that stack below 1100, the lists of warnings without a button for what LiveCue did not create, both dialogs with their focus and their default button | `PairingPageTests` (three tests); `ResetPairingDialogTests.Behaviour`; `SettingsPageTests` (five tests) | Windows, UI |
 
 ### 2.9 Self-test (WP-W11) and tools (WP-W12), folder `SelfTest/`
 

@@ -4585,6 +4585,32 @@ it. The element's automation name is "Pairing QR code" and its status text is `Q
 matrix is never exposed as text. The left panel is as wide as the tile plus its padding, at least
 `SizeQrPanel`.
 
+As built (WP-W10):
+
+- **The QR element.** `QrCodeView` carries the id `PairingQr` and is always in the tile; without a matrix it
+  draws nothing and takes no room. To assistive technology it is one image whose name is "Pairing QR code",
+  a comma and `QrAutomationStatus`. The arithmetic is `Controls.QrGeometry`; "the code" that must not be
+  narrower than 200 is the drawn square, quiet zone included (DS 4.15). The square is centred in a code area
+  of at least 240 x 240, so the tile is 264 for every code up to 240 and grows with a larger one (41 modules
+  at 100% are 245, and the panel 309). A run of dark modules is drawn as one rectangle, with aliased edges
+  and a guideline on every module boundary.
+- **Tile faces.** A shown QR stays shown while "Show QR" is asked again; `Generating` is the face only while
+  nothing is shown. The placeholder is the 28 glyph, "Your pairing code" and the line, all in `ink.secondary`,
+  as the mockup draws it.
+- **Countdown chip.** A capsule drawn by the page from the chip tokens (base, tint, clock glyph, caption
+  semibold, tabular figures), because `Chip` draws a status mark and has no glyph. `QrCountdown` is a value:
+  whole seconds, a part of a second counted as a whole one, so the chip reads 2:00 when the QR appears.
+- **Reset hint.** The matrix that arrives while the confirmed reset dialog is busy gets "Pairing reset. Scan
+  this QR on each iPhone."; after a reset with the relay stopped, the first matrix of the next start gets it.
+- **Verification notice.** A `SelfCheckCompleted` is shown only while a QR is shown. One that arrives while
+  "Show QR" or a reset is still waiting for its matrix is kept and shown with that matrix. `RelayEnded` also
+  puts the hint back to the one of the start.
+- **Address.** Until the relay has run once the field reads "Shown when the relay is running" in
+  `ink.secondary` and has no copy button. The address is a `TextBlock`; the copy button is how it is taken.
+- **Scrolling.** The page keeps the scroll bar's 12 free in the window's inset at all times (content margin
+  16, 8, 4, 16 with the bar always present), so its panels are as wide as on every other page and do not
+  move when the page starts to scroll at the minimum height. Settings does the same.
+
 ### 5.7 Activity page (`Activity/`)
 
 `ActivityLog` is the model: a list of entries and a running character count. The count of an entry is the
@@ -4692,6 +4718,55 @@ for `stopped`) and from `SpeechStreamChanged` (`Ready` gives "`<label>` · in us
 gives "`<label>` · ready"). `OpenSourceCommand` opens the repository page; `OpenNoticesCommand` opens
 `THIRD-PARTY-NOTICES.md` beside the executable; both through `IExternalLauncher`.
 
+As built (WP-W10):
+
+- **Form.** `SettingsForm` is a record of the fields as typed; `HasChanges` is "the form is not the form of
+  the saved settings". A port field without a number is validated as port 0, which the rules report as out
+  of range. A path field drops surrounding spaces and the quotes of "Copy as path". Each field's error line
+  is a property of the view model (`RelayPortError`, `PrivateHttpsPortError`, `PublicPathPrefixError`,
+  `CodexPathError`, `LabFolderError`) and is also what `INotifyDataErrorInfo` reports. Switching the mode puts
+  a field that the new mode does not show, and that has an error, back to its saved value, so that "Save" is
+  never disabled by an error nobody can see. The saved settings changing under the form (a mapping command
+  that wrote its ledger, "Mark as checked") leaves unsaved edits alone; a form without edits follows them.
+- **Field texts** (`Text/SettingsText.cs`). Relay port: "Enter a port from 1024 to 65535."; the `ForbiddenRelayPort`
+  text of 4.15; "This port is used by the PC speech lab. Choose another relay port." Private port: "Enter a
+  port from 1 to 65535." and the Funnel text above. Path: "Use a path such as /livecue: a slash, then 1 to 32
+  lowercase letters, digits or hyphens, starting with a letter or digit." Codex path: "No file was found at
+  this path. Enter the full path of codex.exe, or leave the field empty."; "The file must be named
+  codex.exe." Lab folder: the text above; "This folder does not exist."; "This folder does not hold
+  Start-ASR-Lab.ps1 and Stop-ASR-Lab.ps1."
+- **Layout of the form.** Private: Relay port, HTTPS port and the read-only path "/" share a line. Public: Relay
+  port and the path field share it, and the three Funnel ports are a segmented control on a line of their
+  own, because three segments do not fit a third of the column. `SettingsAddressField` shows "Shown when
+  Tailscale is connected" until the last check knew this PC's name, and whenever the form has no valid
+  address.
+- **After "Save".** The session is asked for `CheckAgainAsync()`, which only reads: the mapping status is the
+  status of the settings that are saved, and the inspection the session holds was made for the previous
+  ones. Nothing is written to Tailscale by a save.
+- **Mapping status.** Before the first inspection: "Not checked" (ring). When the last check found Tailscale
+  missing or offline, that comes first, whatever was inspected: "Tailscale is not installed" with "Install
+  Tailscale and sign in, then choose Check again.", or "Tailscale is not online" with "Open Tailscale and
+  connect, then choose Check again." `Unknown` otherwise: "LiveCue could not read Tailscale's configuration"
+  with "Check that Tailscale is running, then choose Check again." "Save the settings first." is the caption
+  only while the state is `Absent`. `MappingCommandText` is plain `Type.Mono` text in the card, as the mockup
+  draws it, under the kicker "What Set up does"; "Check again" and "Remove…" stand under it.
+- **Lists.** `StaleMappingList` uses the `Banner`'s own button; a banner's button has no parameter, so the
+  page's code-behind hands the row's entry to `RemoveMappingCommand`. That command accepts only
+  `CurrentOwnedMapping` and the entries of `StaleMappings`: nothing else can be planned for removal. A list
+  whose rows did not change keeps its instance, so its warnings are not drawn or announced again. An
+  `UnownedExposureList` row without a command shows `MappingTexts.ManualRemovalUnavailable` in its place.
+- **Assistant.** "Not signed in" has its fix as the row's subtitle (`CodexLoginDetail`). "Mark as checked"
+  stands under the "Codex version" row and is shown only while it can be chosen. `IsCheckingAssistant` is true
+  while either "Check again" runs or the session is `Checking`; both buttons are busy then. Opening the page
+  runs a check only when the session has no report yet (the view calls `OnOpened`).
+- **PC speech models.** The lab folder in use is the one the running relay was given
+  (`IRelaySupervisor.RunningOptions`); while no relay runs it is the saved folder, or `asr` beside the app,
+  when `ISettingsValidator.Validate` has no objection to it as `asrLabFolder`. `Stopping` is shown as "None".
+  The loaded-model row goes back to "Not reported yet" at `RelayStarting` and at `RelayEnded`. Model names
+  are "Nemotron" and "Qwen3" for the two ids of C-04, the id itself otherwise.
+- **Capture switch and About.** `HideFromCaptureToggle` is a compact panel of its own between the two check
+  panels and About. About is "Version", "Licence", and the two quiet buttons (`Settings/AboutInfo.cs`).
+
 ### 5.9 Dialogs and toasts
 
 `DialogHost` shows one `IDialogViewModel` in the dialog layer: scrim over the whole window including the
@@ -4706,6 +4781,16 @@ click on the scrim run `CancelCommand` unless `IsBusy`.
 
 The mapping dialog view model is the only code that calls `ExecuteMappingAsync` (TS-9); a test fails if any
 other type in the desktop assembly references that member.
+
+As built (WP-W10): both dialogs have a close button at the title's right (`Button.Icon.Quiet`, "Close"), as
+the mockup draws it; it runs `CancelCommand` and is not the cancel button, so the initial focus stays on
+"Cancel". The reset body is read when it is shown, so it follows the relay. The mapping dialog shows the
+command in a read-only `Field.Text` box (it can be selected and copied, and is not "the first field" for the
+initial focus), and holds only the confirm button of its own action. Its `Failure` is
+`MappingTexts.Failure(result, plan)` and, when `OthersChanged` is set, `MappingTexts.OthersChanged` on a
+line after it. The test of TS-9 reads the IL of the built desktop assembly: every reference to a method
+named `ExecuteMappingAsync` must lie in `MappingDialogViewModel`, and `IMappingManager.ExecuteAsync` is
+referenced by `DesktopSession` alone.
 
 `ToastHost`: one toast at a time at the bottom centre of the content area (DS 4.11), shown for 4 s. The only
 toast text is "Copied".
@@ -5164,6 +5249,12 @@ the workflow's restore step (`--locked-mode`).
 - Nothing changes on the Pairing page: the QR keeps carrying the token (decisions 8.4).
 - Adds: ST-06 (`SettingsViewModelTests.Hide_from_capture_is_a_form_field`), ST-08
   (`SettingsViewModelTests.Unowned_exposure_rows`).
+- As built: the notes at the end of 5.6 and 5.8 and in 5.9. Besides the tests of test plan 2.8,
+  `PairingPageTests`, `ResetPairingDialogTests` and `SettingsPageTests` draw every state of screens 3, 5 and
+  6 in the real window over a `FakeSession`, at 1240 x 660 and at 960 x 620; with `LIVECUE_TEST_SHOTS` set
+  they write each scene as a PNG. Every QR in them is a synthetic matrix that encodes nothing. One line
+  outside the package's files changed: the self-test's check of the Settings scene reads the relay port
+  from `RelayPortField`, which is a text box now and no longer a text block.
 
 **WP-W11 Self-test**
 
