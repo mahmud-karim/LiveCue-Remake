@@ -36,7 +36,7 @@ enum ProviderLockReason: Equatable, Sendable {
     }
 
     /// Meta: a key is saved. PC-local: the PC model can start a session. On-device: the model of the
-    /// selected provider is loaded.
+    /// selected provider is loaded; for Apple, the system's language asset is installed.
     var speechReady: Bool {
         let provider = speech.provider
         if provider.isCloud {
@@ -60,6 +60,15 @@ enum ProviderLockReason: Equatable, Sendable {
 
     var systemReady: Bool {
         speechReady && answersReady
+    }
+
+    /// Why a provider cannot be chosen on this iPhone, or nil when it can. Only Apple has such a reason:
+    /// "Requires iOS 26 or later", or what the system said when it was asked.
+    func unavailableReason(for provider: SpeechProvider) -> String? {
+        guard provider == .apple, case .unavailable(let reason) = models.systemSpeechAvailability else {
+            return nil
+        }
+        return reason
     }
 
     /// An on-device model is being prepared, or a PC model command is in flight or the PC reports

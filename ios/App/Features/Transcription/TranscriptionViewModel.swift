@@ -51,7 +51,8 @@ import Observation
             provider: provider,
             hasMetaKey: speech.hasMetaKey,
             pcModelLabel: relay.homeLabel(for: provider),
-            isModelLoaded: models.isLoaded(for: provider)
+            isModelLoaded: models.isLoaded(for: provider),
+            modelNote: models.systemSpeechNote
         )
     }
 
@@ -60,9 +61,24 @@ import Observation
         speech.provider.explanation(answers: assistant.configuration.provider)
     }
 
-    /// Stays on this screen. The owner refuses the change during a session and while it is locked.
+    /// Why a provider cannot be chosen on this iPhone, or nil. Apple on iOS 18 to 25:
+    /// "Requires iOS 26 or later".
+    func unavailableReason(for provider: SpeechProvider) -> String? {
+        readiness.unavailableReason(for: provider)
+    }
+
+    /// Stays on this screen. The owner refuses the change during a session, while it is locked, and for a
+    /// provider this iPhone cannot run. Before Apple is chosen for the first time the system is asked
+    /// whether it can run it, so an iPhone that cannot keeps its choice.
     func select(_ provider: SpeechProvider) {
-        speech.select(provider)
+        guard provider == .apple, speech.provider != .apple, models.systemSpeechAvailability == .unknown else {
+            speech.select(provider)
+            return
+        }
+        Task { [speech, models] in
+            await models.refreshSystemSpeech(updatingStatus: false)
+            speech.select(provider)
+        }
     }
 
     /// The PC model label of a PC-local provider is kept fresh while this screen is visible.

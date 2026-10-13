@@ -27,6 +27,7 @@ extension AppDependencies {
             openRouterKeyVerifier: FixtureAnswerService(provider: .openrouter, mode: mode, clock: clock),
             metaKeyTester: FixtureMetaKeyTester(),
             engineLoader: FixtureEngineLoader(clock: clock),
+            systemSpeech: FixtureSystemSpeech(),
             makeTranscriberFactory: { _ in
                 FixtureTranscriberFactory(clock: clock)
             }

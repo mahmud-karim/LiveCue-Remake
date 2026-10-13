@@ -105,7 +105,13 @@ enum TranscriberFailureText {
         message: "Could not finalize the transcript. Some final words may be missing."
     )
 
-    /// "Prepare Voz first." / "Prepare Parakeet first."
+    /// Apple: the system recogniser could not be started. Its own text is never shown during a session.
+    static let systemSpeechStart = TranscriberFailure(
+        .processingFailed,
+        message: "Apple speech could not start on this iPhone."
+    )
+
+    /// "Prepare Voz first." / "Prepare Parakeet first." / "Prepare Apple speech first."
     static func notPrepared(_ provider: SpeechProvider) -> TranscriberFailure {
         TranscriberFailure(.notPrepared, message: "Prepare \(provider.shortName) first.")
     }

@@ -39,9 +39,10 @@ struct PreparationBlock: Equatable {
         TranscriptionModel.onDevice(for: speech.provider)
     }
 
-    /// "~467 MB · Transcribes when you tap Assist"
+    /// "~467 MB · Transcribes when you tap Assist". Apple names no size: the system keeps its asset.
     var descriptionText: String {
         guard let model else { return "" }
+        guard model.approximateMegabytes > 0 else { return model.quality }
         return "~\(model.approximateMegabytes) MB · \(model.quality)"
     }
 
@@ -49,9 +50,15 @@ struct PreparationBlock: Equatable {
         models.isLoaded(for: speech.provider)
     }
 
-    /// "Download & use" / "Reload"
+    /// "Download & use" / "Reload". Apple has nothing to reload: "Check again" asks the system anew.
     var mainButtonTitle: String {
-        isLoaded ? "Reload" : "Download & use"
+        guard isLoaded else { return "Download & use" }
+        return speech.provider == .apple ? "Check again" : "Reload"
+    }
+
+    /// Apple's recogniser belongs to the system: there is nothing to unload.
+    var showsUnload: Bool {
+        isLoaded && speech.provider != .apple
     }
 
     var isPreparing: Bool {

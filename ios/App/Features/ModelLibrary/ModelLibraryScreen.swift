@@ -55,7 +55,7 @@ private struct ModelEntryPanel: View {
                 // Busy and unavailable while a preparation runs.
                 LCButton(model.mainButtonTitle, fullWidth: fullWidth, isBusy: model.isPreparing, action: prepare)
                     .disabled(model.isPreparing)
-                if model.isLoaded {
+                if model.showsUnload {
                     LCButton("Unload", kind: .secondary, fullWidth: fullWidth, action: unload)
                         .disabled(model.isPreparing)
                 }

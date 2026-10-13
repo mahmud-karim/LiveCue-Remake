@@ -11,6 +11,8 @@ import Observation
     @ObservationIgnored var onProviderChanged: (@MainActor (SpeechProvider) -> Void)?
     /// Installed by `AppEnvironment` from `SystemReadiness`.
     @ObservationIgnored var changeIsBlocked: (@MainActor () -> Bool)?
+    /// Installed by `AppEnvironment` from `SystemReadiness`: a provider this iPhone cannot run.
+    @ObservationIgnored var selectionIsUnavailable: (@MainActor (SpeechProvider) -> Bool)?
 
     private let preferences: any PreferencesStoring
     private let secrets: any SecretStoring
@@ -32,10 +34,13 @@ import Observation
         hasMetaKey = secrets.read(.metaAPIKey) != nil
     }
 
-    /// Refused during a session or while blocked.
+    /// Refused during a session, while blocked, and for a provider this iPhone cannot run.
     func select(_ provider: SpeechProvider) {
         guard provider != self.provider, !activity.isActive else { return }
         if let changeIsBlocked, changeIsBlocked() {
+            return
+        }
+        if let selectionIsUnavailable, selectionIsUnavailable(provider) {
             return
         }
         self.provider = provider
