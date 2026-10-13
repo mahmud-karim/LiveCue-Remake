@@ -166,8 +166,10 @@ import LiveCueCore
         // One limit for the whole of finalising (spec 01 section 3.6): the buffers still queued, the
         // remainder, `endStream` and the close. The session bounds its own part; this bounds the
         // hand-over of the queue as well, so a send that never returns cannot hold a Pause or a Stop.
+        // It waits a moment longer than the session, so that the session's own limit, which knows whether
+        // anything is still missing (IOS-A11), has the first word.
         let session = run.session
-        let seconds = finalizeSeconds
+        let seconds = finalizeSeconds + StreamingTranscriberEngine.finalizeGraceSeconds
         let limit = Task { [clock] in
             do {
                 try await clock.sleep(seconds: seconds)
@@ -376,6 +378,9 @@ import LiveCueCore
     }
 
     /// C-60 for the relay; the same 15 s for Meta.
+    /// How much longer than the session's limit the transcriber's own limit waits.
+    static let finalizeGraceSeconds: TimeInterval = 0.5
+
     private var finalizeSeconds: TimeInterval {
         provider == .meta ? MetaRealtimeAPI.finalizeSeconds : RelayConstants.speechFinalizeSeconds
     }

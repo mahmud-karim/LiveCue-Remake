@@ -280,9 +280,18 @@ final class RelaySpeechNegotiationTests: XCTestCase {
         negotiation.markEndStreamSent()
         XCTAssertEqual(negotiation.ending(closeCode: 1000, closeReason: "", insideWindow: true), .completed)
 
+        // "Going away" and "no status code" are the relay ending the stream too (IOS-A11, 1.1.0),
+        // unless the reason is a code of the relay.
+        XCTAssertEqual(negotiation.ending(closeCode: 1001, closeReason: "", insideWindow: true), .completed)
+        XCTAssertEqual(negotiation.ending(closeCode: 1005, closeReason: "", insideWindow: true), .completed)
+        XCTAssertEqual(negotiation.ending(closeCode: 1001, closeReason: "going away", insideWindow: true), .completed)
+        XCTAssertEqual(
+            negotiation.ending(closeCode: 1001, closeReason: "FINALIZE_TIMEOUT", insideWindow: true),
+            .interrupted(RelayFailure.wire(.finalizeTimeout, origin: .stream))
+        )
+
         // Any other close code, and a 1000 that came too late, are interrupted.
         XCTAssertEqual(negotiation.ending(closeCode: 1011, closeReason: "", insideWindow: true), .interrupted(streamDropped))
-        XCTAssertEqual(negotiation.ending(closeCode: 1001, closeReason: "", insideWindow: true), .interrupted(streamDropped))
         XCTAssertEqual(negotiation.ending(closeCode: 1006, closeReason: "", insideWindow: true), .interrupted(streamDropped))
         XCTAssertEqual(negotiation.ending(closeCode: 1000, closeReason: "", insideWindow: false), .interrupted(streamDropped))
     }
