@@ -175,40 +175,64 @@ struct ScreensBHostReport {
         pictureNamed name: String?,
         in testCase: XCTestCase
     ) -> ScreensBHostReport {
+        let window = open(content, size: size)
+        // Lists and navigation bars settle over a few turns of the run loop.
+        settle(window, seconds: name == nil ? 0.05 : 0.6)
+        let report = read(window)
+        if let name {
+            attachPicture(of: window, named: name, to: testCase)
+        }
+        close(window)
+        return report
+    }
+
+    /// Puts the view on screen and leaves it there, for a test that changes something before it looks.
+    static func open<Content: View>(_ content: Content, size: CGSize = CGSize(width: 393, height: 852)) -> UIWindow {
         let host = UIHostingController(rootView: content)
         let window = makeWindow(size: size)
         window.rootViewController = host
         window.isHidden = false
         host.view.frame = window.bounds
         host.view.layoutIfNeeded()
-        // Lists and navigation bars settle over a few turns of the run loop.
-        RunLoop.main.run(until: Date().addingTimeInterval(name == nil ? 0.05 : 0.6))
-        host.view.layoutIfNeeded()
+        return window
+    }
 
+    /// Lets the run loop turn, so that layout, lists and presentations finish.
+    static func settle(_ window: UIWindow, seconds: TimeInterval) {
+        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+        window.rootViewController?.view.layoutIfNeeded()
+    }
+
+    static func read(_ window: UIWindow) -> ScreensBHostReport {
         var elements: [NSObject] = []
-        collect(host.view, into: &elements, depth: 0)
+        if let root = window.rootViewController?.view {
+            collect(root, into: &elements, depth: 0)
+        }
         let labels = elements.compactMap { $0.accessibilityLabel }.filter { !$0.isEmpty }
         let identifiers = elements.compactMap { ($0 as? any UIAccessibilityIdentification)?.accessibilityIdentifier }
         let links = elements.filter { $0.accessibilityTraits.contains(.link) }
-
-        if let name {
-            let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
-            let image = renderer.image { _ in
-                window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-            }
-            let attachment = XCTAttachment(image: image)
-            attachment.name = name
-            attachment.lifetime = .keepAlways
-            testCase.add(attachment)
-        }
-
-        window.isHidden = true
-        window.rootViewController = nil
         return ScreensBHostReport(
             labels: labels,
             identifiers: Set(identifiers.filter { !$0.isEmpty }),
             linkCount: links.count
         )
+    }
+
+    /// Keeps a picture of everything in the window, presented alerts included, with the test results.
+    static func attachPicture(of window: UIWindow, named name: String, to testCase: XCTestCase) {
+        let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
+        let image = renderer.image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        testCase.add(attachment)
+    }
+
+    static func close(_ window: UIWindow) {
+        window.isHidden = true
+        window.rootViewController = nil
     }
 
     /// A window in the scene of the app that hosts the tests, or a window of its own when there is none.

@@ -57,7 +57,10 @@ private struct ProviderSetupRow: View {
                 identifier: "meta-key-settings"
             )
         case .pcSpeechModel(let value):
-            LCNavigationRow(route: Route.pcSpeechModel, title: "PC speech model", value: value, systemImage: "cpu")
+            // The home label goes below the title: "Stopped · open Settings" does not fit beside it.
+            LCNavigationRow(route: Route.pcSpeechModel, title: "PC speech model", systemImage: "cpu") {
+                Text(verbatim: value)
+            }
         case .modelLibrary(let value):
             LCNavigationRow(
                 route: Route.modelLibrary,

@@ -175,21 +175,28 @@ final class ScreensBScreenshotUITests: XCTestCase {
         _ = UITestSupport.element("scan-pairing-qr").waitForExistence(timeout: UITestSupport.timeout)
 
         // Another host on a reserved test domain, and the synthetic token of the fixtures.
+        // Typing is best effort here: a field under the keyboard is scrolled up first, and a field that
+        // cannot be reached is left alone. The screenshots show how far the walk came.
         let app = XCUIApplication()
         let address = app.textFields["PC address"]
-        if address.waitForExistence(timeout: UITestSupport.timeout) {
+        if bringIntoReach(address) {
             address.tap()
             address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 48))
             address.typeText("https://other.example.test:11443/")
         }
+        shot("wp11-pairing-address-typed")
+
         let token = app.secureTextFields["Pairing token"]
-        if token.waitForExistence(timeout: UITestSupport.timeout) {
+        if bringIntoReach(token) {
             token.tap()
             token.typeText(String(repeating: "A", count: 43))
         }
         shot("wp11-pairing-typed")
 
-        tap(button("Verify and pair"))
+        let verify = button("Verify and pair")
+        if bringIntoReach(verify) {
+            verify.tap()
+        }
         let alert = app.alerts["Replace this PC?"]
         _ = alert.waitForExistence(timeout: UITestSupport.timeout)
         shot("wp11-pairing-replace-prompt")
@@ -323,6 +330,22 @@ final class ScreensBScreenshotUITests: XCTestCase {
         if element.waitForExistence(timeout: UITestSupport.timeout) {
             element.tap()
         }
+    }
+
+    /// True once the element can be tapped. An element that exists but is covered, by the keyboard or by
+    /// the tab bar, is scrolled up a little at a time.
+    @MainActor
+    private func bringIntoReach(_ element: XCUIElement) -> Bool {
+        guard element.waitForExistence(timeout: UITestSupport.timeout) else {
+            return false
+        }
+        let app = XCUIApplication()
+        for _ in 0..<4 where !element.isHittable {
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+            from.press(forDuration: 0.05, thenDragTo: to)
+        }
+        return element.isHittable
     }
 
     @MainActor

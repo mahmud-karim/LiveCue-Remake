@@ -1,4 +1,5 @@
 import LiveCueCore
+import SwiftUI
 import XCTest
 @testable import LiveCueRemake
 
@@ -443,6 +444,37 @@ final class PairingViewModelTests: XCTestCase {
         await model.verifyAndPair()
         XCTAssertNotNil(model.replacementPrompt)
         calls = await owners.gateway.calls
+        XCTAssertEqual(calls, [])
+    }
+
+    /// The screen with its confirmation, hosted in a window: a picture of it is kept with the test
+    /// results. Nothing is sent while the confirmation is up.
+    @MainActor
+    func testTheReplacementConfirmationIsDrawn() async {
+        let owners = TestOwners()
+        let model = makeModel(owners)
+        let window = ScreensBHost.open(
+            NavigationStack {
+                PairingScreen()
+            }
+            .environment(model)
+            .environment(owners.app)
+        )
+        // Appearing fills the address with the saved one, so the other address is typed after it.
+        ScreensBHost.settle(window, seconds: 0.3)
+
+        model.showsOptions = true
+        model.address = otherAddress
+        model.token = FixtureValues.pairingToken
+        await model.verifyAndPair()
+        XCTAssertNotNil(model.replacementPrompt)
+        ScreensBHost.settle(window, seconds: 1)
+        ScreensBHost.attachPicture(of: window, named: "wp11-pairing-replace-prompt", to: self)
+
+        model.cancelReplacement()
+        ScreensBHost.settle(window, seconds: 0.6)
+        ScreensBHost.close(window)
+        let calls = await owners.gateway.calls
         XCTAssertEqual(calls, [])
     }
 
