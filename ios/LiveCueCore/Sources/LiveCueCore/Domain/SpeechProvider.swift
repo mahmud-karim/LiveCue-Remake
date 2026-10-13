@@ -1,8 +1,8 @@
 import Foundation
 
-/// The five speech providers, in catalogue order.
+/// The six speech providers, in catalogue order. `apple` is the recogniser built into iOS 26 (D-28).
 public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
-    case meta, nemotron, qwen3, voz, parakeet
+    case meta, nemotron, qwen3, voz, parakeet, apple
 
     /// Spec 02 section 7.1. The separator is a middle dot (U+00B7) with a space on each side.
     public var displayName: String {
@@ -12,6 +12,7 @@ public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
         case .qwen3: return "Qwen3 1.7B · PC"
         case .voz: return "Voz · iPhone"
         case .parakeet: return "Parakeet · iPhone"
+        case .apple: return "Apple · iPhone"
         }
     }
 
@@ -24,7 +25,7 @@ public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
     }
 
     public var isOnDevice: Bool {
-        self == .voz || self == .parakeet
+        self == .voz || self == .parakeet || self == .apple
     }
 
     public var streamsAudio: Bool {
