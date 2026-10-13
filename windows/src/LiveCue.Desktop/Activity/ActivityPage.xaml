@@ -7,24 +7,39 @@
 
   <!--
     Activity (docs/design/03-windows-screens.md, section 4; mockups win-activity and
-    win-activity-empty): one panel that fills the page, holding the log or the empty state, then the
-    footer line. First version: time and message of each entry; payloads arrive with the page
-    (W-design 5.7).
-  -->
-  <DockPanel>
+    win-activity-empty; W-design 5.7): one panel that fills the page.
 
-    <Grid DockPanel.Dock="Top" MinHeight="{DynamicResource SizePageHeader}" Margin="4,0,4,16">
-      <TextBlock Text="Activity" Style="{DynamicResource Type.Display}" VerticalAlignment="Center" />
+      caption  the three rejected-request counters, as plain numbers (SEC-14)
+      log      a card that scrolls: each entry starts with its time, then its message; a request or
+               a reply has its payload under the message, as indented JSON in the quieter ink
+      footer   where the log lives, and how many entries it has
+
+    While the log is empty the card gives way to the empty state. Nothing floats over what scrolls.
+  -->
+  <ui:PageLayout Title="Activity">
+
+    <ui:PageLayout.HeaderContent>
       <Button Style="{DynamicResource Button.Secondary}"
-              HorizontalAlignment="Right"
               ui:ButtonAssist.Icon="{StaticResource Icon.Trash}"
+              ui:ButtonAssist.IconSize="18"
               Content="Clear activity"
               Command="{Binding ClearActivityCommand}"
               AutomationProperties.AutomationId="{x:Static app:AutomationIds.ClearActivityButton}" />
-    </Grid>
+    </ui:PageLayout.HeaderContent>
 
     <ContentControl Style="{DynamicResource Glass.Panel}">
       <DockPanel>
+
+        <!-- Requests the relay refused before they reached a route. Numbers only: never a colour, never an alert. -->
+        <TextBlock DockPanel.Dock="Top"
+                   Text="{Binding RejectedCountsText}"
+                   Style="{DynamicResource Type.Caption}"
+                   Foreground="{DynamicResource InkSecondaryBrush}"
+                   Typography.NumeralAlignment="Tabular"
+                   TextWrapping="Wrap"
+                   TextTrimming="None"
+                   Margin="0,0,0,12"
+                   AutomationProperties.AutomationId="{x:Static app:AutomationIds.ActivityRejectedCounts}" />
 
         <!-- Footer line -->
         <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
@@ -33,6 +48,7 @@
                      Style="{DynamicResource Type.Caption}"
                      Foreground="{DynamicResource InkSecondaryBrush}"
                      Typography.NumeralAlignment="Tabular"
+                     VerticalAlignment="Bottom"
                      Margin="12,0,0,0" />
           <TextBlock Text="Activity stays in memory on this PC. It is cleared when LiveCue closes and is never written to disk."
                      Style="{DynamicResource Type.Caption}"
@@ -42,55 +58,95 @@
         </DockPanel>
 
         <Grid>
-          <!-- The log: each entry starts with its time, then its message. The card scrolls; nothing floats over it. -->
+          <!--
+            The log. Only the entries in view are built; the card follows new entries while it is
+            scrolled to the end, and stops following when the owner scrolls up (screens 4.2). The
+            scrollbar stands in the card's own inset.
+          -->
           <ContentControl Style="{DynamicResource Glass.Card}"
                           ui:Glass.CornerRadius="{DynamicResource RadiusField}"
-                          Padding="6"
+                          Padding="16,6,4,6"
                           Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled"
+            <ItemsControl x:Name="LogList"
+                          ItemsSource="{Binding Entries}"
                           Focusable="False"
-                          Padding="10,8"
-                          AutomationProperties.AutomationId="{x:Static app:AutomationIds.ActivityLog}">
-              <ItemsControl ItemsSource="{Binding Entries}" Focusable="False">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate>
-                    <TextBlock Style="{DynamicResource Log.Text}" TextTrimming="None">
-                      <Run Text="{Binding TimeText, Mode=OneWay}" Foreground="{DynamicResource InkSecondaryBrush}" /><Run Text="  " /><Run Text="{Binding Message, Mode=OneWay}" />
-                    </TextBlock>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel"
+                          ScrollViewer.CanContentScroll="True"
+                          ScrollViewer.ScrollChanged="OnLogScrolled">
+              <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                  <ScrollViewer CanContentScroll="True"
+                                VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled"
+                                Focusable="False"
+                                AutomationProperties.Name="Activity"
+                                AutomationProperties.AutomationId="{x:Static app:AutomationIds.ActivityLog}">
+                    <ItemsPresenter Margin="0,10,12,10" />
+                  </ScrollViewer>
+                </ControlTemplate>
+              </ItemsControl.Template>
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <!-- Two characters of the log's own type between the time and the message. -->
+                    <TextBlock x:Name="Time"
+                               Text="{Binding TimeText}"
+                               Style="{DynamicResource Log.Text}"
+                               Foreground="{DynamicResource InkSecondaryBrush}"
+                               Margin="0,0,16,0" />
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="{Binding Message}" Style="{DynamicResource Log.Text}" TextTrimming="None" />
+                      <TextBlock Text="{Binding Payload}"
+                                 Style="{DynamicResource Log.Text}"
+                                 Foreground="{DynamicResource InkSecondaryBrush}"
+                                 TextTrimming="None"
+                                 Visibility="{Binding Payload, Converter={StaticResource NullToVisibility}}" />
+                    </StackPanel>
+                  </Grid>
+                  <DataTemplate.Triggers>
+                    <!-- "[Older activity removed from memory]" has no time: it starts at the edge. -->
+                    <DataTrigger Binding="{Binding IsTrimMarker}" Value="True">
+                      <Setter TargetName="Time" Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </DataTemplate.Triggers>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
           </ContentControl>
 
           <!-- Empty state -->
-          <StackPanel VerticalAlignment="Center"
-                      HorizontalAlignment="Center"
-                      Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}}">
-            <Grid Width="64" Height="64" HorizontalAlignment="Center">
-              <Border CornerRadius="{DynamicResource RadiusCard}" Background="{DynamicResource SurfaceRaisedBrush}" />
-              <Border CornerRadius="{DynamicResource RadiusCard}" Background="{DynamicResource AccentTintBrush}">
-                <ui:Icon Glyph="{StaticResource Icon.Activity}"
-                         Width="28"
-                         Height="28"
-                         Foreground="{DynamicResource AccentTextBrush}"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center" />
-              </Border>
-            </Grid>
-            <TextBlock Text="No activity yet"
-                       Style="{DynamicResource Type.Title}"
-                       HorizontalAlignment="Center"
-                       Margin="0,16,0,0" />
-            <TextBlock Text="Start the relay, then tap Assist on your iPhone."
-                       Style="{DynamicResource Type.Body}"
-                       Foreground="{DynamicResource InkSecondaryBrush}"
-                       HorizontalAlignment="Center"
-                       Margin="0,6,0,0" />
-          </StackPanel>
+          <ContentControl Style="{DynamicResource EmptyState}"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}}">
+            <StackPanel>
+              <ContentControl Style="{DynamicResource EmptyState.Tile}">
+                <ui:Icon Glyph="{StaticResource Icon.Activity}" Width="28" Height="28" />
+              </ContentControl>
+              <TextBlock Text="No activity yet"
+                         Style="{DynamicResource Type.Title}"
+                         TextTrimming="None"
+                         TextWrapping="Wrap"
+                         Margin="0,16,0,0" />
+              <TextBlock Text="Start the relay, then tap Assist on your iPhone."
+                         Style="{DynamicResource Type.Body}"
+                         Foreground="{DynamicResource InkSecondaryBrush}"
+                         TextTrimming="None"
+                         TextWrapping="Wrap"
+                         Margin="0,6,0,0" />
+            </StackPanel>
+          </ContentControl>
         </Grid>
       </DockPanel>
     </ContentControl>
-  </DockPanel>
+  </ui:PageLayout>
 </UserControl>

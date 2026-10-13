@@ -9,17 +9,22 @@ using LiveCue.Relay;
 namespace LiveCue.Desktop.Activity;
 
 /// <summary>
-/// The Activity page (screens section 4; W-design 5.7).
+/// The Activity page (screens section 4; W-design 5.7): a readable record of what the relay did since
+/// it started. Every line comes from an event of the session; a request and a reply carry their
+/// payload as indented JSON. The log lives in memory only and is bounded (<see cref="ActivityLog"/>).
 ///
-/// First version (foundation): the log shows the start of the relay, notices, faults, diagnostics and
-/// the session's own messages. Request and reply lines with their payloads, the speech lines and the
-/// character bounds are work package WP-W09.
+/// The three rejected-request counters (SEC-14) are not log entries: they are the totals of the
+/// relay's latest <see cref="EdgeStatistics"/> event, shown as plain numbers in one caption line. They
+/// start again from zero with each relay and are not cleared by "Clear activity".
 /// </summary>
 internal sealed class ActivityViewModel : ObservableObject, IActivityViewModel
 {
     private readonly IDesktopSession _session;
     private readonly ActivityLog _log;
     private readonly RelayCommand _clear;
+    private long _rejectedMalformed;
+    private long _rejectedTokenNotAccepted;
+    private long _rejectedFunnelInPrivateMode;
 
     public ActivityViewModel(IDesktopSession session, TimeProvider clock)
     {
@@ -41,40 +46,47 @@ internal sealed class ActivityViewModel : ObservableObject, IActivityViewModel
 
         session.RelayEventReceived += OnRelayEvent;
         session.MessageRaised += (_, message) => _log.Add(message.At, message.Text);
-        session.Signal += (_, signal) =>
-        {
-            if (signal is SessionSignal.RelayStarting or SessionSignal.ActivityCleared)
-            {
-                _log.Clear();
-            }
-        };
+        session.Signal += OnSignal;
     }
 
     public ReadOnlyObservableCollection<ActivityEntry> Entries { get; }
 
     public bool IsEmpty => _log.Entries.Count == 0;
 
-    public string EntryCountText => _log.Entries.Count switch
-    {
-        0 => string.Empty,
-        1 => ActivityText.OneEntry,
-        var count => ActivityText.Entries(count),
-    };
+    public string EntryCountText => ActivityText.EntryCount(_log.EntryCount);
 
-    public string Text => string.Join(
-        Environment.NewLine,
-        _log.Entries.Select(entry => entry.Payload is null
-            ? $"{entry.TimeText} {entry.Message}"
-            : $"{entry.TimeText} {entry.Message}{Environment.NewLine}{entry.Payload}"));
+    public string Text => _log.ToText();
 
-    // First version (foundation): the three counters stay at zero; WP-W09 follows EdgeStatistics.
-    public long RejectedMalformed => 0;
+    public long RejectedMalformed => _rejectedMalformed;
 
-    public long RejectedTokenNotAccepted => 0;
+    public long RejectedTokenNotAccepted => _rejectedTokenNotAccepted;
 
-    public long RejectedFunnelInPrivateMode => 0;
+    public long RejectedFunnelInPrivateMode => _rejectedFunnelInPrivateMode;
+
+    /// <summary>The caption line above the log: the three counters in one sentence.</summary>
+    public string RejectedCountsText =>
+        ActivityText.RejectedCounts(_rejectedMalformed, _rejectedTokenNotAccepted, _rejectedFunnelInPrivateMode);
 
     public ICommand ClearActivityCommand => _clear;
+
+    private void OnSignal(object? sender, SessionSignal signal)
+    {
+        switch (signal)
+        {
+            case SessionSignal.RelayStarting:
+                // A new relay instance: its log starts empty and it counts from zero.
+                _log.Clear();
+                SetRejected(0, 0, 0);
+                break;
+
+            case SessionSignal.ActivityCleared:
+                _log.Clear();
+                break;
+
+            default:
+                break;
+        }
+    }
 
     private void OnRelayEvent(object? sender, RelayEvent relayEvent)
     {
@@ -93,6 +105,40 @@ internal sealed class ActivityViewModel : ObservableObject, IActivityViewModel
                 _log.Add(notice.At, notice.Message);
                 break;
 
+            case SelfCheckCompleted selfCheck:
+                _log.Add(selfCheck.At, ActivityText.SelfCheck(selfCheck.Result));
+                break;
+
+            case RequestStarted request:
+                _log.Add(
+                    request.At,
+                    ActivityText.Incoming(request.Kind, request.RequestId),
+                    PayloadFormatter.Indent(request.PayloadJson));
+                break;
+
+            case RequestCompleted reply:
+                _log.Add(
+                    reply.At,
+                    ActivityText.Reply(reply.RequestId, reply.DurationMs),
+                    PayloadFormatter.Indent(reply.PayloadJson));
+                break;
+
+            case RequestFailed failed:
+                _log.Add(failed.At, LiveText.Failure(failed.Code));
+                break;
+
+            case AssistantNotice assistant:
+                _log.Add(assistant.At, assistant.Message);
+                break;
+
+            case LocalModelChanged model:
+                _log.Add(model.At, model.Message);
+                break;
+
+            case SpeechStreamChanged speech:
+                _log.Add(speech.At, speech.Message);
+                break;
+
             case RelayFaulted faulted:
                 _log.Add(faulted.At, _session.StateText ?? faulted.Message);
                 break;
@@ -101,8 +147,24 @@ internal sealed class ActivityViewModel : ObservableObject, IActivityViewModel
                 _log.Add(diagnostic.At, ShellText.DiagnosticPrefix + diagnostic.Message);
                 break;
 
+            case EdgeStatistics statistics:
+                // Numbers only: no entry, no banner, no toast, whatever the totals are.
+                SetRejected(statistics.Malformed, statistics.TokenNotAccepted, statistics.FunnelInPrivateMode);
+                break;
+
             default:
                 break;
+        }
+    }
+
+    private void SetRejected(long malformed, long tokenNotAccepted, long funnelInPrivateMode)
+    {
+        var changed = SetProperty(ref _rejectedMalformed, malformed, nameof(RejectedMalformed));
+        changed |= SetProperty(ref _rejectedTokenNotAccepted, tokenNotAccepted, nameof(RejectedTokenNotAccepted));
+        changed |= SetProperty(ref _rejectedFunnelInPrivateMode, funnelInPrivateMode, nameof(RejectedFunnelInPrivateMode));
+        if (changed)
+        {
+            OnPropertyChanged(nameof(RejectedCountsText));
         }
     }
 }

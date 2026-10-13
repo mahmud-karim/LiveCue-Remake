@@ -6,152 +6,495 @@
              Focusable="False">
 
   <!--
-    Live (docs/design/03-windows-screens.md, section 2; mockups win-live-stopped and win-live-ready).
-    The layout is the spike's. First version: the relay controls, the two statuses and the PC address
-    are bound; the transcript and the reply show their initial texts. The prerequisite list, the
-    banners and the reply lists arrive with the page (W-design 5.5).
-  -->
-  <DockPanel>
+    Live (docs/design/03-windows-screens.md, section 2; mockups win-live-stopped, win-live-ready,
+    win-live-thinking, win-live-failed, win-live-prereq and win-min; W-design 5.5).
 
-    <!-- Page header: the view's name, and the relay controls on the right. -->
-    <Grid DockPanel.Dock="Top" MinHeight="{DynamicResource SizePageHeader}" Margin="4,0,4,16">
-      <TextBlock Text="Live" Style="{DynamicResource Type.Display}" VerticalAlignment="Center" />
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-        <!-- Not running: Start is the only accent control on the page. -->
+      header        "Live" and the relay controls
+      status strip  relay status, iPhone status, PC address; under them the two warnings about the
+                    connection, each only while it has something to say
+      below         the two panels side by side, 0.88 : 1.12; after a start that failed its checks,
+                    the prerequisite list takes their place
+
+    Nothing floats over what scrolls, and every element with an automation id of screens section 9
+    is one element here.
+  -->
+
+  <UserControl.Resources>
+    <!--
+      Text the owner can select and copy (the transcript, the reply): a text box that looks like
+      text. No frame, no caret, no tab stop; the colour, size and line height are set where it is
+      used. The content host is pulled out by the 2 that a text box keeps beside its text for the
+      caret, so the text starts under the kicker above it.
+    -->
+    <Style TargetType="TextBox">
+      <Setter Property="IsReadOnly" Value="True" />
+      <Setter Property="IsReadOnlyCaretVisible" Value="False" />
+      <Setter Property="IsTabStop" Value="False" />
+      <Setter Property="AcceptsReturn" Value="True" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="FontFamily" Value="{DynamicResource FontFamilyText}" />
+      <Setter Property="FontSize" Value="{DynamicResource TypeTranscriptSize}" />
+      <Setter Property="TextBlock.LineHeight" Value="{DynamicResource TypeTranscriptLineHeight}" />
+      <Setter Property="TextBlock.LineStackingStrategy" Value="BlockLineHeight" />
+      <Setter Property="Foreground" Value="{DynamicResource InkPrimaryBrush}" />
+      <Setter Property="SelectionBrush" Value="{DynamicResource AccentFillBrush}" />
+      <Setter Property="SelectionOpacity" Value="0.3" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="ContextMenu" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <ScrollViewer x:Name="PART_ContentHost"
+                          Margin="-2,0"
+                          Focusable="False"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden" />
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+
+  <ui:PageLayout Title="Live">
+
+    <!-- Relay controls. Start is the only accent control on the page; once the relay runs there is none. -->
+    <ui:PageLayout.HeaderContent>
+      <StackPanel Orientation="Horizontal">
         <Button Style="{DynamicResource Button.Primary.Session}"
                 ui:ButtonAssist.Icon="{StaticResource Icon.Play}"
+                ui:ButtonAssist.IsBusy="{Binding IsStartBusy}"
                 Content="{Binding StartLabel}"
                 Command="{Binding StartRelayCommand}"
                 Visibility="{Binding IsStartVisible, Converter={StaticResource BooleanToVisibility}}"
                 AutomationProperties.AutomationId="{x:Static app:AutomationIds.StartRelayButton}" />
-        <!-- Running: no accent control at all; nothing here needs pressing. -->
-        <Button Style="{DynamicResource Button.Secondary}"
-                ui:ButtonAssist.Icon="{StaticResource Icon.Pause}"
-                Content="{Binding PauseResumeLabel}"
+
+        <Button Content="{Binding PauseResumeLabel}"
                 Command="{Binding PauseResumeCommand}"
+                ui:ButtonAssist.IconSize="18"
                 Visibility="{Binding AreRunningControlsVisible, Converter={StaticResource BooleanToVisibility}}"
-                AutomationProperties.AutomationId="{x:Static app:AutomationIds.PauseRelayButton}" />
+                AutomationProperties.AutomationId="{x:Static app:AutomationIds.PauseRelayButton}">
+          <Button.Style>
+            <!-- The glyph says what the button will do: pause while accepting, play while paused. -->
+            <Style TargetType="Button" BasedOn="{StaticResource Button.Secondary}">
+              <Setter Property="ui:ButtonAssist.Icon" Value="{StaticResource Icon.Pause}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsPaused}" Value="True">
+                  <Setter Property="ui:ButtonAssist.Icon" Value="{StaticResource Icon.Play}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Button.Style>
+        </Button>
+
         <Button Style="{DynamicResource Button.Secondary}"
                 Margin="8,0,0,0"
                 ui:ButtonAssist.Icon="{StaticResource Icon.Stop}"
+                ui:ButtonAssist.IconSize="18"
                 ui:ButtonAssist.IconBrush="{DynamicResource StatusDangerBrush}"
                 Content="Stop relay"
                 Command="{Binding StopRelayCommand}"
                 Visibility="{Binding AreRunningControlsVisible, Converter={StaticResource BooleanToVisibility}}"
                 AutomationProperties.AutomationId="{x:Static app:AutomationIds.StopRelayButton}" />
       </StackPanel>
-    </Grid>
+    </ui:PageLayout.HeaderContent>
 
-    <!-- Status strip: relay status, iPhone status, PC address. -->
-    <ContentControl x:Name="StatusStrip"
-                    DockPanel.Dock="Top"
-                    Style="{DynamicResource Glass.PanelCompact}"
-                    Margin="0,0,0,16">
-      <ui:SplitRowPanel>
-        <StackPanel Orientation="Horizontal">
-          <StackPanel MaxWidth="440">
-            <TextBlock Text="Relay" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
-            <ui:StatusIndicatorView Indicator="{Binding RelayStatus}"
-                                    Margin="0,4,0,0"
-                                    AutomationProperties.AutomationId="{x:Static app:AutomationIds.RelayStatusText}" />
+    <!--
+      The page fills the window: the two cards take the height that is left. Only when even their
+      floor of 120 does not fit (a long status with both warnings at the minimum size, or large
+      text) does the page scroll instead of squeezing them; the view sets the height of the content
+      for that (LivePage.xaml.cs).
+    -->
+    <ScrollViewer x:Name="PageScroller" Style="{DynamicResource Page.Scroller}">
+      <DockPanel x:Name="PageContent" Margin="{DynamicResource InsetScrollerContent}">
+
+        <!-- Status strip: relay status, iPhone status, PC address; then the connection warnings. -->
+        <ContentControl x:Name="StatusStrip"
+                        DockPanel.Dock="Top"
+                        Style="{DynamicResource Glass.PanelCompact}"
+                        Margin="0,0,0,16">
+          <StackPanel>
+            <!-- The PC address goes under the two statuses when the three do not fit on one line. -->
+            <ui:SplitRowPanel>
+              <StackPanel Orientation="Horizontal">
+                <StackPanel MaxWidth="440">
+                  <TextBlock Text="Relay" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
+                  <!-- The sidebar's indicator, which is always there, announces a change; this one stays silent. -->
+                  <ui:StatusIndicatorView Indicator="{Binding RelayStatus}"
+                                          Margin="0,4,0,0"
+                                          AutomationProperties.AutomationId="{x:Static app:AutomationIds.RelayStatusText}" />
+                  <TextBlock Text="{Binding RelayStatusCaption}"
+                             Style="{DynamicResource Type.Caption}"
+                             Foreground="{DynamicResource InkSecondaryBrush}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             Margin="0,4,0,0"
+                             Visibility="{Binding RelayStatusCaption, Converter={StaticResource NullToVisibility}}" />
+                </StackPanel>
+                <StackPanel Margin="32,0,0,0">
+                  <TextBlock Text="iPhone" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
+                  <ui:StatusIndicatorView Indicator="{Binding PhoneStatus}"
+                                          Margin="0,4,0,0"
+                                          AutomationProperties.AutomationId="{x:Static app:AutomationIds.PhoneStatusText}" />
+                </StackPanel>
+              </StackPanel>
+
+              <Grid HorizontalAlignment="Left">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                  <TextBlock Text="PC address" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
+                  <TextBlock Text="{Binding PcAddress}"
+                             Margin="0,5,0,1"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             AutomationProperties.AutomationId="{x:Static app:AutomationIds.PcAddressText}">
+                    <TextBlock.Style>
+                      <!-- Until the relay has run once, the placeholder is quieter than a real address. -->
+                      <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Mono}">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding HasPcAddress}" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource InkSecondaryBrush}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </StackPanel>
+                <!-- 36 in a strip whose line is 40 high: the button adds no height. -->
+                <Button Grid.Column="1"
+                        Style="{DynamicResource Button.Icon.Quiet}"
+                        Width="36"
+                        Height="36"
+                        Margin="6,0,-8,0"
+                        VerticalAlignment="Center"
+                        ui:ButtonAssist.Icon="{StaticResource Icon.Copy}"
+                        ui:ButtonAssist.IconSize="16"
+                        Command="{Binding CopyPcAddressCommand}"
+                        ToolTip="Copy PC address"
+                        AutomationProperties.Name="Copy PC address"
+                        Visibility="{Binding HasPcAddress, Converter={StaticResource BooleanToVisibility}}" />
+              </Grid>
+            </ui:SplitRowPanel>
+
+            <!-- The relay runs, but Tailscale forwards nothing to it yet (screens 2.10). -->
+            <ui:Banner x:Name="ConnectionBannerView"
+                       Model="{Binding ConnectionBanner}"
+                       Command="{Binding SetUpConnectionCommand}"
+                       Margin="0,12,0,0"
+                       AutomationProperties.AutomationId="{x:Static app:AutomationIds.ConnectionBanner}" />
+
+            <!-- Something forwards to the relay that LiveCue does not manage, or it cannot be told (W-design 5.5). -->
+            <ui:Banner Model="{Binding ExposureBanner}"
+                       Command="{Binding OpenSettingsCommand}"
+                       Margin="0,12,0,0"
+                       AutomationProperties.AutomationId="{x:Static app:AutomationIds.ExposureBanner}" />
           </StackPanel>
-          <StackPanel Margin="32,0,0,0">
-            <TextBlock Text="iPhone" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
-            <ui:StatusIndicatorView Indicator="{Binding PhoneStatus}"
-                                    Margin="0,4,0,0"
-                                    AutomationProperties.AutomationId="{x:Static app:AutomationIds.PhoneStatusText}" />
-          </StackPanel>
-        </StackPanel>
+        </ContentControl>
 
-        <StackPanel>
-          <TextBlock Text="PC address" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
-          <TextBlock Text="{Binding PcAddress}"
-                     Margin="0,5,0,1"
-                     AutomationProperties.AutomationId="{x:Static app:AutomationIds.PcAddressText}">
-            <TextBlock.Style>
-              <!-- Until the relay has run once, the placeholder is quieter than a real address. -->
-              <Style TargetType="TextBlock" BasedOn="{StaticResource Type.Mono}">
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding HasPcAddress}" Value="False">
-                    <Setter Property="Foreground" Value="{DynamicResource InkSecondaryBrush}" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </TextBlock.Style>
-          </TextBlock>
-        </StackPanel>
-      </ui:SplitRowPanel>
-    </ContentControl>
+        <Grid>
 
-    <!-- Two panels side by side, 0.88 : 1.12. Each has one inset card that takes the remaining height. -->
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="0.88*" />
-        <ColumnDefinition Width="16" />
-        <ColumnDefinition Width="1.12*" />
-      </Grid.ColumnDefinitions>
+          <!-- After a start that failed its checks: every result, in the order of the checks (screens 2.6). -->
+          <ContentControl x:Name="PrerequisitePanel"
+                          Style="{DynamicResource Glass.Panel}"
+                          MinHeight="240"
+                          Visibility="{Binding ArePrerequisitesVisible, Converter={StaticResource BooleanToVisibility}}">
+            <DockPanel>
+              <Grid DockPanel.Dock="Top">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Before the relay can start"
+                           Style="{DynamicResource Type.Headline}"
+                           VerticalAlignment="Center"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
+                  <Button Style="{DynamicResource Button.Secondary}"
+                          ui:ButtonAssist.Icon="{StaticResource Icon.Refresh}"
+                          ui:ButtonAssist.IconSize="18"
+                          Content="Check again"
+                          Command="{Binding CheckAgainCommand}" />
+                  <Button Style="{DynamicResource Button.Quiet}"
+                          Margin="8,0,-8,0"
+                          Content="Open Settings"
+                          Command="{Binding OpenSettingsCommand}" />
+                </StackPanel>
+              </Grid>
 
-      <ContentControl x:Name="TranscriptPanel" Style="{DynamicResource Glass.Panel}">
-        <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Text="Incoming transcript" Style="{DynamicResource Type.Headline}" />
-          <StackPanel DockPanel.Dock="Top"
-                      Orientation="Horizontal"
-                      Margin="0,4,0,0"
-                      TextElement.Foreground="{DynamicResource InkSecondaryBrush}">
-            <ui:Icon Glyph="{StaticResource Icon.Mic}"
-                     Width="{DynamicResource IconSizeSmall}"
-                     Height="{DynamicResource IconSizeSmall}"
-                     Margin="0,0,8,0"
-                     VerticalAlignment="Center" />
-            <TextBlock Text="{Binding TranscriptHint}"
-                       Style="{DynamicResource Type.Caption}"
-                       AutomationProperties.AutomationId="{x:Static app:AutomationIds.TranscriptHint}" />
-          </StackPanel>
-          <ContentControl Style="{DynamicResource Glass.Card}" Margin="0,12,0,0" VerticalContentAlignment="Top" MinHeight="120">
-            <StackPanel>
-              <TextBlock Text="From iPhone" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource InkSecondaryBrush}" />
-              <TextBlock Text="{Binding TranscriptText}"
-                         Style="{DynamicResource Type.Transcript}"
-                         Foreground="{DynamicResource InkSecondaryBrush}"
-                         MaxWidth="{DynamicResource SizeReadingMax}"
-                         HorizontalAlignment="Left"
-                         Margin="0,8,0,0"
-                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.TranscriptText}" />
-            </StackPanel>
+              <!-- The scrollbar, when there is one, stands in the panel's own inset. -->
+              <ScrollViewer Margin="0,8,-12,0"
+                            VerticalScrollBarVisibility="Auto"
+                            HorizontalScrollBarVisibility="Disabled"
+                            Focusable="False"
+                            AutomationProperties.Name="Before the relay can start"
+                            AutomationProperties.AutomationId="{x:Static app:AutomationIds.PrerequisiteList}">
+                <ItemsControl ItemsSource="{Binding Prerequisites}" Focusable="False" Margin="0,0,12,0">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <ui:CheckRow State="{Binding State}" Title="{Binding Title}" Subtitle="{Binding Subtitle}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </DockPanel>
           </ContentControl>
-        </DockPanel>
-      </ContentControl>
 
-      <ContentControl Grid.Column="2" Style="{DynamicResource Glass.Panel}">
-        <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Text="Assistant reply" Style="{DynamicResource Type.Headline}" />
-          <StackPanel DockPanel.Dock="Top"
-                      Orientation="Horizontal"
-                      Margin="0,4,0,0"
-                      TextElement.Foreground="{DynamicResource InkSecondaryBrush}">
-            <ui:Icon Glyph="{StaticResource Icon.Sparkles}"
-                     Width="{DynamicResource IconSizeSmall}"
-                     Height="{DynamicResource IconSizeSmall}"
-                     Margin="0,0,8,0"
-                     VerticalAlignment="Center" />
-            <TextBlock Text="{Binding ReplyHint}"
-                       Style="{DynamicResource Type.Caption}"
-                       AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyHint}" />
-          </StackPanel>
-          <ContentControl Style="{DynamicResource Glass.Card}" Margin="0,12,0,0" VerticalContentAlignment="Top" MinHeight="120">
-            <StackPanel>
-              <TextBlock Text="Assistant" Style="{DynamicResource Type.Micro}" Foreground="{DynamicResource AccentTextBrush}" />
-              <TextBlock Text="{Binding ReplyText}"
-                         Style="{DynamicResource Type.Cue}"
-                         Foreground="{DynamicResource InkSecondaryBrush}"
-                         MaxWidth="{DynamicResource SizeReadingMax}"
-                         HorizontalAlignment="Left"
-                         Margin="0,8,0,0"
-                         AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyText}" />
-            </StackPanel>
-          </ContentControl>
-        </DockPanel>
-      </ContentControl>
-    </Grid>
-  </DockPanel>
+          <!-- Two panels side by side, 0.88 : 1.12. Each has one inset card that takes the remaining height and scrolls. -->
+          <Grid Visibility="{Binding ArePrerequisitesVisible, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="0.88*" />
+              <ColumnDefinition Width="16" />
+              <ColumnDefinition Width="1.12*" />
+            </Grid.ColumnDefinitions>
+
+            <ContentControl x:Name="TranscriptPanel" Style="{DynamicResource Glass.Panel}">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Incoming transcript"
+                           Style="{DynamicResource Type.Headline}"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <DockPanel DockPanel.Dock="Top"
+                           Margin="0,4,0,0"
+                           TextElement.Foreground="{DynamicResource InkSecondaryBrush}">
+                  <ui:Icon DockPanel.Dock="Left"
+                           Glyph="{StaticResource Icon.Mic}"
+                           Width="{DynamicResource IconSizeSmall}"
+                           Height="{DynamicResource IconSizeSmall}"
+                           Margin="0,1,8,0"
+                           VerticalAlignment="Top" />
+                  <TextBlock Text="{Binding TranscriptHint}"
+                             Style="{DynamicResource Type.Caption}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             AutomationProperties.AutomationId="{x:Static app:AutomationIds.TranscriptHint}" />
+                </DockPanel>
+
+                <ContentControl x:Name="TranscriptCard" Style="{DynamicResource Glass.Card}" Margin="0,12,0,0" MinHeight="120">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="From iPhone"
+                               Style="{DynamicResource Type.Micro}"
+                               Foreground="{DynamicResource InkSecondaryBrush}" />
+                    <ScrollViewer x:Name="TranscriptScroller"
+                                  Margin="0,8,-12,0"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Focusable="False">
+                      <StackPanel MaxWidth="{DynamicResource SizeReadingMax}" HorizontalAlignment="Left" Margin="0,0,12,0">
+
+                        <!-- Nothing yet: the placeholder, in the quieter ink. -->
+                        <TextBlock Text="{Binding TranscriptText}"
+                                   Style="{DynamicResource Type.Transcript}"
+                                   Foreground="{DynamicResource InkSecondaryBrush}"
+                                   Visibility="{Binding IsTranscriptPlaceholder, Converter={StaticResource BooleanToVisibility}}"
+                                   AutomationProperties.AutomationId="{x:Static app:AutomationIds.TranscriptText}" />
+
+                        <!-- The transcript, then the live speech lines. -->
+                        <TextBox x:Name="TranscriptBox"
+                                 Text="{Binding TranscriptText, Mode=OneWay}"
+                                 AutomationProperties.Name="Incoming transcript"
+                                 AutomationProperties.AutomationId="{x:Static app:AutomationIds.TranscriptText}">
+                          <TextBox.Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                              <!-- One blank line before the quieter blocks below. -->
+                              <Setter Property="Margin" Value="0,0,0,22" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding TranscriptSecondaryText}" Value="">
+                                  <Setter Property="Margin" Value="0" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsTranscriptPlaceholder}" Value="True">
+                                  <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <Trigger Property="Text" Value="">
+                                  <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBox.Style>
+                        </TextBox>
+
+                        <!-- "[In progress] …" and "Instruction: …": part of the request, not of what was said. -->
+                        <TextBox Text="{Binding TranscriptSecondaryText, Mode=OneWay}"
+                                 Foreground="{DynamicResource InkSecondaryBrush}"
+                                 AutomationProperties.Name="In progress and instruction"
+                                 Visibility="{Binding TranscriptSecondaryText, Converter={StaticResource NullToVisibility}}" />
+                      </StackPanel>
+                    </ScrollViewer>
+                  </DockPanel>
+                </ContentControl>
+              </DockPanel>
+            </ContentControl>
+
+            <ContentControl x:Name="ReplyPanel" Grid.Column="2" Style="{DynamicResource Glass.Panel}">
+              <DockPanel>
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Assistant reply"
+                           Style="{DynamicResource Type.Headline}"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <DockPanel DockPanel.Dock="Top"
+                           Margin="0,4,0,0"
+                           TextElement.Foreground="{DynamicResource InkSecondaryBrush}">
+                  <ui:Icon DockPanel.Dock="Left"
+                           Glyph="{StaticResource Icon.Sparkles}"
+                           Width="{DynamicResource IconSizeSmall}"
+                           Height="{DynamicResource IconSizeSmall}"
+                           Margin="0,1,8,0"
+                           VerticalAlignment="Top" />
+                  <TextBlock Text="{Binding ReplyHint}"
+                             Style="{DynamicResource Type.Caption}"
+                             TextWrapping="Wrap"
+                             TextTrimming="None"
+                             AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyHint}" />
+                </DockPanel>
+
+                <!-- PC timing of the reply that is shown: visible, not a tooltip. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Text="{Binding ReplyTiming}"
+                           Style="{DynamicResource Type.Caption}"
+                           Foreground="{DynamicResource InkSecondaryBrush}"
+                           Typography.NumeralAlignment="Tabular"
+                           TextWrapping="Wrap"
+                           TextTrimming="None"
+                           Margin="0,8,0,0"
+                           Visibility="{Binding ReplyTiming, Converter={StaticResource NullToVisibility}}"
+                           AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyTiming}" />
+
+                <ContentControl x:Name="ReplyCard" Style="{DynamicResource Glass.Card}" Margin="0,12,0,0" MinHeight="120">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Assistant"
+                               Style="{DynamicResource Type.Micro}"
+                               Foreground="{DynamicResource AccentTextBrush}" />
+                    <Grid Margin="0,8,0,0">
+
+                      <!-- Nothing yet: the placeholder, in the quieter ink. -->
+                      <TextBlock Text="{Binding ReplyText}"
+                                 Style="{DynamicResource Type.Cue}"
+                                 Foreground="{DynamicResource InkSecondaryBrush}"
+                                 MaxWidth="{DynamicResource SizeReadingMax}"
+                                 HorizontalAlignment="Left"
+                                 VerticalAlignment="Top"
+                                 Visibility="{Binding IsReplyPlaceholder, Converter={StaticResource BooleanToVisibility}}"
+                                 AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyText}" />
+
+                      <!-- A request is being answered. -->
+                      <StackPanel Orientation="Horizontal"
+                                  VerticalAlignment="Top"
+                                  Visibility="{Binding IsReplyThinking, Converter={StaticResource BooleanToVisibility}}">
+                        <ui:Spinner Width="16"
+                                    Height="16"
+                                    Margin="0,0,8,0"
+                                    Foreground="{DynamicResource AccentFillBrush}" />
+                        <TextBlock Text="Thinking…"
+                                   Style="{DynamicResource Type.Cue}"
+                                   Foreground="{DynamicResource InkSecondaryBrush}" />
+                      </StackPanel>
+
+                      <!-- The request failed: nothing went back to the phone. -->
+                      <ui:Banner Model="{Binding ReplyFailure}" VerticalAlignment="Top" />
+
+                      <!-- The reply that was sent. -->
+                      <ScrollViewer x:Name="ReplyScroller"
+                                    Margin="0,0,-12,0"
+                                    VerticalScrollBarVisibility="Auto"
+                                    HorizontalScrollBarVisibility="Disabled"
+                                    Focusable="False">
+                        <ScrollViewer.Style>
+                          <Style TargetType="ScrollViewer">
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsReplyPlaceholder}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsReplyThinking}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding ReplyFailure, Converter={StaticResource NullToVisibility}}" Value="Visible">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </ScrollViewer.Style>
+                        <StackPanel MaxWidth="{DynamicResource SizeReadingMax}" HorizontalAlignment="Left" Margin="0,0,12,0">
+
+                          <!-- The answer or the summary and, after a blank line, the details. -->
+                          <TextBox Text="{Binding ReplyText, Mode=OneWay}"
+                                   FontSize="{DynamicResource TypeCueSize}"
+                                   TextBlock.LineHeight="{DynamicResource TypeCueLineHeight}"
+                                   AutomationProperties.Name="Assistant reply"
+                                   AutomationProperties.AutomationId="{x:Static app:AutomationIds.ReplyText}">
+                            <TextBox.Style>
+                              <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Style.Triggers>
+                                  <Trigger Property="Text" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                  </Trigger>
+                                </Style.Triggers>
+                              </Style>
+                            </TextBox.Style>
+                          </TextBox>
+
+                          <!-- A summary's two lists, one item per line. -->
+                          <StackPanel Margin="0,16,0,0">
+                            <StackPanel.Style>
+                              <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding ReplyKeyPoints.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="Key points"
+                                       Style="{DynamicResource Type.Micro}"
+                                       Foreground="{DynamicResource InkSecondaryBrush}"
+                                       Margin="0,0,0,4" />
+                            <ItemsControl ItemsSource="{Binding ReplyKeyPoints}" Focusable="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                  <TextBox Text="{Binding Mode=OneWay}" />
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+
+                          <StackPanel Margin="0,16,0,0">
+                            <StackPanel.Style>
+                              <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding ReplyActionItems.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="Action items"
+                                       Style="{DynamicResource Type.Micro}"
+                                       Foreground="{DynamicResource InkSecondaryBrush}"
+                                       Margin="0,0,0,4" />
+                            <ItemsControl ItemsSource="{Binding ReplyActionItems}" Focusable="False">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                  <TextBox Text="{Binding Mode=OneWay}" />
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </StackPanel>
+                      </ScrollViewer>
+                    </Grid>
+                  </DockPanel>
+                </ContentControl>
+              </DockPanel>
+            </ContentControl>
+          </Grid>
+        </Grid>
+      </DockPanel>
+    </ScrollViewer>
+  </ui:PageLayout>
 </UserControl>
