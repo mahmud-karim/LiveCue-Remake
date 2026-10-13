@@ -43,7 +43,7 @@ decision cannot be met in full. In every case the safer reading was taken.
 
 Recorded, not reopened. Numbering against the architect's brief: its items 1 to 5 are D-01 to D-05; its
 keep, fix and drop calls are D-06 to D-16; its items 6 to 12 are D-17 to D-23; item 13 is D-24; items 14 and
-15 are D-25 and D-26; the repository layout is D-27.
+15 are D-25 and D-26; the repository layout is D-27. D-28 was added after 1.0.0, at the owner's request.
 
 ### Product
 
@@ -91,6 +91,12 @@ keep, fix and drop calls are D-06 to D-16; its items 6 to 12 are D-17 to D-23; i
 | D-25 | The platform-independent core is a real Swift package in a subfolder, Foundation only, tested with `swift test` on Linux and macOS. Transport sits behind a protocol, with the Apple implementation outside the Linux-compiled path. The app target is generated with XcodeGen. The research document's recommendations on Xcode pinning, language mode, signing, the availability wrapper and LiveContainer are followed. |
 | D-26 | A UI-test seam equivalent to the old test mode, with the same fixtures and modifiers, and every accessibility identifier of spec 01 section 1.13. |
 | D-27 | Repository layout: `ios/`, `windows/`, `asr/`, `scripts/`, `docs/`, `.github/workflows/`. |
+
+### After 1.0.0: requested by the owner
+
+| Id | Decision |
+|---|---|
+| D-28 | **Apple speech, a sixth speech provider (requested by the owner on 2026-10-13; a new feature beyond parity, so D-01 does not cover it).** Provider id `apple`, display name "Apple · iPhone", picker title "Apple · iPhone live", listed last. It is the on-device transcription built into iOS 26 (`SpeechAnalyzer` with `SpeechTranscriber`): free, no key, no PC, audio stays on the phone. Tentative text is the partial; text the system finalises is committed as a segment at once, not on Pause. English only for 1.x: the device's English locale when the system transcribes it, otherwise `en-US`. The language asset belongs to iOS: when it is installed the provider is ready with no manual step at launch; when it is not, Model Library offers the download. On iOS 18 to 25 the row is shown, cannot be chosen, and reads "Requires iOS 26 or later". **No speech-recognition authorisation is requested**: Apple documents that process for the older `SFSpeechRecognizer` only, and the app never names that class, so inside LiveContainer no call can run that needs a usage string the host lacks. `NSSpeechRecognitionUsageDescription` is declared all the same, for normal installs. The five existing providers keep their ids, names and behaviour. The app becomes 1.1.0, build 2. Architecture 04 section 10 has the design as built; what only a real iPhone can show is listed there. |
 
 ---
 

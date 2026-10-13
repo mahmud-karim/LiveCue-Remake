@@ -20,6 +20,7 @@ Contents
 7. [Work packages](#7-work-packages)
 8. [Compile-risk checklist](#8-compile-risk-checklist)
 9. [Changes after review](#9-changes-after-review)
+10. [Apple speech (D-28), as built by WP-13](#10-apple-speech-d-28-as-built-by-wp-13)
 
 Conventions
 
@@ -650,11 +651,11 @@ public struct SummaryResponse: Codable, Equatable, Sendable {
 }
 
 public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
-    case meta, nemotron, qwen3, voz, parakeet            // catalogue order
+    case meta, nemotron, qwen3, voz, parakeet, apple     // catalogue order; `apple` is D-28 (section 10)
     public var displayName: String { get }               // spec 02 section 7.1
     public var isCloud: Bool { get }                     // meta
     public var isPCLocal: Bool { get }                   // nemotron, qwen3
-    public var isOnDevice: Bool { get }                  // voz, parakeet
+    public var isOnDevice: Bool { get }                  // voz, parakeet, apple
     public var streamsAudio: Bool { get }                // isCloud || isPCLocal
     public var sampleRate: Int { get }                   // 24000 for meta, otherwise 16000
     /// `.meta` for nil or any unknown raw value.
@@ -676,6 +677,7 @@ public struct TranscriptionModel: Codable, Equatable, Sendable, Identifiable {
     public init(variant: String, displayName: String, approximateMegabytes: Int, quality: String, recommended: Bool)
     public static let voz: TranscriptionModel            // "voz", "Voz on Assist", 467, "Transcribes when you tap Assist", true
     public static let parakeet: TranscriptionModel       // "parakeet", "Live Parakeet", 230, "English live captions · 320 ms mode", true
+    public static let apple: TranscriptionModel          // "apple", "Apple live captions", 0, "English live captions · built into iOS", false (D-28)
     public static func onDevice(for provider: SpeechProvider) -> TranscriptionModel?
 }
 
@@ -4530,3 +4532,136 @@ project, resolves with automatic resolution disabled, fails when the file change
 | R-2 | The "Replace this PC?" dialog is new and is not in `02-ios-screens.md` yet; its strings are in 5.9 and in decisions 6.1 | The screen designer |
 | R-3 | README: inside LiveContainer, other guest apps can read the fallback pairing file, the stored sessions and the preferences (architecture 6.5) | Whoever writes the README |
 | R-4 | The CI plan carries the XcodeGen version check, the committed `ios/Package.resolved` and the Markdown lint into `ci.yml` (test plan 5.2, 5.5) | CI plan |
+
+---
+
+## 10. Apple speech (D-28), as built by WP-13
+
+Added after 1.0.0 at the owner's request. It changes frozen contract files; every other provider keeps its
+raw value, its texts and its behaviour. Where a section above says "five providers", "Voz, Parakeet" or
+`voz, parakeet`, Apple is the sixth and the third on-device provider; this section is the text for it.
+
+### 10.1 Contract changes
+
+| File | Change |
+|---|---|
+| `LiveCueCore/Domain/SpeechProvider.swift` | `case apple`, last. Display name "Apple · iPhone". `isOnDevice` is true for it; `streamsAudio` false; sample rate 16,000 |
+| `LiveCueCore/Domain/TranscriptionModel.swift` | `static let apple`: "apple", "Apple live captions", 0 MB (iOS keeps the asset, so no size is named), "English live captions · built into iOS", not recommended. `onDevice(for: .apple)` returns it |
+| `Speech/SystemSpeech.swift` (new) | `SystemSpeechAvailability` (`unknown`, `unavailable(reason:)`, `needsDownload`, `installed`), `SystemSpeechResult`, the engine protocol `SystemSpeechRecognizing`, `UnavailableSystemSpeech` (iOS 18 to 25), `SystemSpeechFailure`, `SystemSpeechText`, `SpeechProbeMark` |
+| `Speech/AppleSpeechEngine.swift` (new) | The only file that imports `Speech`. `AppleSpeech.makeEngine()` returns the real engine on iOS 26 and `UnavailableSystemSpeech` below |
+| `Speech/AppleTranscriber.swift` (new) | Provider `apple` |
+| `Speech/OnDeviceModelManager.swift` | `init` takes `systemSpeech:` (default: unavailable); `systemSpeechAvailability`, `systemSpeechEngine`, `systemSpeechNote`, `refreshSystemSpeech(updatingStatus:)`; `isLoaded(for: .apple)` is "the asset is installed"; `prepare(.apple)` installs the asset |
+| `Speech/SpeechSettings.swift` | `selectionIsUnavailable`, installed by `AppEnvironment`; `select` refuses a provider this iPhone cannot run |
+| `Speech/SpeechProvider+Presentation.swift`, `Speech/LiveTranscriberFactory.swift`, `Speech/TranscriberStatusText.swift` | The `apple` case of every switch: short name "Apple speech", picker title "Apple · iPhone live", package label "Built into iOS", the on-device captions and explanation; `TranscriberFailureText.systemSpeechStart` |
+| `AppShell/SystemReadiness.swift` | `unavailableReason(for:)` |
+| `AppShell/AppDependencies.swift`, `AppEnvironment*.swift` | `systemSpeech` dependency: `AppleSpeech.makeEngine()` live, `FixtureSystemSpeech()` in the test seam; bootstrap and scene activation ask the system when Apple is the provider |
+| `Features/Settings/ProviderSetupRows.swift` | `init` takes `modelNote:` (default nil); Apple has the Model Library and Speech benchmark rows |
+| `Features/Transcription/*`, `Features/ModelLibrary/*`, `Features/Home/HomeViewModel.swift` | The unavailable row and its reason; the Apple entry, "Check again", no "Unload"; Home's detail line |
+| `ios/project.yml`, `.github/workflows/ios.yml` | Version 1.1.0, build 2; `NSSpeechRecognitionUsageDescription` |
+
+### 10.2 The system API, and where each signature was confirmed
+
+All from Apple's Speech framework reference (developer.apple.com/documentation/speech) and WWDC25
+session 277. Everything is iOS 26.0 or later; the engine is `@available(iOS 26.0, *)` and is made only
+inside `if #available(iOS 26.0, *)`.
+
+| Use | Signature |
+|---|---|
+| Device support | `SpeechTranscriber.isAvailable` |
+| Locale | `SpeechTranscriber.supportedLocale(equivalentTo:) async -> Locale?`: the device's locale when its language is English, otherwise `en_US` |
+| Module | `SpeechTranscriber(locale:transcriptionOptions:reportingOptions:attributeOptions:)` with `[]`, `[.volatileResults, .fastResults]`, `[]`: the options of the preset `progressiveTranscription` |
+| Asset state | `AssetInventory.status(forModules:) async -> AssetInventory.Status` (`unsupported`, `supported`, `downloading`, `installed`) |
+| Asset download | `AssetInventory.assetInstallationRequest(supporting:) async throws -> AssetInstallationRequest?`; `downloadAndInstall() async throws`; `progress` (it is `ProgressReporting`), observed by key-value observation of `fractionCompleted` |
+| Audio format | `SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith:considering:) async -> AVAudioFormat?`. The analyzer converts nothing, so the Float32 16 kHz capture is converted with `AVAudioConverter` when the format differs |
+| Analysis | `SpeechAnalyzer(modules:)`; `start(inputSequence:)` (returns at once) over an `AsyncStream<AnalyzerInput>`; `AnalyzerInput(buffer:)` |
+| Results | `transcriber.results`, an `AsyncSequence` that throws; `result.text` (`AttributedString`), `result.isFinal`, `result.range` (`CMTimeRange`) |
+| Finishing | `finalizeAndFinishThroughEndOfInput()` after ending the input stream; the module's results then end. `cancelAndFinishNow()` to end at once |
+
+The framework's transcriber class has the same name as this app's `SpeechTranscriber` protocol. In the
+engine file it is always written `Speech.SpeechTranscriber`; no other file imports `Speech`.
+
+**Authorisation.** None is requested. Apple's article "Asking Permission to Use Speech Recognition" says
+the authorisation process "only applies to speech recognition using" `SFSpeechRecognizer`, and that the
+analyzer's transcriber modules do not send audio to Apple's servers. The app never names
+`SFSpeechRecognizer`, so the call that ends a process without a usage string (`requestAuthorization`)
+cannot run. This matters inside LiveContainer, where prompts and usage strings are the host app's.
+`NSSpeechRecognitionUsageDescription` is declared in `project.yml` for normal installs. The microphone
+permission is the one the app already asks for (4.1.2, check 4).
+
+**The asset.** A machine-learning model that iOS downloads from Apple, keeps, updates and shares between
+apps. The reference names no entitlement for it. Reservations of locales are assigned by the system when
+needed. Inside LiveContainer the request is made under the host app's identity.
+
+### 10.3 Behaviour
+
+`AppleTranscriber`, in the terms of 4.2:
+
+| | `AppleTranscriber` |
+|---|---|
+| Needs | The system recogniser, handed over by the factory only when its asset is installed |
+| `start` | `engine.begin()`; then `audio.start(float32 16,000, queue 128)`; status "Listening" |
+| Start failures | "Prepare Apple speech first."; "Apple speech could not start on this iPhone."; "No usable microphone." |
+| While running | Each chunk goes to `engine.process(samples:)`. A tentative result gives `partial`. A final result gives `segment` at once (start and end = the stream offset plus the result's audio range), then `partial ""`. No `lastChunk` |
+| Failures after start | The results end with an error, or `process` throws: the on-device processing text. Capture events as for Voz. On any of them: stop capture keeping the audio session, emit `failed` once |
+| `finalize` | Stop capture keeping the audio session; wait for queued chunks; `engine.finish()`; the last final results become segments as they arrive; when the results have ended, `partial ""` and status "Paused". After a recogniser failure the recognition is cancelled and nothing more is asked. A recogniser that has not finished after 10 s is cancelled, and the call throws the on-device processing text (T-08) |
+| `shutdown` | Stop capture releasing the audio session; `engine.cancel()` |
+
+Unlike Parakeet, segments are committed while listening, with times, so nothing waits for Pause (4.1.3
+appends them in arrival order). Audio pipeline: the Voz and Parakeet column of 4.5.
+
+Preparation, in the terms of 4.6. Nothing is loaded into the app and nothing is released when the provider
+changes. `OnDeviceModelManager` keeps what the system last said:
+
+| State | Home | Transcription and Settings, "Model Library" value | Can start |
+|---|---|---|---|
+| `unknown` (not asked yet) | "Checking Apple speech…" | the same | no |
+| `unavailable(reason)` | the reason | the reason; the picker row is disabled with the reason as its caption | no |
+| `needsDownload` | "Download a model to start", and the download control | "Not downloaded" | no |
+| `installed` | "Apple live captions" / "English live captions · built into iOS" | "Ready" | yes |
+
+The system is asked, without a prompt and without downloading: at bootstrap and when the app becomes
+active, if Apple is the provider; before Apple is chosen for the first time; and after an installation.
+Never during a session. On iOS 18 to 25 the state is `unavailable("Requires iOS 26 or later")` from the
+start and the system is never touched.
+
+`prepare(.apple)` ("Download & use", and "Check again" once installed): progress block as in 4.6 with no
+counter; status "Checking Apple speech…", "Downloading the English speech asset…", "Download complete ·
+finishing…"; then the system is asked again. Installed: status "Ready", block removed. Otherwise the block
+stays as failed, status "Preparation failed", and the error is rethrown for the alert (E-12): the
+system's own error, the reason, or "The speech asset is not installed yet. Try again in a moment."
+
+`SpeechProbeMark`: a flag in the preferences, set before the system is asked and removed after it
+answered. A launch that finds it set does not ask by itself; Apple then reads "Apple speech closed the app
+last time. Restart LiveCue to try again." and the other providers can be chosen. "Download & use" asks
+anyway. It exists because the app cannot be tried inside LiveContainer from here: if asking ever ended the
+process, the app would otherwise end at every launch while Apple is the provider.
+
+Fixture (4.9): `FixtureSystemSpeech` reports the asset installed on every iOS, so a UI test can choose
+`provider-apple` and Home offers Start. `FixtureTranscriber` treats `apple` as any on-device provider.
+
+### 10.4 Tests
+
+| Where | What |
+|---|---|
+| `SpeechProviderTests`, `ContractSmokeTests` (core) | The sixth case, its raw value, name, flags, catalogue entry and place in the order; `needsPC` for both answer services |
+| `AppleTranscriberTests` | The table of 10.3 with `FakeSystemSpeech`: partials, final results to segments while listening, offsets, Pause, Resume, Stop, every failure text, the 10 s limit |
+| `SystemSpeechModelTests` | Unavailable on an older system; nothing known until asked; ready when installed; the download with progress, failure and retry; the provider lock; `SpeechProbeMark` |
+| `TranscriptionViewModelTests`, `SettingsViewModelTests`, `ModelLibraryViewModelTests`, `HomeViewModelTests`, `SystemReadinessTests`, `StreamingTranscriberEngineTests` | The sixth row and its reason; the setup rows; the entry; Home; the live factory |
+| `PCModelUITests`, `OnDeviceUITests` | Six rows; `provider-apple` can be chosen and Home offers Start |
+
+No test reaches the real recogniser: the simulator may not have it.
+
+### 10.5 What only a real iPhone can show
+
+1. Inside LiveContainer on iOS 26 or later: opening Transcription and choosing "Apple · iPhone live" does
+   not end the app, and no permission prompt other than the microphone's appears.
+2. With the English asset already on the phone, the row is ready at once and again after a relaunch. With
+   it missing, Model Library's "Download & use" downloads it, the bar moves, and the status ends at "Ready".
+3. Speaking: tentative text appears within about a second, and finished phrases move into the transcript
+   while the conversation goes on, without Pause.
+4. Pause, Resume and Stop each end within a second or two and lose no final words; the 10 s limit is never
+   reached.
+5. A phone call during listening pauses with the interruption notice, and Resume works afterwards.
+6. Whether the format the analyzer asks for needs resampling on this iPhone (the conversion path is
+   untested on hardware), and whether segment times look right in History.
+7. Assist reads the Apple transcript like any other.

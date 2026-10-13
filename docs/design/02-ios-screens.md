@@ -28,8 +28,8 @@ Root
 │        ├─ Provider                 → Transcription
 │        │     ├─ Meta API key       (Meta)
 │        │     ├─ PC speech model    (Nemotron, Qwen3)
-│        │     ├─ Model Library      (Voz, Parakeet)
-│        │     └─ Speech benchmark   (Voz, Parakeet)
+│        │     ├─ Model Library      (Voz, Parakeet, Apple)
+│        │     └─ Speech benchmark   (Voz, Parakeet, Apple)
 │        ├─ the same provider rows, directly
 │        ├─ Assistant models & timing → Assistant Lab
 │        │     ├─ OpenRouter models   (OpenRouter)
@@ -406,7 +406,7 @@ Mockup: `ios-transcription`.
 
 **Navigation.** Title "Transcription". In: Home row `transcription-settings`, Settings row `speech-provider`. Out: back, or one of the provider rows below.
 
-**Panel 1: the five providers** as choice rows.
+**Panel 1: the six providers** as choice rows.
 
 | Identifier | Title |
 |---|---|
@@ -415,10 +415,13 @@ Mockup: `ios-transcription`.
 | `provider-qwen3` | "Qwen3 1.7B · PC live" |
 | `provider-voz` | "Voz · iPhone on Assist" |
 | `provider-parakeet` | "Parakeet · iPhone live" |
+| `provider-apple` | "Apple · iPhone live" **(new in 1.1.0, D-28)** |
 
 Caption: "PC models run one at a time on your GPU. Start a new conversation to compare them. Neither sends audio to Meta."
 
 Tapping a row selects it and stays on this screen, so the second panel can show what the new provider needs. The rows are disabled under the same conditions as the "Provider" row in Settings, with the same caption.
+
+A provider this iPhone cannot run stays in the list, disabled, with the reason as the row's caption. Only Apple has such a reason: "Requires iOS 26 or later" on iOS 18 to 25, or "Not supported on this iPhone" when iOS 26 says so.
 
 **Panel 2: the selected provider**, titled with its display name.
 
@@ -427,6 +430,7 @@ Tapping a row selects it and stays on this screen, so the second panel can show 
 | Meta | Navigating row "Meta API key", value "Saved on iPhone" or "Required" (`status.warning`), `meta-key-settings`. Spec text S-01 |
 | Nemotron, Qwen3 | Navigating row "PC speech model" with the home label (spec 3.7) as its subtitle. As built: the longer labels, such as "Stopped · open Settings", do not fit beside the title, and a value there is cut off. Spec text S-02 |
 | Voz, Parakeet | Navigating rows "Model Library" (value: "Ready" or "Not loaded" **(new)**) and "Speech benchmark". Spec text S-03 |
+| Apple | The same two rows. The "Model Library" value is "Ready" when the system's language asset is installed, "Not downloaded" when it is not, "Checking Apple speech…" until the system has answered, or the reason it cannot be used. Spec text S-03 |
 
 ---
 
@@ -534,7 +538,7 @@ DS 4.15, scanner. A sheet with a full-bleed camera preview.
 
 Mockup: `ios-model-library`.
 
-**Purpose.** Download and load the on-device model for the current provider. Shown only for Voz and Parakeet; it lists exactly one model.
+**Purpose.** Download and load the on-device model for the current provider. Shown only for Voz, Parakeet and Apple; it lists exactly one model.
 
 **Navigation.** Title "Model Library". In: the row on Transcription or Settings, or "Download a transcription model" on Home.
 
@@ -553,6 +557,8 @@ Mockup: `ios-model-library`.
 | Progress block | Only while this model is being prepared, or after its preparation failed: a determinate bar, `model-download-progress`; "`N`% setup" and "`MM:SS` elapsed"; the status line (section 14); a byte or file counter when known; the caption "Downloading and model preparation are separate steps; preparation can continue after the download reaches 100%." |
 
 - Section title "Pinned source", then a panel with detail rows "Status" → the status line, and "Package" → "Desert Ant 3.1.0" (Voz) or "FluidAudio 0.15.6" (Parakeet).
+
+Apple (D-28): the entry is "Apple live captions" with the description "English live captions · built into iOS" (no size: iOS keeps the asset) and no "Recommended" chip. The main button reads "Download & use", and "Check again" once the asset is installed; there is no "Unload". The progress block shows the bar and the status line without a counter. "Package" reads "Built into iOS".
 
 The progress block belongs to its model and disappears when that model is ready. It no longer lingers after completion or shows another model's last run (spec 11.1, B13).
 

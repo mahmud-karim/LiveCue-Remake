@@ -15,8 +15,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.1.0"
+    CURRENT_PROJECT_VERSION: "2"
 
     # Swift 5 language mode with complete concurrency checking: data-race findings arrive as warnings,
     # so they do not cost a CI cycle. The core package is in Swift 6 mode through its own manifest.
@@ -71,6 +71,10 @@ targets:
           - audio
         NSMicrophoneUsageDescription: "LiveCue transcribes audio on this iPhone, sends it to your PC for local speech models, or streams it directly to Meta for cloud transcription, depending on your selected provider."
         NSCameraUsageDescription: "LiveCue scans the pairing QR code displayed on your Windows PC."
+        # Apple speech (D-28) works on the device and asks for no speech-recognition authorisation, so the
+        # app never requests it. The text is declared so that a normal install can never be ended for a
+        # missing usage string. Inside LiveContainer the host app's strings apply, not these.
+        NSSpeechRecognitionUsageDescription: "LiveCue transcribes speech on this iPhone when you choose Apple speech."
         NSLocalNetworkUsageDescription: "LiveCue connects privately to your Windows PC."
     settings:
       base:
