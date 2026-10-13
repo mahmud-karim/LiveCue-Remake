@@ -382,6 +382,8 @@ the toast); without it they write nothing.
 | The log never exceeds the upper bound; a trimmed log starts with the marker (AC-WIN-030) | `ActivityLogTests.Bounds` | any |
 | Start clears the log only; "Clear activity" clears log, transcript and reply and restores placeholders | `ActivityViewModelTests.Clearing` | any |
 | Payloads are indented; no line contains the token | `PayloadFormatterTests.Indentation`; `ActivityViewModelTests.No_token` | any |
+| As built: the phone tooltip's age is told again once a tick; a containment warning stands in the Codex row | `LiveViewModelTests.The_phone_tooltip_tells_the_age_of_the_last_heartbeat`; `PrerequisiteRowsTests.The_codex_row_carries_the_containment_warning_instead_of_the_path` | any |
+| As built: every state of screens 2.9 and 4.2 in the real window over a `FakeSession`, at both window sizes: the texts shown, the automation ids, the 0.88 : 1.12 panels, the card floor of 120 and the scrolling page, selectable transcript and reply, the log that follows its end | `LivePageTests` (six tests); `ActivityPageTests` (three tests) | Windows, UI |
 
 ### 2.8 Pairing and Settings (WP-W10), folders `Pairing/`, `Settings/`
 

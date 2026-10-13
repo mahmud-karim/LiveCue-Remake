@@ -4485,9 +4485,9 @@ Bindings: one element per automation id of screens section 9.
 | Id | Element | Bound to |
 |---|---|---|
 | `StartRelayButton` | `Button.Primary.Session`; busy shows the spinner | `StartRelayCommand`, `IsStartVisible`, `IsStartBusy`, `StartLabel` |
-| `PauseRelayButton`, `StopRelayButton` | `Button.Secondary.Session` | `PauseResumeCommand`, `PauseResumeLabel`, `StopRelayCommand`, `AreRunningControlsVisible` |
+| `PauseRelayButton`, `StopRelayButton` | `Button.Secondary` (40 high with an 18 glyph, as screens 2.2 and the mockup draw them) | `PauseResumeCommand`, `PauseResumeLabel`, `StopRelayCommand`, `AreRunningControlsVisible` |
 | `RelayStatusText`, `PhoneStatusText` | `StatusIndicatorView` | `RelayStatus` (+ `RelayStatusCaption`), `PhoneStatus` |
-| `PcAddressText` | Selectable `Type.Mono` text; copy icon button | `PcAddress`, `HasPcAddress`, `CopyPcAddressCommand` |
+| `PcAddressText` | `Type.Mono` text; copy icon button (`Button.Icon.Quiet`, shown once there is an address) | `PcAddress`, `HasPcAddress`, `CopyPcAddressCommand` |
 | `ConnectionBanner`, `LiveSetUpConnectionButton` | `Banner` (warning) with its button | `ConnectionBanner`, `SetUpConnectionCommand` |
 | `ExposureBanner` | `Banner` (danger when a row has Funnel on in Private mode, otherwise warning) with the action "Open Settings"; shown in every state, also while the relay is stopped | `ExposureBanner`, `OpenSettingsCommand` |
 | `PrerequisiteList` | Panel "Before the relay can start" with `Row.Check` rows, "Check again", "Open Settings" | `ArePrerequisitesVisible`, `Prerequisites`, `CheckAgainCommand`, `OpenSettingsCommand` |
@@ -4518,11 +4518,35 @@ in `ink.secondary` with the subtitle "Not checked". The row of check 2, when it 
 | Condition | Banner |
 |---|---|
 | The selected mode is Private and `HasFunnelExposure` | Danger. Title "This relay is reachable from the internet". Body "A public Tailscale mapping still points at this relay. Remove it, or switch to Public mode." |
-| `UnownedExposure` is not empty | Warning. Body "`<N>` Tailscale mapping(s) that LiveCue does not manage point at this relay. Open Settings to see them and how to remove them." |
+| `UnownedExposure` is not empty | Warning. Body "`<N>` Tailscale mappings that LiveCue does not manage point at this relay. Open Settings to see them and how to remove them."; for one: "1 Tailscale mapping that LiveCue does not manage points at this relay. Open Settings to see it and how to remove it." |
 | `StatusFailure` is not `None` and Tailscale is installed | Warning. Body: the "Exposure unknown" text of 4.15 |
 | otherwise | null (stale mappings of ours keep their own warning in Settings, as before) |
 
 Numbers are formatted with the invariant culture.
+
+As built (WP-W09):
+
+- **Selectable text.** The transcript, its "[In progress]" and "Instruction" block, the reply and the items
+  of its two lists are read-only `TextBox`es drawn as plain text (a style local to the page, built from
+  the type and colour tokens: no frame, no caret, no tab stop); Ctrl+C copies a selection. Each card's
+  placeholder is a `TextBlock`. A placeholder and the text box that replaces it carry the same automation
+  id (`TranscriptText`, `ReplyText`); only one of the two is shown at a time. `PcAddressText` is a
+  `TextBlock` and is not selectable: the copy button beside it is how the address is taken.
+- **`LiveSetUpConnectionButton`** is the button the `Banner` draws for its action; the page gives it the id
+  once the banner's template exists.
+- **Status texts.** The Live indicators do not announce changes: the sidebar's indicators, which are always
+  shown, do. A failed check and a fault put their whole sentence into the relay indicator's tooltip. The
+  page raises `PhoneStatus` once a tick (W-10) while a phone was seen, so the age in the tooltip, here and
+  in the sidebar, is current.
+- **Height.** The page's content is as high as the window gives it, so each card takes what is left and
+  scrolls its own text. When the strip has grown so far that a card would fall under its floor of 120 (both
+  banners at the minimum size, or large text), the content gets the height it needs and the page scrolls
+  (`Page.Scroller`). Side-by-side panels do not stack at a large text scale; they keep the 0.88 : 1.12 split.
+- **Prerequisite rows.** A passed Codex row shows the path that was found as its subtitle. A PC name row
+  whose check was not made, so that no name is known, is titled "PC name". `Row.Check` draws every title
+  in `ink.primary`, a "Not checked" row included; its hollow ring and its subtitle tell it apart.
+- **Transcript.** New text, a request's as well as a speech line, is scrolled to its end; a new reply is
+  shown from its first line. A relay that ends while a request is being answered stops the spinner.
 
 ### 5.6 Pairing page (`Pairing/`)
 
@@ -4594,6 +4618,11 @@ Lines (`ActivityViewModel`; texts in `Text/ActivityText.cs`):
 always visible, in `Type.Caption`: "Rejected since the relay started: `<a>` malformed · `<b>` with an
 unknown token · `<c>` through Funnel in Private mode". Plain numbers in the invariant culture. No colour
 change, no banner, no toast and no log entry at any value; "Clear activity" does not reset them.
+
+As built (WP-W09): a line break counts as `Environment.NewLine`, so the count is exactly the length of
+`IActivityViewModel.Text` plus one line break. The caption line is one text block bound to the view model's
+`RejectedCountsText`. An entry is drawn as its time, then its message and under it its payload, each a
+`Log.Text` block (the log is not selectable; `Text` holds it as it would be copied).
 
 The page: `ClearActivityButton` (`ClearActivityCommand`, calls `session.ClearActivity()`, disabled while
 empty); `ActivityLog` is a virtualised `ItemsControl` of entries in `Log.Text` style inside a `Glass.Card`,
@@ -5122,6 +5151,10 @@ the workflow's restore step (`--locked-mode`).
 - `ExposureBanner` and its three cases; the containment warning as the subtitle of the check 2 row (5.5).
 - The three counters, their caption line, and no log entry for `EdgeStatistics` (5.7).
 - Adds: ST-08 (`LiveViewModelTests.Exposure_banner_cases`), ST-19 (two `ActivityViewModelTests`).
+- As built: the notes at the end of 5.5 and in 5.7. Besides the tests of test plan 2.7, `LivePageTests` and
+  `ActivityPageTests` draw every state of screens 2.9 and 4.2 in the real window over a `FakeSession`, at
+  1240 x 660 and at 960 x 620; with `LIVECUE_TEST_SHOTS` set they write each scene as a PNG, including the
+  states the self-test has no scene for (`win-live-prereq`, the two banners, a summary).
 
 **WP-W10 Pairing and Settings**
 
