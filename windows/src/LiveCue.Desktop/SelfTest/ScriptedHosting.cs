@@ -13,7 +13,7 @@ namespace LiveCue.Desktop.SelfTest;
 /// </summary>
 internal sealed class ScriptedHosting
 {
-    public const string DnsName = "pc.example.test";
+    public const string DnsName = SyntheticData.DnsName;
 
     /// <summary>A path handed to the supervisor as the data folder. Nothing is ever created there.</summary>
     public static readonly string UnusedDataDirectory =
@@ -21,6 +21,24 @@ internal sealed class ScriptedHosting
 
     public ScriptedHosting(TimeProvider clock, RelayScript relays)
     {
+        ArgumentNullException.ThrowIfNull(clock);
+
+        // The PC of the script was set up before: its Private mapping exists and is LiveCue's own, and
+        // the containment check was run for the Codex version it has. So no scene shows a warning.
+        var settings = new MemorySettings(RelaySettings.Default with
+        {
+            CodexContainmentCheckedVersion = SyntheticData.CodexVersion,
+            OwnedMappings =
+            [
+                new OwnedMapping(
+                    ConnectionMode.Private,
+                    RelaySettings.Default.PrivateHttpsPort,
+                    "/",
+                    MappingCommand.TargetFor(RelaySettings.Default.RelayPort),
+                    clock.GetUtcNow()),
+            ],
+        });
+
         Mappings = new ScriptedMappings(clock);
         Services = HostingFactory.Create(
             new SupervisorOptions(UnusedDataDirectory, "1.0.0"),
@@ -29,8 +47,8 @@ internal sealed class ScriptedHosting
                 Clock = clock,
                 Processes = Processes,
                 Files = Files,
-                Settings = new MemorySettings(),
-                Prerequisites = new PassingPrerequisites(),
+                Settings = settings,
+                Prerequisites = new PassingPrerequisites(settings),
                 Mappings = Mappings,
                 RelayFactory = relays,
             });
@@ -45,17 +63,20 @@ internal sealed class ScriptedHosting
     public ScriptedMappings Mappings { get; }
 
     /// <summary>Settings that live for one run and never reach a disk.</summary>
-    private sealed class MemorySettings : ISettingsStore
+    private sealed class MemorySettings(RelaySettings settings) : ISettingsStore
     {
-        private RelaySettings _settings = RelaySettings.Default;
+        private RelaySettings _settings = settings;
 
         public SettingsLoadResult Load() => new(_settings, SettingsFileState.Missing, []);
 
         public void Save(RelaySettings settings) => _settings = settings;
     }
 
-    /// <summary>Every check passes, with a Tailscale name on a reserved test domain.</summary>
-    private sealed class PassingPrerequisites : IPrerequisiteChecker
+    /// <summary>
+    /// Every check passes: a Codex of a fixed version at a placeholder path, and a Tailscale name on a
+    /// reserved test domain. The report carries the settings as they are saved at that moment.
+    /// </summary>
+    private sealed class PassingPrerequisites(MemorySettings settings) : IPrerequisiteChecker
     {
         public Task<PrerequisiteReport> CheckAsync(PrerequisiteOptions options, CancellationToken ct)
         {
@@ -70,46 +91,96 @@ internal sealed class ScriptedHosting
             ];
             return Task.FromResult(new PrerequisiteReport(
                 results,
-                new SettingsLoadResult(RelaySettings.Default, SettingsFileState.Missing, []),
-                CodexExecutablePath: null,
-                DnsName));
+                settings.Load(),
+                SyntheticData.CodexPath,
+                DnsName,
+                SyntheticData.CodexVersion));
         }
     }
 }
 
 /// <summary>
 /// A mapping manager that reads no Tailscale configuration and runs no command. It reports the state
-/// the script chose for both modes and counts the executions asked of it, which must stay zero.
+/// the script chose for each mode and counts the executions asked of it, which must stay zero.
 /// </summary>
 internal sealed class ScriptedMappings(TimeProvider clock) : IMappingManager
 {
-    /// <summary>What an inspection reports for the selected mode.</summary>
-    public MappingState State { get; set; } = MappingState.Present;
+    /// <summary>What an inspection reports for the Private mapping.</summary>
+    public MappingState PrivateState { get; set; } = MappingState.Present;
 
-    public MappingRefusal BlockedBy { get; set; } = MappingRefusal.None;
+    /// <summary>What an inspection reports for the Public mapping.</summary>
+    public MappingState PublicState { get; set; } = MappingState.Present;
+
+    /// <summary>Why the Public mapping is blocked, when <see cref="PublicState"/> says it is.</summary>
+    public MappingRefusal PublicBlockedBy { get; set; } = MappingRefusal.None;
+
+    /// <summary>Sets the state of both mappings at once.</summary>
+    public MappingState State
+    {
+        get => PrivateState;
+        set
+        {
+            PrivateState = value;
+            PublicState = value;
+        }
+    }
+
+    /// <summary>How often the configuration was "read".</summary>
+    public int Inspections { get; private set; }
 
     /// <summary>How often a write was asked for. The self-test never confirms a mapping dialog.</summary>
     public int Executions { get; private set; }
 
-    public Task<ConnectionInspection> InspectAsync(RelaySettings settings, CancellationToken ct) => Task.FromResult(
-        new ConnectionInspection(
-            new MappingInspection(ConnectionMode.Private, State, BlockedBy, State == MappingState.Present, settings.PrivateHttpsPort, "/"),
-            new MappingInspection(ConnectionMode.Public, State, BlockedBy, State == MappingState.Present, settings.PublicHttpsPort, settings.PublicPathPrefix),
+    public Task<ConnectionInspection> InspectAsync(RelaySettings settings, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        Inspections++;
+        var target = MappingCommand.TargetFor(settings.RelayPort);
+        bool Owned(ConnectionMode mode, int port, string path) => settings.OwnedMappings.Any(entry =>
+            entry.Mode == mode && entry.HttpsPort == port && entry.Path == path && entry.Target == target);
+
+        // An exposure report without a row: nothing but LiveCue's own mapping points at the relay.
+        return Task.FromResult(new ConnectionInspection(
+            new MappingInspection(
+                ConnectionMode.Private,
+                PrivateState,
+                MappingRefusal.None,
+                PrivateState == MappingState.Present && Owned(ConnectionMode.Private, settings.PrivateHttpsPort, "/"),
+                settings.PrivateHttpsPort,
+                "/"),
+            new MappingInspection(
+                ConnectionMode.Public,
+                PublicState,
+                PublicState == MappingState.Blocked ? PublicBlockedBy : MappingRefusal.None,
+                PublicState == MappingState.Present && Owned(ConnectionMode.Public, settings.PublicHttpsPort, settings.PublicPathPrefix),
+                settings.PublicHttpsPort,
+                settings.PublicPathPrefix),
             StaleOwned: [],
             TailscaleReadFailure.None,
             clock.GetUtcNow(),
             Exposure: []));
+    }
 
     public MappingPlan? PlanApply(ConnectionMode mode, RelaySettings settings, string? dnsName, out MappingRefusal refusal)
     {
-        refusal = MappingRefusal.None;
+        ArgumentNullException.ThrowIfNull(settings);
+        // As the real manager: the plan depends on the settings alone, not on what an inspection found.
         var isPublic = mode == ConnectionMode.Public;
+        refusal = MappingRefusal.None;
         var action = isPublic ? MappingAction.ApplyPublic : MappingAction.ApplyPrivate;
         var command = isPublic
             ? MappingCommand.ApplyPublic(settings.PublicHttpsPort, settings.PublicPathPrefix, settings.RelayPort)
             : MappingCommand.ApplyPrivate(settings.PrivateHttpsPort, settings.RelayPort);
-        return new MappingPlan(action, command, MappingTexts.Effect(action, null, settings.RelayPort), Entry: null);
+        return new MappingPlan(
+            action, command, MappingTexts.Effect(action, Address(dnsName, command.HttpsPort, command.Path), settings.RelayPort), Entry: null);
     }
+
+    /// <summary>The address a mapping serves, for the sentence that says what a command does.</summary>
+    private static string? Address(string? dnsName, int httpsPort, string path) => string.IsNullOrEmpty(dnsName)
+        ? null
+        : string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"https://{dnsName}{(httpsPort == 443 ? string.Empty : ":" + httpsPort.ToString(System.Globalization.CultureInfo.InvariantCulture))}{path}");
 
     public MappingPlan PlanRemoval(OwnedMapping entry, string? dnsName)
     {
@@ -118,7 +189,7 @@ internal sealed class ScriptedMappings(TimeProvider clock) : IMappingManager
         var command = isPublic
             ? MappingCommand.RemovePublic(entry.HttpsPort, entry.Path)
             : MappingCommand.RemovePrivate(entry.HttpsPort);
-        return new MappingPlan(action, command, MappingTexts.Effect(action, null, 0), entry);
+        return new MappingPlan(action, command, MappingTexts.Effect(action, Address(dnsName, entry.HttpsPort, entry.Path), 0), entry);
     }
 
     public Task<MappingResult> ExecuteAsync(MappingPlan plan, CancellationToken ct)

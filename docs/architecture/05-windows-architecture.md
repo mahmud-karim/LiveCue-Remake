@@ -4906,6 +4906,45 @@ every `-min` file / `win-min`. `live-ready`, `live-paused`, `pairing-empty`, `se
 `settings-blocked` and `fault-port-in-use` have no frame; `win-live-prereq` and `win-settings-assistant` have
 no scene and are covered by view-model tests.
 
+As built (WP-W11):
+
+- **Files.** `SelfTestRunner.cs` is the entry, the watchdog and the tools the steps use (press a button
+  through its command, wait for the session, move the clock, show a scene); `Scenes.cs` is the list of the
+  fifteen scenes and the nineteen steps; `SelfTestAssertions.cs` names the assertions and keeps what the
+  end-of-run ones need; `SceneRenderer.cs` draws and writes the pictures. `SelfTestSession` takes the
+  application and an optional theme manager, not the `App`, so that a test can make the whole run inside
+  its own process and ask the recording seams afterwards (`SelfTestIsolationTests`).
+- **The matrix.** `QrMatrix` is internal to the relay, so `SyntheticData.PairingMatrix()` encodes the
+  synthetic payload itself, with the QR package the relay already ships and the parameters of
+  `QrMatrix.Encode` (as the console host's `TerminalQr` does). The scene shows a code of the real size
+  (41 modules). `qr-drawn` compares every module of the tile with the matrix, and `qr-quiet-zone` looks at
+  every module of the four-module border.
+- **The script's clock.** One day, in UTC: start at 09:14:02, "Show QR" at 09:14:31, the `pairing-qr`
+  scene 18 seconds later ("Hides in 1:42"), the QR hidden by its own timer at 09:16:31 (the state the
+  mockup shows behind the reset dialog), the request at 09:16:48, its reply at 09:16:49, the failed request
+  at 09:18:20 to 09:18:23, the speech messages at 09:21:10 and 09:21:34. `ManualClock` fires a periodic
+  timer once per period. After every move the script's phone is heard from again, so it stays "connected".
+- **Synthetic data beyond the list above.** The request also has an unfinished sentence and an instruction,
+  so that the transcript has the three blocks the mockup shows; model `gpt-5.6-sol`, effort `low`; the
+  failed request is `selftest-0002`. The scripted relay sends the "Saved pairing restored." notice at each
+  start. The scripted settings hold LiveCue's own Private mapping in the ledger (so `settings-private`
+  shows "Remove…"), the Public mapping is absent from the start, and the Codex path is the mockup's
+  placeholder text, not a path of the PC.
+- **Assertions beyond the table.** After step 1: `look-ground-and-glass`, `look-reference-composites`
+  (DS checklist item 1) and `layout-beyond-desktop`, carried over from the spike. At the end: `scenes`
+  (all fifteen were shown, in order, and with a folder exactly the thirty files were written).
+  `crisp-text` also covers the text of text boxes. `reset-dialog` also checks that the focus returns to
+  the button that opened the dialog.
+- **Step 18** puts its 400 entries into the log through the session's own message path
+  (`DesktopSession.Report`), synchronously, and measures the log after each one.
+- **Without `--screenshots`** each scene is still drawn once at the default size; the window is resized to
+  the minimum size only when files are written.
+- **A failure** prints two lines: "Desktop self-test FAILED: `<name>`", then "Expected: …". A failure that
+  no assertion names (a wait that ran out) is named after its step, "step-07". The switch that makes one
+  assertion fail for the tests is `--self-test-fail <name>`; the self-test reads it from the process's
+  command line itself, and `AppEnvironment` does not know it.
+- **Output** is UTF-8 without a signature, redirected or not.
+
 ### 5.14 Icon tool (`windows/tools/LiveCue.IconTool/`)
 
 A WPF console program, not published. `LiveCue.IconTool <repository root>` draws the mark from the numbers
@@ -4913,6 +4952,22 @@ of DS 8.2 with `DrawingVisual` and writes `windows/src/LiveCue.Desktop/Assets/Li
 64, 48, 40, 32, 24, 20, 16, each a 32-bit PNG entry, drawn per size as DS 8.2 says) and the iPhone 1024 px
 PNG at the path the iPhone design names. It is run by hand; a normal build never runs it (WIN-19). A test
 checks that the committed `.ico` holds exactly those nine frame sizes.
+
+As built (WP-W12):
+
+- **Paths.** The iPhone picture is `ios/App/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png`
+  (1024 x 1024, 8-bit RGB without alpha). The tool refuses a root that does not hold both target folders, so
+  a wrong path writes nothing. `--frames <folder>` also writes every frame, the 1024 px picture and a sheet
+  of all frames on a light and a dark ground, the small ones enlarged, for a person to look at.
+- **The flat frames (64 to 32)** put the bubble's body and the three bars on whole pixels: one bar width,
+  one distance between bars, heights that are all even or all odd, the body as wide and as high as keeps the
+  bars exactly in its middle. Scaled from the master without that, a bar is 2.1 to 4.25 pixels wide and
+  turns grey. The tail keeps the master's outline. DS 8.2 asks for the pixel grid only from 24 down.
+- **The 20 and 24 px frames**: bubble (1,1) to (19,15) and (2,2) to (23,18); bars 2 and 3 wide with 2 px
+  between them, heights 4, 8, 6 and 4, 10, 8.
+- **The shadow's blur** is 80 in the sense of DS 2.13 (`BlurRadius`), scaled with the frame.
+- The output is the same bytes on every run. The Windows shell takes the 32 and 16 px frames from the
+  built executable (checked on the build PC).
 
 ---
 
@@ -5261,11 +5316,27 @@ the workflow's restore step (`--locked-mode`).
 - The scripted hosting returns inspections with an empty `Exposure` and a report with a fixed version that
   equals the scripted `CodexContainmentCheckedVersion`, so that no warning appears in a scene. In self-test
   mode `SetWindowDisplayAffinity` is not called. Scenes and assertions are unchanged.
+- As built: the notes at the end of 5.13. Besides the tests of test plan 2.9, `SelfTestRunTests` has
+  `A_usage_error_exits_2`, and `SelfTestIsolationTests` checks the scripted file system and the synthetic
+  data on their own. Compared with their mockup frames, three scenes differ in state because of the order
+  of the steps, not in layout: `pairing-qr` has a phone connected (the frame has none), `settings-private`
+  is taken while the relay runs and its mapping exists (the frame shows it stopped and "Not set up"), and
+  `activity-filled` is scrolled to its newest entry, as the page does (the frame shows the top of the log).
 
 **WP-W12 Tools**
 
 - `scripts/verify-pc-asr.ps1` always passes its own `--data-dir`, which is what allows it to read the
   payload of `--show-pairing` from a redirected output.
+- As built: the notes at the end of 5.14. `scripts/verify-pc-asr.ps1` also takes `-RelayHost <exe>`
+  (default `artifacts\publish\LiveCueRelayHost.exe`), `-LabFolder <folder>` (default `asr`), `-KeepModel`
+  and `-CheckOnly` (check the arguments, say what would be started, start nothing). It refuses audio that,
+  repeated, lasts 240 s or more; reads the host's events from a file in its temporary folder; keeps the
+  token in a variable only; and unloads the model afterwards when this run loaded it. A wrong argument
+  prints the usage and exits 2. `scripts/smoke/tests/test_openrouter_catalogue.py` tests the catalogue
+  check's rules and arguments without a request. **Neither script was run for real by its builder**: only
+  the argument handling was tried. The iPhone picture belongs to the iPhone side (iPhone design, file map:
+  `Resources/Assets.xcassets`, "from the icon tool"); the tool's output is committed there on this
+  package's branch, and `scripts/generate_app_icon.py`, which drew the placeholder, is no longer needed.
 
 **WP-W13 Conformance and security sweep**
 

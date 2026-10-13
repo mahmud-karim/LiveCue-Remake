@@ -43,28 +43,35 @@ internal static class SelfTestConsole
 
         _prepared = true;
         var hasOutput = NativeMethods.GetStdHandle(NativeMethods.StdOutputHandle) is not (0 or -1);
-        if (hasOutput || !NativeMethods.AttachConsole(NativeMethods.AttachParentProcess))
+        if (!hasOutput && !NativeMethods.AttachConsole(NativeMethods.AttachParentProcess))
         {
             return;
         }
 
+        // UTF-8 without a signature, whatever code page this PC has: what reads a redirected output (a
+        // CI log, a test) then sees the same text everywhere.
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), encoding) { AutoFlush = true });
         Console.SetError(new StreamWriter(Console.OpenStandardError(), encoding) { AutoFlush = true });
     }
 }
 
-/// <summary>The self-test's log: every line goes to standard output and into self-test.log beside the screenshots.</summary>
-internal sealed class SelfTestLog(string? directory)
+/// <summary>
+/// The self-test's log: every line goes to standard output and, when screenshots were asked for, into
+/// self-test.log beside them. A test that runs the self-test inside its own process gives another
+/// place for the lines to go.
+/// </summary>
+internal sealed class SelfTestLog(string? directory, Action<string>? output = null)
 {
     public const string FileName = "self-test.log";
 
     private readonly StringBuilder _lines = new();
+    private readonly Action<string> _output = output ?? SelfTestConsole.WriteLine;
 
     public void Write(string line)
     {
         _lines.AppendLine(line);
-        SelfTestConsole.WriteLine(line);
+        _output(line);
     }
 
     public void Save()

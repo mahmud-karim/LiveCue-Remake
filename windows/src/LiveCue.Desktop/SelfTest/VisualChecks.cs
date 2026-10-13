@@ -1,12 +1,22 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using LiveCue.Desktop.Controls;
 
 namespace LiveCue.Desktop.SelfTest;
 
-/// <summary>A self-test expectation that did not hold.</summary>
-internal sealed class SelfTestFailedException(string message) : Exception(message);
+/// <summary>
+/// A self-test expectation that did not hold. <see cref="Assertion"/> is the name of the assertion it
+/// belongs to (W-design 5.13), once the runner knows it; the message says what was expected.
+/// </summary>
+internal sealed class SelfTestFailedException(string message, string? assertion = null) : Exception(message)
+{
+    public string? Assertion { get; } = assertion;
+}
 
 /// <summary>Checks the self-test makes on the live visual tree and on rendered pixels.</summary>
 internal static class VisualChecks
@@ -45,25 +55,45 @@ internal static class VisualChecks
         foreach (var text in Descendants(root).OfType<TextBlock>().Where(text => text.IsVisible))
         {
             checkedCount++;
-            for (DependencyObject? current = text; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (CrispTextProblem(text, text.Text, root) is { } problem)
             {
-                if (current is UIElement element)
-                {
-                    var where = $"\"{text.Text}\" (ancestor {element.GetType().Name})";
-                    Require(element.Effect is null, $"no Effect above the text {where}");
-                    Require(element.OpacityMask is null, $"no OpacityMask above the text {where}");
-                    Require(element.CacheMode is null, $"no BitmapCache above the text {where}");
-                    Require(element.Opacity >= 1 || !element.IsEnabled, $"no resting Opacity below 1 above the text {where}");
-                }
-
-                if (ReferenceEquals(current, root))
-                {
-                    break;
-                }
+                throw new SelfTestFailedException("Expected: " + problem);
             }
         }
 
         return checkedCount;
+    }
+
+    /// <summary>
+    /// The same rule, for every visible text of the tree, a text box's own text included, as a list of
+    /// what breaks it instead of a failure: the self-test collects these over all its steps and
+    /// reports them at the end. <paramref name="texts"/> receives the number of texts looked at.
+    /// </summary>
+    public static List<string> CrispTextProblems(FrameworkElement root, out int texts)
+    {
+        var problems = new List<string>();
+        texts = 0;
+        foreach (var element in Descendants(root).OfType<FrameworkElement>().Where(element => element.IsVisible))
+        {
+            var shown = element switch
+            {
+                TextBlock block => block.Text,
+                TextBoxBase box => (box as TextBox)?.Text ?? string.Empty,
+                _ => null,
+            };
+            if (shown is null)
+            {
+                continue;
+            }
+
+            texts++;
+            if (CrispTextProblem(element, shown, root) is { } problem)
+            {
+                problems.Add(problem);
+            }
+        }
+
+        return problems;
     }
 
     /// <summary>
@@ -86,6 +116,54 @@ internal static class VisualChecks
 
     public static int CountEffects(FrameworkElement root) =>
         Descendants(root).OfType<UIElement>().Count(element => element.IsVisible && element.Effect is not null);
+
+    /// <summary>
+    /// Everything the tree would show or say to a person or to assistive technology: the text of text
+    /// blocks, text boxes and status indicators, string contents, tooltips, and the automation name,
+    /// help text and item status of every element, visible or not.
+    /// </summary>
+    public static IEnumerable<string> SpokenAndShownTexts(FrameworkElement root)
+    {
+        foreach (var node in Descendants(root).Prepend(root))
+        {
+            switch (node)
+            {
+                case TextBlock block:
+                    yield return block.Text;
+                    foreach (var run in block.Inlines.OfType<Run>())
+                    {
+                        yield return run.Text;
+                    }
+
+                    break;
+                case TextBox box:
+                    yield return box.Text;
+                    break;
+                case StatusIndicatorView indicator:
+                    yield return indicator.Text;
+                    break;
+                case ContentControl { Content: string content }:
+                    yield return content;
+                    break;
+                default:
+                    break;
+            }
+
+            if (node is FrameworkElement element)
+            {
+                yield return element.ToolTip switch
+                {
+                    string text => text,
+                    ToolTip { Content: string text } => text,
+                    _ => string.Empty,
+                };
+            }
+
+            yield return AutomationProperties.GetName(node) ?? string.Empty;
+            yield return AutomationProperties.GetHelpText(node) ?? string.Empty;
+            yield return AutomationProperties.GetItemStatus(node) ?? string.Empty;
+        }
+    }
 
     /// <summary>The colour of one pixel of a rendered frame (premultiplied BGRA, opaque here).</summary>
     public static Color PixelAt(BitmapSource bitmap, int x, int y)
@@ -113,4 +191,44 @@ internal static class VisualChecks
     }
 
     public static string Hex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    /// <summary>What breaks the crisp-text rule above <paramref name="text"/>, or null.</summary>
+    private static string? CrispTextProblem(DependencyObject text, string shown, FrameworkElement root)
+    {
+        for (var current = text; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is UIElement element)
+            {
+                var where = $"\"{Shorten(shown)}\" (ancestor {element.GetType().Name})";
+                if (element.Effect is not null)
+                {
+                    return $"no Effect above the text {where}";
+                }
+
+                if (element.OpacityMask is not null)
+                {
+                    return $"no OpacityMask above the text {where}";
+                }
+
+                if (element.CacheMode is not null)
+                {
+                    return $"no BitmapCache above the text {where}";
+                }
+
+                if (element.Opacity < 1 && element.IsEnabled)
+                {
+                    return $"no resting Opacity below 1 above the text {where}";
+                }
+            }
+
+            if (ReferenceEquals(current, root))
+            {
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    private static string Shorten(string text) => text.Length <= 60 ? text : text[..60] + "…";
 }
