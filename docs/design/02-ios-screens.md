@@ -425,7 +425,7 @@ Tapping a row selects it and stays on this screen, so the second panel can show 
 | Provider | Rows |
 |---|---|
 | Meta | Navigating row "Meta API key", value "Saved on iPhone" or "Required" (`status.warning`), `meta-key-settings`. Spec text S-01 |
-| Nemotron, Qwen3 | Navigating row "PC speech model", value = the home label (spec 3.7). Spec text S-02 |
+| Nemotron, Qwen3 | Navigating row "PC speech model" with the home label (spec 3.7) as its subtitle. As built: the longer labels, such as "Stopped · open Settings", do not fit beside the title, and a value there is cut off. Spec text S-02 |
 | Voz, Parakeet | Navigating rows "Model Library" (value: "Ready" or "Not loaded" **(new)**) and "Speech benchmark". Spec text S-03 |
 
 ---
@@ -671,6 +671,7 @@ The messages of spec 8.1 that are not session notices, unchanged, with these adj
 - "Add your Meta API key in Transcription. It stays in this iPhone's Keychain." **(reworded likewise)**.
 - A failed "Verify and pair" no longer starts with "Your pairing is saved." (spec 11.1, B10); that prefix is used only for health-check failures of the saved pairing.
 - "Use the pairing QR from LiveCue Desktop. It must contain an HTTPS PC address and a valid pairing token." is unchanged and also covers pasted text.
+- "This iPhone could not save the pairing. Try again." **(new, as built)**: the PC accepted "Verify and pair" and the phone could not store the pairing. The store's own error has no text that may be shown.
 
 ### Inline status lines
 

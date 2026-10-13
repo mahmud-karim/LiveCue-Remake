@@ -21,36 +21,58 @@ struct HistoryRowContent: Equatable, Identifiable {
     let usage: HistoryUsageLabel?
 
     init(session: Session) {
-        // STUB(WP-11)
         id = session.id
         title = session.title
-        dateText = ""
-        countsText = ""
-        usage = nil
+        dateText = session.startedAt.formatted(date: .abbreviated, time: .shortened)
+        countsText = "\(session.segments.count) transcript segments · \(session.assistantTurns.count) assists"
+        usage = HistoryRowContent.usageLabel(of: session.transcriptionUsage)
+    }
+
+    /// Meta shows the estimated cost, every other provider "Local". A session without recorded usage
+    /// shows nothing: never a made-up zero.
+    private static func usageLabel(of usage: TranscriptionUsage?) -> HistoryUsageLabel? {
+        guard let usage else { return nil }
+        let ending = usage.isIncomplete ? " · incomplete" : ""
+        if usage.provider == SpeechProvider.meta.rawValue {
+            return .meta("\(SpeechProvider.meta.displayName) · \(SessionTexts.cost(usage))\(ending)")
+        }
+        let name = SpeechProvider(rawValue: usage.provider)?.displayName ?? "On-device"
+        return .local("\(name) · Local\(ending)")
     }
 }
 
-/// History (screens 13).
+/// History (screens 13): every stored conversation, newest first, and the deletion of one.
 @MainActor @Observable final class HistoryViewModel {
     /// The row whose confirmation is showing.
     var pendingDeleteID: UUID? = nil
 
+    private let history: HistoryModel
+
     init(history: HistoryModel) {
-        // STUB(WP-11)
+        self.history = history
     }
 
-    var rows: [HistoryRowContent] { [] } // STUB(WP-11)
-    var isEmpty: Bool { true } // STUB(WP-11)
+    /// Newest start first, as `HistoryModel` keeps them.
+    var rows: [HistoryRowContent] {
+        history.sessions.map { HistoryRowContent(session: $0) }
+    }
 
+    var isEmpty: Bool {
+        history.sessions.isEmpty
+    }
+
+    /// The swipe action: nothing is deleted before the confirmation.
     func requestDelete(_ id: UUID) {
-        // STUB(WP-11)
+        pendingDeleteID = id
     }
 
     func confirmDelete() async {
-        // STUB(WP-11)
+        guard let id = pendingDeleteID else { return }
+        pendingDeleteID = nil
+        await history.delete(id: id)
     }
 
     func cancelDelete() {
-        // STUB(WP-11)
+        pendingDeleteID = nil
     }
 }

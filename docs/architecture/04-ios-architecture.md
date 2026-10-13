@@ -3766,6 +3766,12 @@ to it (not the global alert, which has one button):
 Scanning or pasting a payload still only fills the two fields. No request is made before "Verify and pair",
 and none before "Replace" when the prompt is shown.
 
+As built (WP-11): `appeared()` also closes the pairing options and drops a pending replacement prompt,
+because the view model outlives the screen. `PairingScreen` keeps what the scanner delivered until the
+sheet is gone and calls `scannerFinished(_:)` from the sheet's `onDismiss`, so that the alert of a failed
+scan is not raised under a sheet that is still closing. A pairing that the PC accepted and the phone could
+not store raises the alert "This iPhone could not save the pairing. Try again."
+
 `QRScanSheet` presents `QRScannerView` under the viewfinder overlay of DS 4.15, with the title
 "Scan PC QR", the button "Cancel" and the caption "Point at the QR in LiveCue Desktop"; it uses
 `lcSheetChrome()`. A failed "Verify and pair" shows `RelayMessages.text(for:)` with no "Your pairing is
@@ -3875,6 +3881,13 @@ struct SessionDetailScreen: View { init(sessionID: UUID) }
 History is a `List` with clear row backgrounds (DS 4.8), because it needs `.swipeActions`; the "Delete"
 action calls `requestDelete`, and the confirmation is an `.alert` titled "Delete this conversation?" with
 the message and the buttons "Delete" (destructive) and "Cancel" of screens 13.
+
+As built (WP-11): the list draws the ground itself instead of using `ScreenScaffold`, and each row draws
+its slice of one panel as its row background, so the rows read as a panel. A row is a `Button` that appends
+`Route.sessionDetail` to `AppModel.historyPath`, not a `NavigationLink`: a link in a `List` brings the
+system's own disclosure indicator. The swipe action has no destructive role, because that role removes the
+row before the confirmation. `HistoryRow` lays itself out twice, as `LCNavigationRow` does, so that the
+usage label and its identifier stay outside the button.
 
 Contracts: `HistoryModel`. Identifiers: `history-transcription-cost`, `history-local-transcription`.
 
