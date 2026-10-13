@@ -313,8 +313,11 @@ compiler refuses two files of the same name in one module.
 | `DesignSystem/Surfaces.swift`, `Glyph.swift`, `Pill.swift`, `Scaling.swift`, `Pulse.swift`, `RowSupport.swift`, `BrandMarkArtwork.swift` | Private helpers of the components: the content surfaces, icon sizes, the pill shape, lengths that follow the text size, the live pulse, the row layout inside a panel or card, the geometry of the mark | WP-05 |
 | `DesignSystem/DesignGallery.swift` | Debug builds only: a gallery of the components, shown in place of every screen when the app is launched with `-design-gallery` | WP-05 |
 | `Features/Home/HomeScreen.swift`, `HomeViewModel.swift`, `HomeReadinessPanel.swift` | Screens 3 | WP-10 |
+| `Features/Home/ContainerHeightReader.swift` | Private helper of Home and the live session: the measured container height that the compact rules are written against | WP-10 |
 | `Features/LiveSession/LiveSessionScreen.swift`, `LiveSessionViewModel.swift`, `LiveStatusPanel.swift`, `SessionNoticeBanner.swift`, `LiveTranscriptPanel.swift`, `AnswerFeed.swift`, `AssistErrorCard.swift`, `InProgressCard.swift`, `AnswerCard.swift`, `TimingView.swift`, `TimingViewContent.swift` | Screens 4 | WP-10 |
+| `Features/LiveSession/AnswerFormat.swift`, `CueCardHeader.swift`, `LiveLayout.swift` | Private helpers of the live screen: the numbers of an answer as text, the header of a cue card, the layout values of screens 4.1 | WP-10 |
 | `Features/AssistantLab/AssistantLabScreen.swift`, `AssistantLabViewModel.swift`, `AnswerServicePanel.swift`, `AssistantModelPanel.swift`, `OpenRouterKeyPanel.swift`, `RecentComparisonsPanel.swift`, `OpenRouterModelsScreen.swift`, `ReasoningScreen.swift`, `RunDetailsScreen.swift` | Screens 5 | WP-10 |
+| `Features/AssistantLab/AssistantMessageLine.swift` | Private helper of Assistant Lab: the result line of a key action | WP-10 |
 | `Features/Settings/SettingsScreen.swift`, `SettingsViewModel.swift`, `ProviderSetupRows.swift` | Screens 6; the provider rows are shared with Transcription | WP-11 |
 | `Features/Transcription/TranscriptionScreen.swift`, `TranscriptionViewModel.swift` | Screens 7 | WP-11 |
 | `Features/PCSpeechModel/PCSpeechModelScreen.swift`, `PCSpeechModelViewModel.swift` | Screens 8 | WP-11 |
@@ -344,7 +347,7 @@ compiler refuses two files of the same name in one module.
 | `StreamingTranscriberEngineTests.swift`, `VozTranscriberTests.swift`, `ParakeetTranscriberTests.swift`, `OnDeviceModelManagerTests.swift`, `FixtureTranscriberTests.swift` | Section 6.2 | WP-07 |
 | `SessionControllerStateTests.swift`, `SessionControllerAssistTests.swift`, `SessionControllerSummaryTests.swift`, `SessionPersistenceTests.swift`, `AnswerServicesTests.swift` | Section 6.2 | WP-08 |
 | `RelayMonitorTests.swift`, `PairingControllerTests.swift`, `AssistantSettingsTests.swift`, `SpeechSettingsTests.swift`, `HistoryModelTests.swift`, `SystemReadinessTests.swift` | Section 6.2 | WP-09 |
-| `HomeViewModelTests.swift`, `LiveSessionViewModelTests.swift`, `AssistantLabViewModelTests.swift`, `TimingViewContentTests.swift` | Section 6.2 | WP-10 |
+| `HomeViewModelTests.swift`, `LiveSessionViewModelTests.swift`, `AssistantLabViewModelTests.swift`, `TimingViewContentTests.swift`, `AnswerPlainTextTests.swift` | Section 6.2 | WP-10 |
 | `SettingsViewModelTests.swift`, `TranscriptionViewModelTests.swift`, `PCSpeechModelViewModelTests.swift`, `MetaKeyViewModelTests.swift`, `PairingViewModelTests.swift`, `ModelLibraryViewModelTests.swift`, `BenchmarkViewModelTests.swift`, `HistoryViewModelTests.swift`, `SessionDetailContentTests.swift` | Section 6.2 | WP-11 |
 
 ### 2.6 `ios/UITests/` (target `LiveCueRemakeUITests`)
@@ -362,6 +365,7 @@ compiler refuses two files of the same name in one module.
 | `SettingsUITests.swift` | T14, T15 | WP-12 |
 | `HistoryUITests.swift` | Delete confirmation | WP-12 |
 | `GlassContrastUITests.swift` | DS 3.2 gate | WP-12 |
+| `ScreensAScreenshotUITests.swift` | Pictures of Home, the live session and Assistant Lab in their main states, for comparing both simulator legs with the mockups. It launches, walks to a state and attaches a named screenshot; it proves no behaviour | WP-10 |
 
 WP-01 starts from the CI spike (branch `spike/ios-ci`), whose layout already matches this map. Spike files
 that WP-01 removes because this map replaces them: `ios/App/AppShell/PlaceholderRootView.swift`,
