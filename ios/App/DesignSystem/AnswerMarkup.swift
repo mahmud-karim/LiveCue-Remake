@@ -88,7 +88,7 @@ enum AnswerMarkup {
                 }
                 continue
             }
-            if trimmed.hasPrefix(fenceMark) {
+            if opensFence(trimmed) {
                 closeParagraph()
                 closeItem()
                 fence = []
@@ -156,6 +156,12 @@ enum AnswerMarkup {
     private static let fenceMark = "```"
     private static let bulletMarks: Set<Character> = ["-", "*", "+", "•"]
     private static let maximumLevel = 3
+
+    /// Three backticks, then at most the name of a language. A longer row of backticks is no fence: it
+    /// stays as written.
+    private static func opensFence(_ trimmed: String) -> Bool {
+        trimmed.hasPrefix(fenceMark) && !trimmed.dropFirst(fenceMark.count).contains("`")
+    }
 
     /// "## Title ##" gives "Title"; nil for a line that is not a heading.
     private static func headingText(_ trimmed: String) -> String? {

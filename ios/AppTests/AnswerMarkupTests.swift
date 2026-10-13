@@ -225,6 +225,9 @@ final class AnswerMarkupTests: XCTestCase {
             [MarkupBlock(kind: .code, spans: [code("still arriving")])]
         )
         XCTAssertEqual(AnswerMarkup.blocks("```"), [])
+        // A longer row of backticks is no fence, and nothing of it disappears.
+        XCTAssertEqual(AnswerMarkup.blocks("`````"), [paragraph(plain("`````"))])
+        XCTAssertEqual(AnswerMarkup.blocks("`````\nnot code"), [paragraph(plain("`````\nnot code"))])
     }
 
     // MARK: - Links and images
