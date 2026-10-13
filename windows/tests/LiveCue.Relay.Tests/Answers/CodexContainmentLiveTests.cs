@@ -258,7 +258,18 @@ public sealed class CodexContainmentLiveTests(ITestOutputHelper output)
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
         foreach (var file in Directory.EnumerateFiles(home, "*", options))
         {
-            names.Add(Path.GetRelativePath(home, file));
+            var name = Path.GetRelativePath(home, file);
+
+            // Codex's own bookkeeping at every start: SQLite sidecar files of its databases and the
+            // markers of its plugin cache. They appear without any request asking for them.
+            if (name.EndsWith(".sqlite-shm", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".sqlite-wal", StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith(Path.Combine("plugins", "cache") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            names.Add(name);
         }
 
         return names;
