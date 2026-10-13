@@ -195,7 +195,9 @@ internal sealed partial class SelfTestSession(App app, AppEnvironment environmen
 
         await ShowAsync(window, shell, AppPage.Settings);
         Require(VisibleTexts(root).Contains("Private tailnet"), "the settings view to show the Private tailnet mode");
-        Require(VisibleTexts(root).Contains("47841"), "the settings view to show relay port 47841");
+        Require(
+            Find(root, AutomationIds.RelayPortField) is TextBox { IsVisible: true, Text: "47841" },
+            "the settings view to show relay port 47841");
         await CaptureAsync(window, root, "settings-private");
 
         // Started: the scripted checks pass, the scripted relay starts, then a phone is seen.
