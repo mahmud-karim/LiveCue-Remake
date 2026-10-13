@@ -7,6 +7,7 @@ namespace LiveCue.Desktop.Tests.Theme;
 /// The resource keys of W-design 5.3: the contrast dictionary has exactly the keys of Daylight, and
 /// every key the design lists exists, so a page can be written against the list alone.
 /// </summary>
+[Collection(UiSuite.Name)]
 public sealed class ResourceKeyTests
 {
     private static readonly string[] Dictionaries =
@@ -75,7 +76,7 @@ public sealed class ResourceKeyTests
     [Fact]
     public void Key_sets_match()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Keys(Load("Daylight"));
             var highContrast = Keys(Load("HighContrast"));
@@ -89,7 +90,7 @@ public sealed class ResourceKeyTests
     [Fact]
     public void Every_listed_key_exists()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var keys = new HashSet<string>(StringComparer.Ordinal);
             foreach (var name in Dictionaries)

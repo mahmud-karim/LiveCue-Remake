@@ -11,6 +11,7 @@ namespace LiveCue.Desktop.Tests.Theme;
 /// The two theme dictionaries, read as data: both define the same tokens, and the Daylight values
 /// keep the contrast figures the design system computed for them (section 2.9, table A).
 /// </summary>
+[Collection(UiSuite.Name)]
 public sealed class ThemeTests
 {
     private static readonly Color DarkestGround = Color.FromRgb(0x9D, 0xC1, 0xF5);
@@ -19,7 +20,7 @@ public sealed class ThemeTests
     [Fact]
     public void Daylight_and_high_contrast_define_exactly_the_same_keys()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Keys(Load("Daylight"));
             var highContrast = Keys(Load("HighContrast"));
@@ -35,7 +36,7 @@ public sealed class ThemeTests
     [Fact]
     public void Daylight_tokens_have_the_design_systems_values()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Load("Daylight");
 
@@ -55,7 +56,7 @@ public sealed class ThemeTests
     [Fact]
     public void Every_daylight_brush_and_shadow_is_frozen_so_one_instance_serves_the_whole_app()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Load("Daylight");
 
@@ -72,7 +73,7 @@ public sealed class ThemeTests
     [Fact]
     public void Shadows_are_written_so_that_wpf_draws_them_in_the_shade_colour()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Load("Daylight");
             var panel = Assert.IsType<DropShadowEffect>(daylight["ShadowPanel"]);
@@ -96,7 +97,7 @@ public sealed class ThemeTests
     [InlineData("StatusDangerBrush", 4.87)]
     public void Text_on_a_panel_over_the_darkest_ground_has_the_computed_contrast(string inkKey, double expected)
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Load("Daylight");
 
@@ -114,7 +115,7 @@ public sealed class ThemeTests
     [Fact]
     public void White_on_the_accent_fill_passes_and_secondary_ink_passes_on_the_bare_ground()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var daylight = Load("Daylight");
 
@@ -126,7 +127,7 @@ public sealed class ThemeTests
     [Fact]
     public void The_high_contrast_dictionary_has_no_shadows_blooms_or_sheen()
     {
-        StaThread.Run(() =>
+        WpfApp.Run(() =>
         {
             var highContrast = Load("HighContrast");
 

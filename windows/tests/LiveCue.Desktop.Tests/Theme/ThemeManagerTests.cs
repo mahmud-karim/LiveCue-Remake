@@ -13,7 +13,6 @@ namespace LiveCue.Desktop.Tests.Theme;
 /// alone.
 /// </summary>
 [Collection(UiSuite.Name)]
-[Trait("Category", "Ui")]
 public sealed class ThemeManagerTests
 {
     private static readonly string[] Shadows = ["ShadowPanel", "ShadowRaised", "ShadowOverlay", "ShadowAccent", "ShadowKnob"];

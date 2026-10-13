@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -140,9 +139,6 @@ internal static class WpfApp
         {
             try
             {
-                // Pack URIs without an assembly name ("pack://application:,,,/Assets/…") are looked up in
-                // the application's resource assembly, which would be the test host.
-                UseAppAssemblyForResources();
                 var app = new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 app.InitializeComponent();
                 SystemPreferences.PinAnimations(false);
@@ -165,26 +161,6 @@ internal static class WpfApp
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         return ready.Task.GetAwaiter().GetResult();
-    }
-
-    private static void UseAppAssemblyForResources()
-    {
-        var assembly = typeof(App).Assembly;
-        try
-        {
-            Application.ResourceAssembly = assembly;
-        }
-        catch (InvalidOperationException)
-        {
-            // WPF fixes the property once a process has an entry assembly, as a test host has.
-            typeof(Application)
-                .GetField("_resourceAssembly", BindingFlags.Static | BindingFlags.NonPublic)?
-                .SetValue(null, assembly);
-            typeof(Application).Assembly
-                .GetType("System.Windows.Navigation.BaseUriHelper")?
-                .GetProperty("ResourceAssembly", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)?
-                .SetValue(null, assembly);
-        }
     }
 
     private static IntPtr AllowSizesBeyondTheDesktop(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
