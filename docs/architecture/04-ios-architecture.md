@@ -365,7 +365,9 @@ compiler refuses two files of the same name in one module.
 | `SettingsUITests.swift` | T14, T15 | WP-12 |
 | `HistoryUITests.swift` | Delete confirmation | WP-12 |
 | `GlassContrastUITests.swift` | DS 3.2 gate | WP-12 |
-| `ScreensAScreenshotUITests.swift` | Pictures of Home, the live session and Assistant Lab in their main states, for comparing both simulator legs with the mockups. It launches, walks to a state and attaches a named screenshot; it proves no behaviour | WP-10 |
+| `UITestWalk.swift` | Steps, lookups and waits the tests of 6.3 share on top of `UITestSupport`: starting, assisting and stopping a session, the PC model walk, typing a key, alerts, and waits that look once before they wait | WP-12 |
+
+As built (WP-12): the screenshot-only files of the screen builders, `ScreensAScreenshotUITests.swift` (WP-10) and `ScreensBScreenshotUITests.swift` (WP-11), are removed. The tests of 6.3 walk the same screens and attach pictures of them.
 
 WP-01 starts from the CI spike (branch `spike/ios-ci`), whose layout already matches this map. Spike files
 that WP-01 removes because this map replaces them: `ios/App/AppShell/PlaceholderRootView.swift`,
@@ -3998,6 +4000,37 @@ T1 to T16 are ported to the new navigation.
 
 Not covered by a UI test because the fixed test seam has no argument for it: stream failures and the
 session notice, an unpaired first run, the QR camera. They are covered in 6.2.
+
+As built (WP-12). Nineteen tests; all pass on both legs, and the glass gate, which skips itself before
+iOS 26, measured a relative luminance of 0.110 for the fill. Each test attaches pictures named after its
+old test (`t1-…` to `t16-…`, `history-…`, `session-detail`, `glass-…`). Where a test proves a statement
+in another form than the statement's own words, this is the form:
+
+| Statement | How the test proves it |
+|---|---|
+| 019, 051 "tappable" | The control exists, is enabled and lies on screen; the walk then taps it. `isHittable` is not used: on iOS 26 it is not reliable for every control |
+| 002 | The pairing row, the assistant row and Start lie on screen, the rows above Start and Start above the tab buttons; both rows are then tapped where they are |
+| 029, 039 | The state element has no identifier. It is found by its label, the chip text, among the elements that are not `transcriber-status`; its value is the elapsed time |
+| 033 | The cost is read when "Paused" appears. A change of it is then waited for during three seconds, and none may come |
+| 039, 081 with a PC provider | A fixture stream reports its first second of audio after one second. A stream that is paused or stopped before that has no usage to show, and History then reads "… · Local · incomplete". The test leaves each stream listening for 2.5 s before it pauses, during which the session must not pause by itself |
+| 080 | The session is paused before Stop, so that the last cost can be read; the History row must contain that text |
+| 061 | T2: no retry control exists before the first Assist; "Retry same text" is enabled after the failure and the same-text retry after the answer. T4: after an Assist that sent nothing (no OpenRouter key) "Retry same text" is shown disabled. That both are disabled while an Assist runs, 0.4 s in the fixture, is left to the unit tests of 6.2 |
+| 012 | "Loading" and the disabled Start are read from one snapshot of the app, so that they belong to the same moment |
+| 102 | The retry is taken: the start runs again and ends in the same error |
+| 120 | The fixture model has no price, so its row reads "Input Unknown · output Unknown". The search is tried with a part of the id and with a text that matches nothing; the fixture's name and id cannot be told apart by a search without a space |
+| 123 | The PC's catalogue takes 8 s. The test stays on OpenRouter's list until 10 s after Assistant Lab appeared and requires that no Codex model shows up |
+| 079 | Seen from outside: the conversation keeps the title its first segment gave it. The fixture summary would rename it to "Local transcription", as `HistoryUITests` sees with Codex answers |
+| 093, 096 | The value of a row ("Qwen3 1.7B · PC", "Required", "Saved on iPhone") is its accessibility value |
+| 098 | The Version row must show a dotted number and not "Unknown"; the number itself is not fixed in the test |
+| 132 to 135 | The pairing is saved by `-save-pairing-fixture`, never typed. A launch before it only keeps pictures of the unpaired first run, while the simulator has no test pairing yet |
+| 127 | After "Scan PC QR code" the simulator, which has no camera, raises "Camera is unavailable."; that is kept as a picture and not asserted |
+| 092 | After the keyboard's "Done" neither a keyboard nor the "Done" button is left |
+| 145, 150 | Voz is prepared in the first launch, from Home's download control; the Parakeet session runs in the launch with `-on-device-ready` |
+
+The two tests that launch with `-pc-offline` expect "PC reconnecting" on Home and nowhere a text
+"PC offline." (9.2). `testInstructionPersists` records the runtime warning "Invalid frame dimension
+(negative or non-finite)" on both legs while the instruction field has the keyboard; no statement is
+affected, and its origin was not looked for.
 
 `UITestSupport` (WP-01) is what the UI tests share:
 
