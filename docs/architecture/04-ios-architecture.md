@@ -1740,6 +1740,24 @@ is free to change its parameters, which nothing else calls.) Calls are those of 
 old app (`AVAudioEngine.inputNode.installTap(onBus:bufferSize:format:block:)`,
 `AVAudioConverter.convert(to:error:withInputFrom:)`).
 
+What the declarations leave open, as built by WP-07. No declaration changes.
+
+- `AudioCapture.init` touches neither the engine nor the audio session. Every `start` makes a new
+  `AVAudioEngine`, so each start takes the hardware format as it is then. A second `start` while running
+  ends the first capture.
+- `AudioTapConverter` is `init?(inputFormat:request:)` and `makeTapBlock(for:)`; it is nil for a format
+  without a sample rate or a channel. One converter is kept for the whole capture, so the resampler runs
+  on across buffers; it is replaced when a buffer arrives in another format. With more than one input
+  channel the first is taken.
+- The chunk queue is `bufferingOldest(queueLimit)`; the event stream is unbounded. The level is thinned
+  by audio time, not by a clock: one level per `sampleRate / 24` converted frames, the first buffer at
+  once.
+- `stop(releaseSession: true)` deactivates only a session this capture activated, also when no capture
+  is running (the Stop after an on-device Pause). A start that fails after activation deactivates it.
+- The two notification observers are built in `AudioSessionPolicy`, outside the main actor, and report
+  straight into the event stream. Only "interruption began" and "old device unavailable" are reported. A
+  new input device attached while listening is not, by design (spec 01 section 3.2); see 6.5 item 4.
+
 #### 3.2.5 Speech providers (architecture 4.7)
 
 ```swift
@@ -1970,6 +1988,34 @@ enum TranscriberStatusText {                             // Speech/TranscriberSt
 ```
 
 Numbers are formatted with `String(format:)` and the POSIX locale, so the decimal separator is always ".".
+
+What the declarations leave open, as built by WP-07. No declaration changes; the members named here are
+internal additions.
+
+- No transcriber ever finishes its event stream, also not in `shutdown`: a consumer ends its own loop.
+- Streaming transcribers. A stream that ends between the provider being ready and `start` returning makes
+  `start` throw with that failure's text and emits no `failed`; the usage stream it opened is closed as
+  interrupted before the throw. After `start` has returned, `failed` can arrive at once, so the consumer
+  must not drop a `failed` of the current generation that arrives before it has changed its phase.
+  `finalize` emits no `failed`: an unclean end is the thrown finalise text. The fifteen seconds bound the
+  whole finalisation, the hand-over of queued buffers included. `finalize` with nothing running returns
+  and emits nothing. A start without a pairing throws before anything is emitted.
+- On-device transcribers. After `failed` the run stays open for the `finalize` that T-10 calls: its
+  segment and its statuses carry the same generation, and the capture is not stopped twice. Buffers
+  queued at the failure are still appended (Voz) or processed without events (Parakeet), except after a
+  Parakeet processing error. Parakeet emits `lastChunk` and its status only while listening. Voz says
+  "Recording on this iPhone" again after a batch that failed while recording. Every Voz start empties the
+  pending buffer.
+- `OnDeviceModelManager`: `prepare` returns for a variant that is not on-device; `unload()` does nothing
+  during a session; `unload()` and `providerChanged(to:)` abandon a preparation in flight, whose engine is
+  released when it arrives. `reportStatus` is unconditional; the transcribers report only when they hold
+  an engine.
+- `LiveOnDeviceEngineLoader` rethrows a package error that has only a `description` as
+  `EngineLoadFailure`, so that `localizedDescription` (E-12) is the package's text.
+- `TranscriberStatusText` also holds "Listening", "Transcribing…", "Paused" and "Ready";
+  `TranscriberFailureText`, in the same file, holds every failure text of 4.2.
+- `FixtureTranscriber` commits the fixture segment at every start, Resume included (4.9).
+  `FixtureEngineLoader` reports its half with a byte count (Voz) or a file count (Parakeet).
 
 #### 3.2.6 Answer services (architecture 4.8; the protocol is fixed)
 
@@ -2296,6 +2342,49 @@ enum ProviderLockReason: Equatable, Sendable {
 
 `SystemReadiness` stores nothing; reading its properties inside a view body is tracked through the owners
 it reads.
+
+What the declarations leave open, as built by WP-09. No declaration changes.
+
+- `RelayMonitor` reads the saved pairing when it is built, so `isPaired` is right in the first frame, and
+  again in `start()`. Nothing is polled before `start()`: until then `appBecameActive()`,
+  `selectionChanged()` and the two observation calls send nothing. `checkHealthNow()` asks whenever a
+  pairing is saved, also when the PC is not needed: only "Reconnect" and start check 3 call it, and both
+  are asked for by the user. Without a pairing it returns false and sends nothing. It returns after the PC
+  model check that follows a successful check, so its caller finds the PC model status fresh. A check
+  that is in flight when the pairing changes is dropped, and what was known about the PC model is
+  forgotten with the old pairing.
+- `refreshPCModel()` called while a status check is in flight sends nothing and returns when that check
+  ends, so its caller (start check 2, for one) reads a status that arrived after the call. A PC model
+  command first ends a status check that is in flight (the check is cancelled and its answer dropped), so
+  the two never overlap (protocol 13.3). A status check that returns after the provider stopped being
+  PC-local says nothing.
+- `PairingController.verifyAndPair` reports invalid input before it looks at anything else. Besides the
+  two errors of its declaration it can throw `CancellationError` (the caller's task was cancelled, or a
+  verification is already running) and, when the relay accepted the pairing and the store then refused
+  it, the store's own error; there is no phone text for that last case. `replacement(forAddress:)`
+  compares with the pairing the store holds.
+- `AssistantSettings`: "Pair your PC first." is a plain message, not an error. A failed load keeps the
+  rows that were loaded before. `adoptCatalogue` leaves the message alone. Choosing a model or an effort
+  of the service that is not selected does nothing. An empty OpenRouter key gets "Enter a valid API key.",
+  and one with a space or a line break anywhere gets the malformed-key text; nothing is trimmed from it.
+- `SpeechSettings.saveMetaKey` trims the text first (spec 01 section 2.6). What is left gets the
+  missing-key text when it is empty and the malformed-key text when it holds a space or a line break.
+  Choosing the provider that is already selected does nothing.
+- `SystemReadiness.providerLockReason` has no case for a running session, because the screens that show
+  the caption cannot be open then; `SpeechSettings.select` refuses that change by itself.
+- `HistoryModel` sorts what the store returns. A reload that asked the store before a newer reload did
+  does not replace the newer answer. A session the store could not delete stays listed.
+- `FixtureRelayGateway`: with `pcOffline` every route gives `L-UNREACHABLE`, not only health. The PC
+  model follows protocol 9.3: starting the loaded model answers `ready` at once, a second operation is
+  `MODEL_OPERATION_IN_PROGRESS`, stopping while the other model is loaded is `MODEL_MISMATCH`, a model
+  that is not PC-local is `INVALID_MODEL`, and the error of `pcModelStartError` is forgotten after C-48
+  or at the next start. An operation ends when a later call finds that its time has passed; nothing runs
+  in the background. `models` waits 8 s with `pcCatalogSlow`. `assist` and `summarize`, which the fixture
+  wiring never calls, give a fixed reply with the selection echoed, or `INVALID_ASSISTANT` and
+  `ASSISTANT_SELECTION_UNAVAILABLE`.
+- Tests beyond the plan of 6.2, in `RelayMonitorTests.swift`: the class `FixtureRelayGatewayTests`. Two
+  tests of `SystemReadinessTests` (an on-device model that is loaded, and the lock while one is prepared)
+  skip themselves while `OnDeviceModelManager` is still the stub of WP-01.
 
 #### 3.2.9 Environment and dependency container (architecture 4.3)
 
@@ -3902,7 +3991,8 @@ The workflow starts only when a file under `ios/`, `scripts/ci/` or the workflow
 3. Capture continues with the app in the background and the phone locked, for one streaming provider and
    one on-device provider; the tick and elapsed time after a long lock.
 4. A phone call during listening pauses with the interruption notice, for Meta, PC speech, Voz and Parakeet;
-   unplugging or switching off a headset pauses with the route notice.
+   unplugging or switching off a headset pauses with the route notice. Plugging a headset in while
+   listening is not reported by design: check whether capture goes on or the level meter falls flat.
 5. Parakeet: whether the partial text is cumulative for the whole stretch or resets after an utterance
    (IOS-A1), and that Pause commits one segment.
 6. Meta closes with code 1000 after `endStream`, so a Pause is recorded completed (IOS-A11).
