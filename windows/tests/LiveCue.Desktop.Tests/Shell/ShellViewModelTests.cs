@@ -10,12 +10,131 @@ using LiveCue.TestSupport;
 namespace LiveCue.Desktop.Tests.Shell;
 
 /// <summary>
-/// The window's view model and the foundation's page view models over a <see cref="FakeSession"/>.
-/// Rewritten from the spike's shell and page tests for the new contracts; work packages WP-W08 to
-/// WP-W10 own these folders and replace this file with the tests of the test plan (sections 2.6 to 2.8).
+/// The window's view model over a <see cref="FakeSession"/> (test plan 2.6): navigation, Escape, the
+/// sidebar card, the dialog and toast layers, the first render and the bounded close. The tests of the
+/// foundation's page view models at the end of this file stay until the page packages (WP-W09, WP-W10)
+/// replace them with the tests of sections 2.7 and 2.8.
 /// </summary>
 public sealed class ShellViewModelTests
 {
+    [Fact]
+    public void Keys_and_the_sidebar_do_not_reach_behind_an_open_dialog()
+    {
+        var parts = new Parts();
+        var shell = parts.Shell;
+        var canNavigateChanged = 0;
+        shell.NavigateCommand.CanExecuteChanged += (_, _) => canNavigateChanged++;
+        Assert.True(shell.NavigateCommand.CanExecute(AppPage.Pairing));
+
+        var dialog = new TestDialog();
+        parts.Dialogs.Show(dialog);
+
+        // Ctrl+1 to Ctrl+4 are bound to this command: they do nothing while the dialog is open.
+        Assert.Same(dialog, shell.ActiveDialog);
+        Assert.False(shell.NavigateCommand.CanExecute(AppPage.Pairing));
+        Assert.Equal(1, canNavigateChanged);
+
+        // A view model still navigates through INavigator (the reset dialog's new QR opens Pairing).
+        ((INavigator)shell).Navigate(AppPage.Pairing);
+        Assert.Equal(AppPage.Pairing, shell.SelectedPage);
+
+        // A second dialog while one is open is ignored.
+        parts.Dialogs.Show(new TestDialog());
+        Assert.Same(dialog, shell.ActiveDialog);
+
+        // Escape does nothing while the dialog is busy, and cancels it afterwards.
+        dialog.IsBusy = true;
+        shell.EscapeCommand.Execute(null);
+        Assert.Same(dialog, shell.ActiveDialog);
+        Assert.Equal(0, dialog.Cancelled);
+        dialog.IsBusy = false;
+        shell.EscapeCommand.Execute(null);
+        Assert.Null(shell.ActiveDialog);
+        Assert.Equal(1, dialog.Cancelled);
+        Assert.True(shell.NavigateCommand.CanExecute(AppPage.Live));
+
+        // A dialog that has closed no longer answers for the layer: the next one is shown.
+        var next = new TestDialog();
+        parts.Dialogs.Show(next);
+        dialog.Close();
+        Assert.Same(next, shell.ActiveDialog);
+    }
+
+    [Fact]
+    public async Task Closing_waits_for_the_stop_but_never_longer_than_it_may()
+    {
+        var parts = new Parts(closeWait: TimeSpan.FromMilliseconds(50));
+        parts.Session.Gate = new TaskCompletionSource();
+
+        // A stop that never returns must not keep the window open, and must not throw.
+        await parts.Shell.OnWindowClosingAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(1, parts.Session.StopCalls);
+        Assert.Equal(LiveCue.Relay.Protocol.ProtocolConstants.WindowCloseWait, new Parts().Shell.CloseWait);
+    }
+
+    [Fact]
+    public void One_toast_at_a_time_and_it_stays_while_the_pointer_rests_on_it()
+    {
+        var parts = new Parts();
+        var shell = parts.Shell;
+        var changes = new List<string?>();
+        shell.PropertyChanged += (_, change) => changes.Add(change.PropertyName);
+
+        parts.Toasts.Show("Copied");
+        Assert.Equal("Copied", shell.ToastText);
+        Assert.Equal([nameof(IShellViewModel.ToastText)], changes);
+
+        // A new toast replaces the current one and has its own four seconds.
+        parts.Clock.Advance(TimeSpan.FromSeconds(3));
+        parts.Toasts.Show("Copied again");
+        parts.Clock.Advance(TimeSpan.FromSeconds(3));
+        Assert.Equal("Copied again", shell.ToastText);
+
+        // The pointer rests on it: it stays. When the pointer leaves, its time starts again.
+        shell.HoldToast();
+        parts.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal("Copied again", shell.ToastText);
+        shell.ReleaseToast();
+        parts.Clock.Advance(TimeSpan.FromSeconds(3.9));
+        Assert.Equal("Copied again", shell.ToastText);
+        parts.Clock.Advance(TimeSpan.FromSeconds(0.1));
+        Assert.Null(shell.ToastText);
+
+        // Nothing to show is not a toast.
+        parts.Toasts.Show(string.Empty);
+        Assert.Null(shell.ToastText);
+        Assert.Equal(TimeSpan.FromSeconds(4), ToastHost.Duration);
+    }
+
+    [Fact]
+    public void The_sidebar_phone_line_is_the_live_pages_indicator_tooltip_included()
+    {
+        var parts = new Parts();
+        var shell = parts.Shell;
+        var changes = new List<string?>();
+        shell.PropertyChanged += (_, change) => changes.Add(change.PropertyName);
+
+        parts.Session.LastPhoneSeen = parts.Clock.GetUtcNow();
+        parts.Session.Presence = PhonePresence.Connected;
+
+        Assert.Equal(shell.Live.PhoneStatus, shell.SidebarPhoneStatus);
+        Assert.Equal("iPhone connected", shell.SidebarPhoneStatus.Text);
+        Assert.Contains(nameof(IShellViewModel.SidebarPhoneStatus), changes);
+        Assert.DoesNotContain(nameof(IShellViewModel.SidebarRelayStatus), changes);
+
+        // The relay line: the short label with the mark and colour of the full status.
+        changes.Clear();
+        parts.Session.FaultCode = Relay.RelayFaultCode.Internal;
+        parts.Session.State = RelayUiState.Faulted;
+        Assert.Equal(new StatusIndicator(StatusMark.Dot, StatusTone.Warning, "Relay stopped"), shell.SidebarRelayStatus);
+        Assert.Contains(nameof(IShellViewModel.SidebarRelayStatus), changes);
+        parts.Session.State = RelayUiState.Thinking;
+        Assert.Equal(new StatusIndicator(StatusMark.Spinner, StatusTone.Live, "Thinking…"), shell.SidebarRelayStatus);
+        parts.Session.State = RelayUiState.Checking;
+        Assert.Equal(new StatusIndicator(StatusMark.Spinner, StatusTone.Live, "Checking…"), shell.SidebarRelayStatus);
+    }
+
     [Fact]
     public void Navigation_and_escape()
     {
@@ -310,15 +429,49 @@ public sealed class ShellViewModelTests
         Assert.Empty(parts.Session.SavedSettings);
     }
 
+    /// <summary>A dialog that only knows how to be cancelled.</summary>
+    private sealed class TestDialog : IDialogViewModel
+    {
+        private bool _isBusy;
+
+        public TestDialog() => CancelCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() =>
+        {
+            Cancelled++;
+            Close();
+        });
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+        public event EventHandler? Closed;
+
+        public string Title => "Test dialog";
+
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set
+            {
+                _isBusy = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsBusy)));
+            }
+        }
+
+        public System.Windows.Input.ICommand CancelCommand { get; }
+
+        public int Cancelled { get; private set; }
+
+        public void Close() => Closed?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>The shell and its four page view models over a fake session, wired as the composition root does.</summary>
     private sealed class Parts
     {
-        public Parts()
+        public Parts(TimeSpan? closeWait = null)
         {
             var ui = new ImmediateDispatcher();
             var navigator = new Navigator();
-            var dialogs = new DialogHost();
-            var toasts = new ToastHost(ui, Clock);
+            var dialogs = Dialogs;
+            var toasts = Toasts = new ToastHost(ui, Clock);
             var hosting = HostingFactory.Create(
                 new SupervisorOptions(@"C:\LiveCue-tests\data", "1.0.0"),
                 new HostingOverrides
@@ -335,10 +488,17 @@ public sealed class ShellViewModelTests
                 new SettingsViewModel(Session, dialogs, Clipboard, toasts, Launcher, hosting, ui),
                 navigator,
                 dialogs,
-                toasts);
+                toasts)
+            {
+                CloseWait = closeWait ?? LiveCue.Relay.Protocol.ProtocolConstants.WindowCloseWait,
+            };
         }
 
         public FakeSession Session { get; } = new();
+
+        public DialogHost Dialogs { get; } = new();
+
+        public ToastHost Toasts { get; }
 
         public ManualTimeProvider Clock { get; } = new();
 

@@ -352,6 +352,20 @@ list and plays the status documents of a scenario ("before", "after"). No test r
 | The contrast dictionary has exactly the keys of Daylight; every key of W-design 5.3 exists | `ResourceKeyTests.Key_sets_match`; `…Every_listed_key_exists` (WP-W00) | Windows |
 | Automation ids are unique and equal screens section 9 | `AutomationIdTests.Ids_are_unique` (WP-W00) | any |
 | Architecture 3.1: the desktop assembly has no reference to `IPairingExport` or `StoredPairingExport` (metadata scan) | `DependencyRuleTests.Desktop_never_references_pairing_export` (WP-W00) | any |
+| The window's chrome, sidebar geometry at both sizes, key bindings, the dialog layer (scrim, focus in and back, no default destructive button) and the toast layer, on the real window off-screen | `MainWindowTests` (`Ui`) | Windows |
+| Every component style draws under Daylight, the contrast theme, transparency off and 150% text; text is crisp and shadows sit on caster layers only | `ComponentGalleryTests.Every_component_draws_with_its_style` (`Ui`) | Windows |
+| The theme slot, the solid twins of DS 6.3 and the text scale of DS 6.1 | `ThemeManagerTests` | Windows |
+
+Added by WP-W08. The session tests use `FakeSupervisor`, `StubRelay`, `FakeMappings` and `SessionHarness`
+(`Session/SessionFakes.cs`) on `UiThread`, a real single-thread dispatcher, so that a test can see which
+thread a call or an event arrived on. Every test that touches WPF, with or without a window, runs on the
+thread of one shared WPF application (`Support/WpfApp.cs`) and is in the xUnit collection `Ui`, so that
+they run one after another: WPF objects belong to the thread that made them, and the application's
+resources are not safe to read from a second thread. `Support/TestProcess.cs` prepares the test process
+when the test assembly loads: DPI-unaware, so windows lay out at 96 DPI on any PC, and with the app's
+assembly as WPF's resource assembly. With the environment variable `LIVECUE_TEST_SHOTS` set to a folder
+the `Ui` tests also write their scenes as PNG files (the component gallery in four looks, the reset dialog,
+the toast); without it they write nothing.
 
 ### 2.7 Live and Activity (WP-W09), folders `Live/`, `Activity/`
 

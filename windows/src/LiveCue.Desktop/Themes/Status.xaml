@@ -147,50 +147,125 @@
   <Style TargetType="ui:StatusChip" BasedOn="{StaticResource Chip}" />
 
   <!--
-    Inline status indicator (design system 4.22): the mark, then the label in ink.primary. First
-    version: the mark and the text. The spinner, pause and check marks and the tooltip arrive with
-    the desktop core.
+    Inline status indicator (design system 4.22): the mark, 8 from it the label in type.label and
+    ink.primary; only the mark is coloured (rules C-1, C-4). The label wraps, and the mark stays
+    beside its first line. Each mark has its own shape:
+
+      Ring      hollow, 8, 1.5 stroke     Dot     filled, 8         Spinner  12, turning
+      Pause     the pause glyph, 14       Alert   the alert glyph, 14   Check  the check glyph, 14
+
+    The tone picks the colour through Foreground, which every mark draws with.
   -->
   <Style x:Key="Indicator" TargetType="ui:StatusIndicatorView">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
     <Setter Property="HorizontalAlignment" Value="Left" />
-    <Setter Property="AutomationProperties.Name" Value="{Binding Text, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="Foreground" Value="{DynamicResource StatusOfflineBrush}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ui:StatusIndicatorView">
-          <DockPanel>
-            <ui:StatusMarkView DockPanel.Dock="Left"
-                               Kind="{TemplateBinding Kind}"
-                               Margin="0,6,8,0"
-                               VerticalAlignment="Top" />
-            <TextBlock Text="{TemplateBinding Text}"
+          <Grid Background="Transparent">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- As high as one line of the label, so the mark is centred on the first line however far the text wraps. -->
+            <Grid Height="{DynamicResource TypeLabelLineHeight}" Margin="0,0,8,0" VerticalAlignment="Top">
+              <Ellipse x:Name="Ring"
+                       Width="8"
+                       Height="8"
+                       VerticalAlignment="Center"
+                       Stroke="{TemplateBinding Foreground}"
+                       StrokeThickness="1.5" />
+              <Ellipse x:Name="Dot"
+                       Width="8"
+                       Height="8"
+                       VerticalAlignment="Center"
+                       Fill="{TemplateBinding Foreground}"
+                       Visibility="Collapsed" />
+              <ui:Spinner x:Name="Turning"
+                          Width="12"
+                          Height="12"
+                          VerticalAlignment="Center"
+                          Foreground="{TemplateBinding Foreground}"
+                          Visibility="Collapsed" />
+              <ui:Icon x:Name="Glyph"
+                       Width="14"
+                       Height="14"
+                       VerticalAlignment="Center"
+                       Foreground="{TemplateBinding Foreground}"
+                       Visibility="Collapsed" />
+            </Grid>
+
+            <TextBlock Grid.Column="1"
+                       Text="{TemplateBinding Text}"
                        Style="{DynamicResource Type.Label}"
+                       Foreground="{DynamicResource InkPrimaryBrush}"
                        TextWrapping="Wrap"
                        TextTrimming="None" />
-          </DockPanel>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="Mark" Value="Dot">
+              <Setter TargetName="Ring" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Mark" Value="Spinner">
+              <Setter TargetName="Ring" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Turning" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Mark" Value="Pause">
+              <Setter TargetName="Ring" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Glyph" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Pause}" />
+            </Trigger>
+            <Trigger Property="Mark" Value="Alert">
+              <Setter TargetName="Ring" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Glyph" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Alert}" />
+            </Trigger>
+            <Trigger Property="Mark" Value="Check">
+              <Setter TargetName="Ring" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Glyph" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Check}" />
+              <Setter TargetName="Glyph" Property="StrokeThickness" Value="2.6" />
+            </Trigger>
+            <Trigger Property="Text" Value="">
+              <Setter Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <Trigger Property="Tone" Value="Live">
+        <Setter Property="Foreground" Value="{DynamicResource StatusLiveBrush}" />
+      </Trigger>
+      <Trigger Property="Tone" Value="Success">
+        <Setter Property="Foreground" Value="{DynamicResource StatusSuccessBrush}" />
+      </Trigger>
+      <Trigger Property="Tone" Value="Warning">
+        <Setter Property="Foreground" Value="{DynamicResource StatusWarningBrush}" />
+      </Trigger>
+      <Trigger Property="Tone" Value="Danger">
+        <Setter Property="Foreground" Value="{DynamicResource StatusDangerBrush}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style TargetType="ui:StatusIndicatorView" BasedOn="{StaticResource Indicator}" />
 
-  <!-- Spinner (design system 4.13). First version: a still ring in the accent; it does not turn yet. -->
+  <!--
+    Spinner (design system 4.13): a 270-degree arc in the current text colour, one turn in 900 ms.
+    20 across here; set Width and Height to 16 in a button and to 12 in a chip or an indicator. The
+    control draws and turns itself, so there is no template. Give it an automation name, or put it
+    beside a text that says what is in progress.
+  -->
   <Style x:Key="Spinner" TargetType="ui:Spinner">
-    <Setter Property="Width" Value="16" />
-    <Setter Property="Height" Value="16" />
-    <Setter Property="Focusable" Value="False" />
-    <Setter Property="IsTabStop" Value="False" />
-    <Setter Property="IsHitTestVisible" Value="False" />
-    <Setter Property="Foreground" Value="{DynamicResource StatusLiveBrush}" />
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="ui:Spinner">
-          <Ellipse Stroke="{TemplateBinding Foreground}" StrokeThickness="2" StrokeDashArray="4 2" />
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Template" Value="{x:Null}" />
   </Style>
 
   <Style TargetType="ui:Spinner" BasedOn="{StaticResource Spinner}" />

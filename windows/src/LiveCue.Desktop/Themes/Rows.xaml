@@ -40,7 +40,7 @@
             <Border x:Name="PressedFill"
                     CornerRadius="{DynamicResource RadiusCard}"
                     Background="{DynamicResource StatePressedBrush}"
-                    Visibility="Collapsed" />
+                    Opacity="0" />
             <Grid Margin="{TemplateBinding Padding}">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -132,7 +132,12 @@
                 <Condition Property="IsInteractive" Value="True" />
                 <Condition Property="IsPressed" Value="True" />
               </MultiTrigger.Conditions>
-              <Setter TargetName="PressedFill" Property="Visibility" Value="Visible" />
+              <MultiTrigger.EnterActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.PressIn}" />
+              </MultiTrigger.EnterActions>
+              <MultiTrigger.ExitActions>
+                <BeginStoryboard Storyboard="{StaticResource Motion.PressOut}" />
+              </MultiTrigger.ExitActions>
             </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
               <Setter Property="Opacity" Value="{DynamicResource OpacityDisabled}" />
@@ -155,29 +160,109 @@
   <Style TargetType="ui:ListRow" BasedOn="{StaticResource Row.List}" />
 
   <!--
-    Check row (design system 4.8; screens 2.6): one prerequisite with its state, title and fix line.
-    First version: the title and the subtitle. The state mark arrives with the desktop core.
+    Check row (design system 4.8, "Check row"; screens 2.6): the result of one check.
+
+      [glyph 20]  Title                                   passed: type.body
+                  Subtitle (type.caption, ink.secondary)  failed: type.label title and how to fix it
+
+    The glyph stands where a list row has its tile: a check in status.success for a pass, the alert in
+    status.danger for a failure, a hollow ring in status.offline for a check that was not made. Rows
+    are at least 48 high and separated by stroke.hairline; in an items control the first row draws no
+    line above itself.
   -->
   <Style x:Key="Row.Check" TargetType="ui:CheckRow">
     <Setter Property="Focusable" Value="False" />
     <Setter Property="IsTabStop" Value="False" />
-    <Setter Property="MinHeight" Value="{DynamicResource RowHeightTwoLine}" />
-    <Setter Property="Padding" Value="16,8" />
+    <Setter Property="MinHeight" Value="{DynamicResource RowHeightOneLine}" />
+    <Setter Property="Padding" Value="0,7" />
+    <Setter Property="Foreground" Value="{DynamicResource StatusOfflineBrush}" />
     <Setter Property="AutomationProperties.Name" Value="{Binding Title, RelativeSource={RelativeSource Self}}" />
+    <Setter Property="AutomationProperties.HelpText" Value="{Binding Subtitle, RelativeSource={RelativeSource Self}}" />
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ui:CheckRow">
-          <StackPanel Margin="{TemplateBinding Padding}" VerticalAlignment="Center">
-            <TextBlock Text="{TemplateBinding Title}" Style="{DynamicResource Type.Label}" />
-            <TextBlock Text="{TemplateBinding Subtitle}"
-                       Style="{DynamicResource Type.Caption}"
-                       Foreground="{DynamicResource InkSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       TextTrimming="None" />
-          </StackPanel>
+          <Grid Background="Transparent">
+            <Grid Margin="{TemplateBinding Padding}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <!-- One line of the title high, so the glyph sits beside the title and not beside the middle of two lines. -->
+              <Grid Width="{DynamicResource IconSizeRegular}"
+                    Height="{DynamicResource TypeBodyLineHeight}"
+                    Margin="0,0,12,0"
+                    VerticalAlignment="Center">
+                <Ellipse x:Name="NotChecked"
+                         Width="10"
+                         Height="10"
+                         Stroke="{TemplateBinding Foreground}"
+                         StrokeThickness="1.5" />
+                <ui:Icon x:Name="Glyph"
+                         Width="{DynamicResource IconSizeRegular}"
+                         Height="{DynamicResource IconSizeRegular}"
+                         Foreground="{TemplateBinding Foreground}"
+                         Visibility="Collapsed" />
+              </Grid>
+
+              <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="Title"
+                           Text="{TemplateBinding Title}"
+                           Style="{DynamicResource Type.Body}"
+                           Foreground="{DynamicResource InkPrimaryBrush}"
+                           TextWrapping="Wrap"
+                           TextTrimming="None" />
+                <TextBlock x:Name="Subtitle"
+                           Text="{TemplateBinding Subtitle}"
+                           Style="{DynamicResource Type.Caption}"
+                           Foreground="{DynamicResource InkSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           TextTrimming="None" />
+              </StackPanel>
+            </Grid>
+
+            <Border x:Name="Separator"
+                    Height="1"
+                    VerticalAlignment="Top"
+                    Background="{DynamicResource StrokeHairlineBrush}" />
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="State" Value="Passed">
+              <Setter TargetName="NotChecked" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Glyph" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Check}" />
+            </Trigger>
+            <Trigger Property="State" Value="Failed">
+              <Setter TargetName="NotChecked" Property="Visibility" Value="Collapsed" />
+              <Setter TargetName="Glyph" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Glyph" Property="Glyph" Value="{StaticResource Icon.Alert}" />
+              <Setter TargetName="Title" Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+            <Trigger Property="Subtitle" Value="{x:Null}">
+              <Setter TargetName="Subtitle" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="Subtitle" Value="">
+              <Setter TargetName="Subtitle" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="ShowSeparator" Value="False">
+              <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <!-- The first row an items control makes has nothing above it to be separated from. -->
+            <Trigger Property="IsFirstInList" Value="True">
+              <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <Trigger Property="State" Value="Passed">
+        <Setter Property="Foreground" Value="{DynamicResource StatusSuccessBrush}" />
+      </Trigger>
+      <Trigger Property="State" Value="Failed">
+        <Setter Property="Foreground" Value="{DynamicResource StatusDangerBrush}" />
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style TargetType="ui:CheckRow" BasedOn="{StaticResource Row.Check}" />

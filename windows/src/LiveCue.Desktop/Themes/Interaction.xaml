@@ -8,8 +8,8 @@
   </ResourceDictionary.MergedDictionaries>
 
   <!--
-    What every interactive style shares: the hover fade and the keyboard focus rings. The style
-    files that need them merge this dictionary and use StaticResource.
+    What every interactive style shares: the hover and pressed fades and the keyboard focus rings.
+    The style files that need them merge this dictionary and use StaticResource.
   -->
 
   <!--
@@ -28,6 +28,21 @@
   </Storyboard>
 
   <!--
+    Pressed: motion.press (100 ms) with ease.out, on the layer every template names PressedFill. It
+    leaves over the same time, so a short click is still seen.
+  -->
+  <Storyboard x:Key="Motion.PressIn">
+    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PressedFill" Storyboard.TargetProperty="Opacity">
+      <SplineDoubleKeyFrame KeyTime="0:0:0.1" KeySpline="{StaticResource EaseOut}" Value="1" />
+    </DoubleAnimationUsingKeyFrames>
+  </Storyboard>
+  <Storyboard x:Key="Motion.PressOut">
+    <DoubleAnimationUsingKeyFrames Storyboard.TargetName="PressedFill" Storyboard.TargetProperty="Opacity">
+      <SplineDoubleKeyFrame KeyTime="0:0:0.1" KeySpline="{StaticResource EaseOut}" Value="0" />
+    </DoubleAnimationUsingKeyFrames>
+  </Storyboard>
+
+  <!--
     6.6 Focus ring: 2 px in stroke.focus, 2 px outside the control, following its shape. It is a
     FocusVisualStyle, so it shows for keyboard focus only, never on a mouse click.
   -->
@@ -37,6 +52,21 @@
         <ControlTemplate>
           <Border Margin="-4"
                   ui:Pill.IsPill="True"
+                  BorderBrush="{DynamicResource StrokeFocusBrush}"
+                  BorderThickness="2"
+                  SnapsToDevicePixels="True" />
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- For shapes with radius.field (a text box that is read only, a banner's button row): radius 16 + 3. -->
+  <Style x:Key="Focus.Field">
+    <Setter Property="Control.Template">
+      <Setter.Value>
+        <ControlTemplate>
+          <Border Margin="-4"
+                  CornerRadius="19"
                   BorderBrush="{DynamicResource StrokeFocusBrush}"
                   BorderThickness="2"
                   SnapsToDevicePixels="True" />

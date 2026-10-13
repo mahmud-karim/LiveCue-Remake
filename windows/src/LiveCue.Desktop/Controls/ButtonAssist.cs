@@ -21,6 +21,26 @@ public static class ButtonAssist
     public static readonly DependencyProperty IconBrushProperty = DependencyProperty.RegisterAttached(
         "IconBrush", typeof(Brush), typeof(ButtonAssist), new PropertyMetadata(null));
 
+    /// <summary>
+    /// The button is doing what it was pressed for (design system 4.1, "Busy"): the leading icon becomes a
+    /// spinner, the label stays, the button ignores the pointer, and it keeps its full opacity also
+    /// while its command is disabled.
+    /// </summary>
+    public static readonly DependencyProperty IsBusyProperty = DependencyProperty.RegisterAttached(
+        "IsBusy", typeof(bool), typeof(ButtonAssist), new PropertyMetadata(false));
+
+    public static bool GetIsBusy(DependencyObject element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        return (bool)element.GetValue(IsBusyProperty);
+    }
+
+    public static void SetIsBusy(DependencyObject element, bool value)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        element.SetValue(IsBusyProperty, value);
+    }
+
     public static IconGlyph? GetIcon(DependencyObject element)
     {
         ArgumentNullException.ThrowIfNull(element);

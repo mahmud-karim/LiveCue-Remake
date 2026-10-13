@@ -16,6 +16,12 @@ internal static partial class NativeMethods
 
     public const int WmGetMinMaxInfo = 0x0024;
 
+    /// <summary>WDA_NONE: the window appears in screen captures.</summary>
+    public const uint WdaNone = 0x00;
+
+    /// <summary>WDA_EXCLUDEFROMCAPTURE: captures show nothing where the window is (Windows 10 2004 and later).</summary>
+    public const uint WdaExcludeFromCapture = 0x11;
+
     /// <summary>DPI_AWARENESS_CONTEXT_UNAWARE: windows created under it are laid out at 96 DPI.</summary>
     public static readonly IntPtr DpiAwarenessContextUnaware = new(-1);
 
@@ -39,6 +45,14 @@ internal static partial class NativeMethods
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowDisplayAffinity(IntPtr hwnd, out uint affinity);
 
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

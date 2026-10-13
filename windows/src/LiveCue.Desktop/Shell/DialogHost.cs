@@ -6,8 +6,9 @@ namespace LiveCue.Desktop.Shell;
 /// The one dialog the window can show (W-design 5.9). A second dialog while one is open is ignored; the
 /// dialog leaves when it raises <see cref="IDialogViewModel.Closed"/>.
 ///
-/// First version (foundation): which dialog is open. Moving the focus into the dialog, trapping it and
-/// restoring it afterwards are work package WP-W08.
+/// This object only says which dialog is open. What the window does with it lives in the window's
+/// dialog layer: the scrim over everything, the card, moving the focus into the dialog, keeping it
+/// there, and giving it back to the control that opened the dialog.
 /// </summary>
 internal sealed class DialogHost : ObservableObject, IDialogHost
 {
