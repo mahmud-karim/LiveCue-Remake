@@ -2297,6 +2297,49 @@ enum ProviderLockReason: Equatable, Sendable {
 `SystemReadiness` stores nothing; reading its properties inside a view body is tracked through the owners
 it reads.
 
+What the declarations leave open, as built by WP-09. No declaration changes.
+
+- `RelayMonitor` reads the saved pairing when it is built, so `isPaired` is right in the first frame, and
+  again in `start()`. Nothing is polled before `start()`: until then `appBecameActive()`,
+  `selectionChanged()` and the two observation calls send nothing. `checkHealthNow()` asks whenever a
+  pairing is saved, also when the PC is not needed: only "Reconnect" and start check 3 call it, and both
+  are asked for by the user. Without a pairing it returns false and sends nothing. It returns after the PC
+  model check that follows a successful check, so its caller finds the PC model status fresh. A check
+  that is in flight when the pairing changes is dropped, and what was known about the PC model is
+  forgotten with the old pairing.
+- `refreshPCModel()` called while a status check is in flight sends nothing and returns when that check
+  ends, so its caller (start check 2, for one) reads a status that arrived after the call. A PC model
+  command first ends a status check that is in flight (the check is cancelled and its answer dropped), so
+  the two never overlap (protocol 13.3). A status check that returns after the provider stopped being
+  PC-local says nothing.
+- `PairingController.verifyAndPair` reports invalid input before it looks at anything else. Besides the
+  two errors of its declaration it can throw `CancellationError` (the caller's task was cancelled, or a
+  verification is already running) and, when the relay accepted the pairing and the store then refused
+  it, the store's own error; there is no phone text for that last case. `replacement(forAddress:)`
+  compares with the pairing the store holds.
+- `AssistantSettings`: "Pair your PC first." is a plain message, not an error. A failed load keeps the
+  rows that were loaded before. `adoptCatalogue` leaves the message alone. Choosing a model or an effort
+  of the service that is not selected does nothing. An empty OpenRouter key gets "Enter a valid API key.",
+  and one with a space or a line break anywhere gets the malformed-key text; nothing is trimmed from it.
+- `SpeechSettings.saveMetaKey` trims the text first (spec 01 section 2.6). What is left gets the
+  missing-key text when it is empty and the malformed-key text when it holds a space or a line break.
+  Choosing the provider that is already selected does nothing.
+- `SystemReadiness.providerLockReason` has no case for a running session, because the screens that show
+  the caption cannot be open then; `SpeechSettings.select` refuses that change by itself.
+- `HistoryModel` sorts what the store returns. A reload that asked the store before a newer reload did
+  does not replace the newer answer. A session the store could not delete stays listed.
+- `FixtureRelayGateway`: with `pcOffline` every route gives `L-UNREACHABLE`, not only health. The PC
+  model follows protocol 9.3: starting the loaded model answers `ready` at once, a second operation is
+  `MODEL_OPERATION_IN_PROGRESS`, stopping while the other model is loaded is `MODEL_MISMATCH`, a model
+  that is not PC-local is `INVALID_MODEL`, and the error of `pcModelStartError` is forgotten after C-48
+  or at the next start. An operation ends when a later call finds that its time has passed; nothing runs
+  in the background. `models` waits 8 s with `pcCatalogSlow`. `assist` and `summarize`, which the fixture
+  wiring never calls, give a fixed reply with the selection echoed, or `INVALID_ASSISTANT` and
+  `ASSISTANT_SELECTION_UNAVAILABLE`.
+- Tests beyond the plan of 6.2, in `RelayMonitorTests.swift`: the class `FixtureRelayGatewayTests`. Two
+  tests of `SystemReadinessTests` (an on-device model that is loaded, and the lock while one is prepared)
+  skip themselves while `OnDeviceModelManager` is still the stub of WP-01.
+
 #### 3.2.9 Environment and dependency container (architecture 4.3)
 
 ```swift
