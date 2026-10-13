@@ -294,6 +294,30 @@ public sealed class MappingRefusalTests
             Assert.DoesNotContain(entry, result.After!.StaleOwned);
         }
 
+        // Ours is there as created, with a neighbour at the same path and a final slash. Tailscale treats
+        // the two as one mount when it sets a handler; should it do so when it removes one, the neighbour
+        // would go with ours. It is not ours to remove, so nothing is run.
+        foreach (var neighbourTarget in new[] { 3000, 47841 })
+        {
+            var harness = new MappingHarness(new RelaySettings { OwnedMappings = [publicEntry] })
+                .Status(ServeDoc.New().Proxy(10000, "/livecue").Proxy(10000, "/livecue/", neighbourTarget).Funnel(10000).Json());
+
+            var result = await harness.RemoveAsync(publicEntry);
+
+            Assert.Equal((MappingOutcome.Refused, MappingRefusal.LedgerMismatch), (result.Outcome, result.Refusal));
+            Assert.Empty(harness.Writes);
+            Assert.Equal([publicEntry], harness.Ledger);
+        }
+
+        // A mount that only begins like ours, or a session's handler at the slash form, is no obstacle.
+        var unrelated = new MappingHarness(new RelaySettings { OwnedMappings = [publicEntry] }).Status(
+            ServeDoc.New().Proxy(10000, "/livecue").Proxy(10000, "/livecue-2", 3000).Funnel(10000)
+                .Foreground("session-1", ServeDoc.New().Proxy(10000, "/livecue/", 3000)).Json(),
+            ServeDoc.New().Proxy(10000, "/livecue-2", 3000).Funnel(10000)
+                .Foreground("session-1", ServeDoc.New().Proxy(10000, "/livecue/", 3000)).Json());
+        Assert.Equal(MappingOutcome.Done, (await unrelated.RemoveAsync(publicEntry)).Outcome);
+        Assert.Equal(["funnel --https=10000 --set-path=/livecue off"], unrelated.Writes);
+
         Assert.Equal(
             "The mapping no longer matches what LiveCue created, so LiveCue will not remove it.",
             MappingTexts.Refusal(MappingRefusal.LedgerMismatch, 11443, "/"));

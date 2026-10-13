@@ -343,8 +343,9 @@ internal static class MappingRules
     // ---- Removal (rule TS-8). ----
 
     /// <summary>
-    /// None when exactly one background handler is at the entry's port and path and it is the entry's
-    /// own (kind and target). NotPresent when no background handler is there. LedgerMismatch otherwise.
+    /// None when exactly one background handler is at the entry's port and path, it is the entry's own
+    /// (kind and target), and no background handler is at the path with a final slash. NotPresent when
+    /// no background handler is at the path. LedgerMismatch otherwise.
     /// </summary>
     public static MappingRefusal CheckRemoval(ServeSnapshot snapshot, OwnedMapping entry)
     {
@@ -354,9 +355,18 @@ internal static class MappingRules
             return MappingRefusal.NotPresent;
         }
 
-        return there.Count == 1 && IsOurs(there[0], entry.HttpsPort, entry.Path, entry.Target)
-            ? MappingRefusal.None
-            : MappingRefusal.LedgerMismatch;
+        if (there.Count != 1 || !IsOurs(there[0], entry.HttpsPort, entry.Path, entry.Target))
+        {
+            return MappingRefusal.LedgerMismatch;
+        }
+
+        // Tailscale treats "<prefix>" and "<prefix>/" as one mount when a handler is set (see Inspect).
+        // Should it do the same when one is removed, a handler somebody else put at "<prefix>/" would go
+        // with ours. Nobody's handler is removed on a guess: the removal is refused.
+        return !string.Equals(entry.Path, RootMount, StringComparison.Ordinal)
+            && AnyBackgroundHandlerAt(snapshot, entry.HttpsPort, entry.Path + "/")
+            ? MappingRefusal.LedgerMismatch
+            : MappingRefusal.None;
     }
 
     private static bool IsBackgroundAt(ServeHandler handler, int port, string mount) =>

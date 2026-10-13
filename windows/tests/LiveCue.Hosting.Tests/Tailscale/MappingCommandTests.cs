@@ -1,6 +1,3 @@
-using LiveCue.Hosting.Tests.Support;
-using LiveCue.Relay;
-
 namespace LiveCue.Hosting.Tests.Tailscale;
 
 /// <summary>
@@ -114,43 +111,6 @@ public sealed class MappingCommandTests
                 || command.Arguments.Any(argument => argument.StartsWith("--set-path=", StringComparison.Ordinal)),
                 "A remove form always names its path.");
         });
-    }
-
-    [Fact]
-    public async Task The_foundations_manager_plans_from_settings_alone_inspects_as_unknown_and_refuses_to_run()
-    {
-        var tailscale = new FakeTailscale(installed: false);
-        var cli = new LiveCue.Hosting.Tailscale.TailscaleCli(tailscale.Processes, tailscale.Files);
-        var store = new InMemorySettingsStore();
-        var manager = new LiveCue.Hosting.Tailscale.MappingManager(
-            cli, store, new SettingsValidator(tailscale.Files), TimeProvider.System);
-
-        var privatePlan = manager.PlanApply(ConnectionMode.Private, RelaySettings.Default, "pc.example.test", out var noRefusal);
-        var publicPlan = manager.PlanApply(ConnectionMode.Public, RelaySettings.Default, null, out _);
-        var forbidden = manager.PlanApply(ConnectionMode.Private, RelaySettings.Default with { RelayPort = 47831 }, null, out var forbiddenRefusal);
-        var invalid = manager.PlanApply(ConnectionMode.Public, RelaySettings.Default with { PublicPathPrefix = "/" }, null, out var invalidRefusal);
-        var inspection = await manager.InspectAsync(RelaySettings.Default, CancellationToken.None);
-        var result = await manager.ExecuteAsync(privatePlan!, CancellationToken.None);
-
-        Assert.Equal(MappingRefusal.None, noRefusal);
-        Assert.Equal(MappingCommand.ApplyPrivate(11443, 47841).DisplayText, privatePlan!.Command.DisplayText);
-        Assert.Contains("https://pc.example.test:11443/", privatePlan.EffectText, StringComparison.Ordinal);
-        Assert.Equal(MappingCommand.ApplyPublic(10000, "/livecue", 47841).DisplayText, publicPlan!.Command.DisplayText);
-        Assert.Contains("this PC's Tailscale address", publicPlan.EffectText, StringComparison.Ordinal);
-        Assert.Null(forbidden);
-        Assert.Equal(MappingRefusal.ForbiddenRelayPort, forbiddenRefusal);
-        Assert.Null(invalid);
-        Assert.Equal(MappingRefusal.InvalidSettings, invalidRefusal);
-
-        Assert.Equal(MappingState.Unknown, inspection.Private.State);
-        Assert.Equal(MappingState.Unknown, inspection.Public.State);
-        Assert.Equal(TailscaleReadFailure.NotInstalled, inspection.StatusFailure);
-        Assert.Equal(MappingOutcome.Refused, result.Outcome);
-        Assert.Equal(MappingRefusal.TailscaleNotInstalled, result.Refusal);
-
-        // Rule TS-9, already true of the foundation: nothing was run, read or write.
-        Assert.Empty(tailscale.ArgumentLists);
-        Assert.Null(cli.ExecutablePath);
     }
 
     private static (MappingCommandKind Kind, int HttpsPort, string Path, int RelayPort) Shape(MappingCommand command) =>

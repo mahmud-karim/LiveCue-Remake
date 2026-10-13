@@ -264,7 +264,7 @@ public sealed partial class MappingSafetyTests
         }
 
         // The run is not vacuous: each of the four forms was written many times, and many plans were refused.
-        // (With this seed: 2,049 commands written, 9,839 plans refused.)
+        // (With this seed: 1,995 commands written, 310 to 776 of each form, and 9,812 plans refused.)
         Assert.True(writes > 1500, $"{writes} commands were written.");
         Assert.True(refusals > 5000, $"{refusals} plans were refused.");
         Assert.Equal(["funnel http", "funnel off", "serve http", "serve off"], kinds.Keys.Order(StringComparer.Ordinal));
