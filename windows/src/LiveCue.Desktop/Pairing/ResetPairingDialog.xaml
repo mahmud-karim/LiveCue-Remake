@@ -4,22 +4,54 @@
              xmlns:app="clr-namespace:LiveCue.Desktop"
              xmlns:ui="clr-namespace:LiveCue.Desktop.Controls"
              Focusable="False"
-             AutomationProperties.AutomationId="{x:Static app:AutomationIds.ResetPairingDialog}">
+             AutomationProperties.AutomationId="{x:Static app:AutomationIds.ResetPairingDialog}"
+             AutomationProperties.Name="{Binding Title}">
 
   <!--
-    The reset confirmation (docs/design/03-windows-screens.md, 6.1). Cancel comes first and is the
-    default; the confirm button is the destructive one and Enter does not press it. First version: the
-    texts, the failure banner and the two buttons; initial focus arrives with the dialog host.
+    The reset confirmation (docs/design/03-windows-screens.md, 6.1; mockup win-pairing-reset).
+
+      title           and the close button, which cancels
+      body            what a reset does; "The relay keeps running." only while it runs
+      failure         a danger banner, only after a reset that failed
+      Cancel          secondary; the cancel button of the dialog, so it has the initial focus and
+                      Escape presses it
+      Reset pairing   destructive primary. It is not the default button: Enter never confirms
   -->
   <StackPanel>
-    <TextBlock Text="{Binding Title}" Style="{DynamicResource Type.Title}" />
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
+      <TextBlock Text="{Binding Title}"
+                 Style="{DynamicResource Type.Title}"
+                 VerticalAlignment="Center"
+                 TextWrapping="Wrap"
+                 TextTrimming="None"
+                 AutomationProperties.HeadingLevel="Level1" />
+      <!-- 36 in a line of 28, drawn out to the card's inset: it adds no height and its glyph ends on the text edge. -->
+      <Button Grid.Column="1"
+              Style="{DynamicResource Button.Icon.Quiet}"
+              Width="36"
+              Height="36"
+              Margin="12,-4,-9,-4"
+              VerticalAlignment="Center"
+              ui:ButtonAssist.Icon="{StaticResource Icon.Close}"
+              ui:ButtonAssist.IconSize="18"
+              Command="{Binding CancelCommand}"
+              ToolTip="Close"
+              AutomationProperties.Name="Close" />
+    </Grid>
+
     <TextBlock Text="{Binding Body}"
                Style="{DynamicResource Type.Body}"
                TextWrapping="Wrap"
                TextTrimming="None"
-               Margin="0,8,0,0" />
+               Margin="0,12,0,0" />
+
     <ui:Banner Model="{Binding Failure}" Margin="0,12,0,0" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
       <Button Style="{DynamicResource Button.Secondary}"
               Content="Cancel"
               IsCancel="True"
@@ -27,6 +59,7 @@
       <Button Style="{DynamicResource Button.DestructivePrimary}"
               Margin="8,0,0,0"
               Content="Reset pairing"
+              ui:ButtonAssist.IsBusy="{Binding IsBusy}"
               Command="{Binding ConfirmCommand}"
               AutomationProperties.AutomationId="{x:Static app:AutomationIds.ConfirmResetPairingButton}" />
     </StackPanel>

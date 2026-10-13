@@ -12,8 +12,8 @@ namespace LiveCue.Desktop.Settings;
 /// <see cref="IDesktopSession.ExecuteMappingAsync"/> (rule TS-9): nothing is written to Tailscale
 /// without a click on a dialog that shows the exact command.
 ///
-/// First version (foundation): a refusal shows its own text and every other failure one general
-/// sentence. The text of each outcome is work package WP-W10.
+/// A command that worked closes the dialog. Every other result stays open with the mapping manager's
+/// own text for it (W-design 4.15), so the command is still on screen beside what went wrong.
 /// </summary>
 internal sealed class MappingDialogViewModel : ObservableObject, IMappingDialogViewModel
 {
@@ -75,6 +75,11 @@ internal sealed class MappingDialogViewModel : ObservableObject, IMappingDialogV
 
     private async Task ConfirmAsync()
     {
+        if (IsBusy)
+        {
+            return;
+        }
+
         IsBusy = true;
         Failure = null;
         var result = await _session.ExecuteMappingAsync(_plan);
@@ -86,11 +91,11 @@ internal sealed class MappingDialogViewModel : ObservableObject, IMappingDialogV
             return;
         }
 
+        // Rule TS-7: a change to somebody else's entries is said here too, not only in the activity.
+        var text = MappingTexts.Failure(result, _plan);
         Failure = new BannerModel(
             BannerTone.Danger,
             null,
-            result.Outcome == MappingOutcome.Refused
-                ? MappingTexts.Refusal(result.Refusal, _plan.Command.HttpsPort, _plan.Command.Path)
-                : SettingsText.CommandDidNotRun);
+            result.OthersChanged ? text + Environment.NewLine + MappingTexts.OthersChanged : text);
     }
 }
