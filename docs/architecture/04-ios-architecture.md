@@ -2197,6 +2197,8 @@ internal additions.
 - A `failed` of the current generation that arrives while the phase is still `connecting` or `resuming` is
   kept (T-20). When the start call throws it is forgotten; when the start call returned it is applied
   right after T-04 or T-12, as T-09 or T-10.
+- `level` goes to 0 as soon as the phase leaves `listening` (at T-06, T-10 and T-14), not only at T-07, so
+  that it is 0 whenever the session is not listening.
 - Ending a session, and a failed start, put the observable state back to that of no session (partial,
   level, elapsed time, status, notice, streamed text, Assist error, latest turn, retry memory). The three
   counters only ever rise.

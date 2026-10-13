@@ -185,6 +185,7 @@ struct SummaryRun {
         case .listening:
             // T-14
             phase = .ending
+            level = 0
             transcriberStatus = TranscriberStatusText.finishing
             var finalizeFailed = false
             do {
@@ -266,6 +267,8 @@ struct SummaryRun {
     /// T-06, then T-07 or T-08.
     private func pause() async {
         phase = .pausing
+        // The level is 0 whenever the session is not listening.
+        level = 0
         transcriberStatus = TranscriberStatusText.finishing
         var finalizeFailed = false
         do {
@@ -367,6 +370,7 @@ struct SummaryRun {
 
         // T-10: an on-device run stays open, so that what was recognised is kept.
         phase = .pausing
+        level = 0
         let transcriber = self.transcriber
         Task { [weak self] in
             _ = try? await transcriber?.finalize()
