@@ -3515,6 +3515,18 @@ struct AnswerCard: View {
 Seconds are shown as `0.000 s` in the timing view and `0.00 s` on cards; cost as `$0.000000`; all with a
 "." separator.
 
+As built (WP-10). The views of this screen that the feed and the tests construct take what they show, so
+that they can be hosted without the environment: `InProgressCard(state: InProgressState)`,
+`AssistErrorCard(message:canRetry:onRetry:)`, `AnswerDetailsText(details:)` (the details of an `AnswerCard`),
+`AnswerFeed(scrolls:)` (false at the accessibility text sizes, where the whole screen scrolls),
+`LiveStatusPanel(isCompact:)` and `LiveTranscriptPanel(isCompact:expandedHeight:)`. `SessionNoticeBanner()`
+reads the view model. The view model also has the pure texts its properties are made of, for the tests:
+`static func chip(for: SessionPhase)`, `meterState(for:)`, `elapsedText(seconds:)` and
+`spokenElapsed(seconds:)`. `TimingViewContent.lastChunkRowID` names the Parakeet row, which the view draws
+after the usage caption and the warning. `isTranscriptExpanded` is computed over the id of the session it
+was expanded for, which is what makes it false when a session starts. The number formats are in
+`AnswerFormat`. `ReasoningScreen` reads the selected effort from `AssistantSettings`.
+
 Contracts: `SessionController`, `AssistantSettings`, `ClipboardWriting`, `ToastCenter`;
 `SessionControlCluster`, `StatusChip`, `LevelMeter`, `Banner`, `DisclosureRow`, `TranscriptLine`, `Card`,
 `IconButton`, `LCButton`, `EmptyStateView`, `haptic`.
