@@ -15,6 +15,9 @@ namespace LiveCue.Relay.Tests.Speech;
 /// </summary>
 public sealed class LabSocketConnectorTests
 {
+    /// <summary>The longest a single step of a test waits before it fails instead of hanging.</summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+
     [Fact]
     public async Task No_origin_no_proxy_and_the_handshake_limit()
     {
@@ -92,26 +95,63 @@ public sealed class LabSocketConnectorTests
         await using var lab = await connector.ConnectAsync(CancellationToken.None);
         var fromLab = await server.NextSocketAsync();
 
+        // Every exchange starts the relay's read before the lab's send, and bounds both. The connector
+        // reports a message beyond C-23 at once and leaves the rest of it on the connection until its
+        // next read. Windows takes one send of any size into an empty send buffer, but holds the next
+        // send back while more than the buffer's size is still unread: a test that awaited a send before
+        // it read would then wait for ever, which is how this test once hung on CI.
+        async Task<LabMessage> ExchangeAsync(Func<Task> send)
+        {
+            var receiving = lab.ReceiveAsync(CancellationToken.None).AsTask();
+            await send().WaitAsync(Patience);
+            return await receiving.WaitAsync(Patience);
+        }
+
         // Exactly C-23 bytes is a message.
         var atLimit = new string('a', ProtocolConstants.MaxLabMessageBytes);
-        await StubLabServer.SendTextAsync(fromLab, atLimit);
-        var whole = await lab.ReceiveAsync(CancellationToken.None);
+        var whole = await ExchangeAsync(() => StubLabServer.SendTextAsync(fromLab, atLimit));
         Assert.Equal(LabMessageKind.Text, whole.Kind);
         Assert.Equal(atLimit, Encoding.UTF8.GetString(whole.Bytes.Span));
 
         // One byte more is not, and neither is one far beyond; nothing of either is handed on.
-        await StubLabServer.SendTextAsync(fromLab, new string('b', ProtocolConstants.MaxLabMessageBytes + 1));
-        Assert.Equal(new LabMessage(LabMessageKind.Invalid, default), await lab.ReceiveAsync(CancellationToken.None));
-        await StubLabServer.SendTextAsync(fromLab, new string('c', 5 * ProtocolConstants.MaxLabMessageBytes));
-        Assert.Equal(new LabMessage(LabMessageKind.Invalid, default), await lab.ReceiveAsync(CancellationToken.None));
+        var invalid = new LabMessage(LabMessageKind.Invalid, default);
+        Assert.Equal(invalid, await ExchangeAsync(
+            () => StubLabServer.SendTextAsync(fromLab, new string('b', ProtocolConstants.MaxLabMessageBytes + 1))));
+        Assert.Equal(invalid, await ExchangeAsync(
+            () => StubLabServer.SendTextAsync(fromLab, new string('c', 5 * ProtocolConstants.MaxLabMessageBytes))));
 
-        // A binary message is invalid too, whatever its size.
-        await fromLab.SendAsync(new byte[] { 1, 2, 3 }, WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None);
-        Assert.Equal(LabMessageKind.Invalid, (await lab.ReceiveAsync(CancellationToken.None)).Kind);
+        // A binary message is invalid too, whatever its size. The read that reports it first skips what
+        // is left of the message before it.
+        Assert.Equal(invalid, await ExchangeAsync(
+            () => fromLab.SendAsync(new byte[] { 1, 2, 3 }, WebSocketMessageType.Binary, endOfMessage: true, CancellationToken.None)));
 
         // The message after an invalid one is read from its own first byte.
-        await StubLabServer.SendTextAsync(fromLab, """{"type":"transcript","transcript":"after"}""");
-        var next = await lab.ReceiveAsync(CancellationToken.None);
+        var next = await ExchangeAsync(
+            () => StubLabServer.SendTextAsync(fromLab, """{"type":"transcript","transcript":"after"}"""));
+        Assert.Equal(LabMessageKind.Text, next.Kind);
+        Assert.Equal("""{"type":"transcript","transcript":"after"}""", Encoding.UTF8.GetString(next.Bytes.Span));
+    }
+
+    [Fact]
+    public async Task The_rest_of_an_oversized_message_is_skipped_however_much_of_it_is_still_on_its_way()
+    {
+        // The condition that made the test above hang, forced: a message so far beyond C-23 that most of
+        // it is still in the lab's send buffer when the connector reports it. The lab's next send then
+        // waits for a reader. The connector's next read is that reader, and it skips to the next message.
+        await using var server = new StubLabServer();
+        var connector = new LabSocketConnector(server.Context(new ManualTimeProvider()));
+        await using var lab = await connector.ConnectAsync(CancellationToken.None);
+        var fromLab = await server.NextSocketAsync();
+
+        var huge = StubLabServer.SendTextAsync(fromLab, new string('h', 256 * ProtocolConstants.MaxLabMessageBytes));
+        var first = await lab.ReceiveAsync(CancellationToken.None).AsTask().WaitAsync(Patience);
+        Assert.Equal(LabMessageKind.Invalid, first.Kind);
+
+        var receiving = lab.ReceiveAsync(CancellationToken.None).AsTask();
+        await huge.WaitAsync(Patience);
+        await StubLabServer.SendTextAsync(fromLab, """{"type":"transcript","transcript":"after"}""").WaitAsync(Patience);
+        var next = await receiving.WaitAsync(Patience);
+
         Assert.Equal(LabMessageKind.Text, next.Kind);
         Assert.Equal("""{"type":"transcript","transcript":"after"}""", Encoding.UTF8.GetString(next.Bytes.Span));
     }

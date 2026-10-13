@@ -3378,6 +3378,9 @@ The 401 path publishes nothing even then.
    where the two are equal). On route 2 the deadline is shorter, so the deadline answers (504).
    A `BadHttpRequestException` is mapped by its status: 408 and 413 to their coded errors, anything else to
    `400 INVALID_REQUEST`.
+   As built (WP-W13): Kestrel reports one kind of bad framing, a chunk size that overflows, as a plain
+   `IOException` and not as a `BadHttpRequestException`. It is mapped to `400 INVALID_REQUEST` as well;
+   before, it reached the last-resort handler and was a `500` with a diagnostic.
 4. Check that the bytes are valid UTF-8 (`Utf8.IsValid`: the JSON reader checks structure and leaves the
    bytes inside a string alone), then parse with `Utf8JsonReader` options `MaxDepth` 32 (protocol 5.4 rule 4),
    no comments, no trailing commas. Invalid UTF-8, a byte-order mark, invalid JSON, an empty body, or a top
@@ -5343,6 +5346,24 @@ the workflow's restore step (`--locked-mode`).
 - S-13 loses its third case, which becomes ST-21; S-43, S-44 and S-45 as reworded in test plan 4.5.
 - Adds: ST-20 (the `RELAY_PAUSED` and `ASSISTANT_BUSY` cases), ST-21. `TokenSweepTests` and
   `PrivateTextSweepTests` include `EdgeStatistics` events and the Codex version text.
+- As built: the harness is `Conformance/ConformanceRelay.cs`, one relay with every area the production
+  one (real files and DPAPI for pairing; the real process runner with `LiveCue.TestChild` as Codex; the
+  real controller and bridge over the fake lab runtime and lab socket). The coverage table (statement,
+  tests, result) and everything this package found are in
+  `windows/tests/LiveCue.Relay.Tests/Conformance/Coverage.md`, which is generated from
+  `CoverageTable.cs` and checked by `CoverageTableTests`. The statements their own area proves below the
+  listener have a second test through it in `StatementTests.cs`.
+- As built: the relay never reads a Codex version text (that is the hosting library's), so the sweeps
+  look instead for anything the stand-in Codex process printed.
+- As built, production code changed by this package: `Edge/BodyReader.cs` (4.5, the chunk size that
+  overflows). Test code outside `Conformance/`: `Speech/LabSocketConnectorTests.cs` (the test that hung)
+  and `Speech/SpeechLimiterTests.cs` (a count that depended on how far the lab writer had got).
+- **Open, for the orchestrator (WP-W13-1):** no limit bounds the write of a response the caller does not
+  read. Test plan S-23 expected Kestrel's response rate limit to do it; at its default that limit allows
+  minutes to more than an hour. Two tests in `SlowClientTests` are skipped for it. Three further findings
+  that are not defects of the relay (a signed `Content-Length` that Kestrel accepts, K-13; what the
+  connection cap does and does not defend against; what "verified" means in the self-check) are in the
+  notes of `Coverage.md`.
 
 **WP-W14 CI, audit, release**
 

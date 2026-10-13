@@ -82,10 +82,16 @@ public sealed class SpeechLimiterTests
         // pass and the next one ends the stream.
         const int Allowed = ProtocolConstants.AllowanceBaseBytes / 2;
         var tiny = new byte[2];
-        for (var sent = 0; sent <= Allowed; sent++)
+        for (var sent = 0; sent < Allowed; sent++)
         {
             await phone.SendAudioAsync(tiny);
         }
+
+        // The allowed frames have all reached the lab before the one too many is sent: a stream that ends
+        // drops what it has accepted and not yet written, so counting at the lab afterwards would depend
+        // on how far the writer had got.
+        await SpeechWait.UntilAsync(() => rig.Lab.Current.AudioBytes == ProtocolConstants.AllowanceBaseBytes, "the lab has every allowed byte");
+        await phone.SendAudioAsync(tiny);
 
         await SpeechFrameRuleTests.AssertEndsAsync(phone, "AUDIO_LIMIT", WebSocketCloseStatus.InternalServerError);
         Assert.Equal(ProtocolConstants.AllowanceBaseBytes, rig.Lab.Current.AudioBytes);
