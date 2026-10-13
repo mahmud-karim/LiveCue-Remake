@@ -23,6 +23,12 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
 
     public ChannelReader<RelayEvent> Events => _events.Reader;
 
+    /// <summary>How often a matrix was asked for, by "Show QR" or by a reset.</summary>
+    public int PairingsShown { get; private set; }
+
+    /// <summary>How often the pairing was replaced. The self-test only ever cancels the confirmation.</summary>
+    public int Resets { get; private set; }
+
     /// <summary>Publishes a synthetic event, as the real relay would from a request thread.</summary>
     public void Raise(RelayEvent relayEvent) => _events.Writer.TryWrite(relayEvent);
 
@@ -30,7 +36,7 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
     {
         if (startFault is { } code)
         {
-            const string message = "The relay port is already in use.";
+            const string message = SyntheticData.PortInUse;
             Status = RelayStatus.Faulted;
             Raise(new RelayFaulted(clock.GetUtcNow(), code, message));
             _events.Writer.TryComplete();
@@ -46,6 +52,9 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
             ProtocolConstants.ProtocolVersion,
             Options.RelayVersion,
             PairingWasCreated: false));
+
+        // The script's PC was paired before: the relay says so, as the real one does at such a start.
+        Raise(new Notice(clock.GetUtcNow(), NoticeKind.PairingRestored, SyntheticData.PairingRestored));
         return Task.CompletedTask;
     }
 
@@ -79,14 +88,16 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
 
     public Task<PairingQr> ShowPairingAsync(CancellationToken ct)
     {
+        PairingsShown++;
         Raise(new PairingShown(clock.GetUtcNow(), Options.AdvertisedEndpoint));
         Raise(new SelfCheckCompleted(clock.GetUtcNow(), SelfCheckResult.Verified));
-        return Task.FromResult(new PairingQr(Options.AdvertisedEndpoint, SyntheticMatrix()));
+        return Task.FromResult(new PairingQr(Options.AdvertisedEndpoint, SyntheticData.PairingMatrix()));
     }
 
     public Task<PairingQr> ResetPairingAsync(CancellationToken ct)
     {
-        Raise(new Notice(clock.GetUtcNow(), NoticeKind.PairingReset, "Pairing reset. Every iPhone must pair again."));
+        Resets++;
+        Raise(new Notice(clock.GetUtcNow(), NoticeKind.PairingReset, SyntheticData.PairingReset));
         return ShowPairingAsync(ct);
     }
 
@@ -94,23 +105,6 @@ internal sealed class ScriptedRelay(RelayOptions options, TimeProvider clock, Re
     {
         _events.Writer.TryComplete();
         return ValueTask.CompletedTask;
-    }
-
-    /// <summary>A 21 x 21 pattern that carries nothing: the self-test has no token to encode.</summary>
-    private static bool[][] SyntheticMatrix()
-    {
-        const int size = 21;
-        var modules = new bool[size][];
-        for (var row = 0; row < size; row++)
-        {
-            modules[row] = new bool[size];
-            for (var column = 0; column < size; column++)
-            {
-                modules[row][column] = ((row * 3) + (column * 5)) % 4 == 0;
-            }
-        }
-
-        return modules;
     }
 }
 
@@ -138,11 +132,28 @@ internal sealed class RelayScript(TimeProvider clock) : IRelayFactory
     public void PhoneSeen() => Current?.Raise(new PhoneSeen(clock.GetUtcNow()));
 
     public void Diagnostic(string message) => Current?.Raise(new Diagnostic(clock.GetUtcNow(), "self-test", message));
+
+    /// <summary>An assist request with the synthetic question passed the relay's checks.</summary>
+    public void RequestStarted(string requestId) => Current?.Raise(SyntheticData.RequestStarted(clock.GetUtcNow(), requestId));
+
+    /// <summary>Codex answered it with the synthetic answer.</summary>
+    public void RequestCompleted(string requestId) => Current?.Raise(SyntheticData.RequestCompleted(clock.GetUtcNow(), requestId));
+
+    /// <summary>It ended with ASSISTANT_FAILED instead.</summary>
+    public void RequestFailed(string requestId) => Current?.Raise(SyntheticData.RequestFailed(clock.GetUtcNow(), requestId));
+
+    /// <summary>The PC speech stream reports progress with one of the relay's fixed texts.</summary>
+    public void Speech(SpeechStreamPhase phase, string message) =>
+        Current?.Raise(new SpeechStreamChanged(clock.GetUtcNow(), phase, SyntheticData.SpeechModel, Code: null, message));
+
+    /// <summary>The PC speech model finished one piece of text.</summary>
+    public void SpeechText(string text) => Current?.Raise(new SpeechText(clock.GetUtcNow(), text));
 }
 
 /// <summary>
-/// A clock the script moves by hand, with timers that fire when it is moved past them. It makes the
-/// times in the screenshots the same on every run and lets "15 seconds later" happen at once.
+/// A clock the script moves by hand, with timers that fire when it is moved past them, a periodic one
+/// once for every period that passed. It makes the times in the screenshots the same on every run and
+/// lets "two minutes later" happen at once.
 /// </summary>
 internal sealed class ManualClock(DateTimeOffset start, TimeZoneInfo? zone = null) : TimeProvider
 {
@@ -182,7 +193,7 @@ internal sealed class ManualClock(DateTimeOffset start, TimeZoneInfo? zone = nul
                 }
 
                 _now = next.Due!.Value;
-                next.Due = null;
+                next.Due = next.Period is { } period ? _now + period : null;
             }
 
             next.Fire();
@@ -206,14 +217,17 @@ internal sealed class ManualClock(DateTimeOffset start, TimeZoneInfo? zone = nul
         /// <summary>When the timer fires next; null while it is not scheduled. Guarded by the clock's lock.</summary>
         public DateTimeOffset? Due { get; set; }
 
+        /// <summary>The time between two firings of a periodic timer; null for one that fires once.</summary>
+        public TimeSpan? Period { get; private set; }
+
         public void Fire() => callback(state);
 
         public bool Change(TimeSpan dueTime, TimeSpan period)
         {
             lock (clock._gate)
             {
-                // One-shot timers are all the app uses; a period is not modelled.
                 Due = dueTime == Timeout.InfiniteTimeSpan ? null : clock._now + dueTime;
+                Period = dueTime != Timeout.InfiniteTimeSpan && period > TimeSpan.Zero ? period : null;
             }
 
             return true;
