@@ -14,7 +14,8 @@ final class SystemSpeechModelTests: XCTestCase {
     }
 
     @MainActor
-    private func makeModels(_ engine: (any SystemSpeechRecognizing)?, activity: SessionActivity = SessionActivity()) -> OnDeviceModelManager {
+    private func makeModels(_ engine: (any SystemSpeechRecognizing)?, activity given: SessionActivity? = nil) -> OnDeviceModelManager {
+        let activity = given ?? SessionActivity()
         let loader = FakeEngineLoader(voz: FakeBatchEngine(), parakeet: FakeStreamingEngine())
         guard let engine else {
             return OnDeviceModelManager(loader: loader, activity: activity, clock: ManualClock())
