@@ -113,7 +113,7 @@ internal sealed class FakeSupervisor : IRelaySupervisor
             ManualTimeProvider.DefaultStart,
             exposure ?? []);
 
-    public RelayOptions OptionsFor(RelaySettings settings) =>
+    public static RelayOptions OptionsFor(RelaySettings settings) =>
         new(settings.RelayPort, Endpoint, settings.ConnectionMode, @"C:\LiveCue-tests\data", null, null, settings.AsrLabPort, "1.0.0");
 
     public void Publish(HostEvent hostEvent) => _events.Writer.TryWrite(hostEvent);
@@ -350,12 +350,15 @@ internal sealed class SessionHarness : IDisposable
     {
         Supervisor = new FakeSupervisor(Clock);
         Session = new DesktopSession(Supervisor, Mappings, new FakeEndpoints(), Ui, Clock);
-        Session.PropertyChanged += (_, change) => Changes.Add(change.PropertyName!);
-        Session.RelayEventReceived += (_, relayEvent) => RelayEvents.Add(relayEvent);
-        Session.Signal += (_, signal) => Signals.Add(signal);
-        Session.MessageRaised += (_, message) => Messages.Add(message);
-        Session.PairingQrProduced += (_, qr) => Qrs.Add(qr);
+        Session.PropertyChanged += (_, change) => Record(Changes, change.PropertyName!);
+        Session.RelayEventReceived += (_, relayEvent) => Record(RelayEvents, relayEvent);
+        Session.Signal += (_, signal) => Record(Signals, signal);
+        Session.MessageRaised += (_, message) => Record(Messages, message);
+        Session.PairingQrProduced += (_, qr) => Record(Qrs, qr);
     }
+
+    /// <summary>The managed thread of everything the session raised. It must only ever be the UI thread.</summary>
+    public System.Collections.Concurrent.ConcurrentBag<int> RaisedOn { get; } = [];
 
     public UiThread Ui { get; } = new();
 
@@ -405,10 +408,29 @@ internal sealed class SessionHarness : IDisposable
         await OnUi(session => session.StartAsync());
     }
 
+    /// <summary>Everything posted to the UI thread so far has run.</summary>
+    public Task Settled() => Ui.RunAsync(() => { });
+
+    /// <summary>Waits, on the UI thread, for something a command or an event brings about.</summary>
+    public Task Until(Func<bool> condition, string what = "the expected state") => Ui.UntilAsync(condition, what);
+
+    /// <summary>Moves the clock; what its timers post to the UI thread has run when this returns.</summary>
+    public async Task Advance(TimeSpan by)
+    {
+        Clock.Advance(by);
+        await Settled();
+    }
+
     public void Dispose()
     {
         Session.Dispose();
         Ui.Dispose();
+    }
+
+    private void Record<T>(List<T> list, T item)
+    {
+        RaisedOn.Add(Environment.CurrentManagedThreadId);
+        list.Add(item);
     }
 
     /// <summary>The event was posted to the UI thread after <paramref name="postedBefore"/>, and has run.</summary>
