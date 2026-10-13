@@ -90,18 +90,4 @@ internal static class ShellText
             _ => null,
         };
     }
-
-    /// <summary>
-    /// The containment warning of architecture 3.7: the Codex in use is not the version the owner last ran
-    /// the containment check for. <paramref name="version"/> is null when the version could not be read;
-    /// <paramref name="checkedVersion"/> is null when the check was never recorded.
-    /// </summary>
-    public static string ContainmentWarning(string? version, string? checkedVersion)
-    {
-        var first = version is null ? "Codex's version could not be read" : $"Codex is version {version}";
-        var second = checkedVersion is null
-            ? "the containment check has not been run yet"
-            : $"the containment check was last run for {checkedVersion}";
-        return $"{first}; {second}. Run the containment check, then choose Mark as checked in Settings.";
-    }
 }

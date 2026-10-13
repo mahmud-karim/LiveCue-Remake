@@ -645,7 +645,7 @@ internal sealed class DesktopSession : IDesktopSession, IDisposable
         {
             _containmentWarned = true;
             _containmentWarnedFor = versions;
-            var text = ShellText.ContainmentWarning(versions.CodexVersion, versions.CodexContainmentCheckedVersion);
+            var text = PrerequisiteTexts.ContainmentWarning(versions.CodexVersion, versions.CodexContainmentCheckedVersion);
             if (duringStart && report.Passed)
             {
                 _containmentWarningForThisStart = text;
