@@ -77,6 +77,16 @@ public sealed class MainWindowTests
             [Visibility.Visible, Visibility.Visible, Visibility.Collapsed, Visibility.Visible],
             captionButtons.Select(button => button.Visibility));
 
+        // An inactive window draws its wordmark and its caption glyphs in the secondary ink.
+        var wordmark = WpfApp.Descendants(titleBar).OfType<TextBlock>().Single();
+        Assert.Same(window.FindResource("InkPrimaryBrush"), wordmark.Foreground);
+        Assert.All(captionButtons, button => Assert.Same(window.FindResource("InkPrimaryBrush"), button.Foreground));
+        window.KeepActiveAppearance = false;
+        Assert.False(window.IsActive);
+        Assert.Same(window.FindResource("InkSecondaryBrush"), wordmark.Foreground);
+        Assert.All(captionButtons, button => Assert.Same(window.FindResource("InkSecondaryBrush"), button.Foreground));
+        window.KeepActiveAppearance = true;
+
         // The sidebar: 232 wide, 16 from the window's edge and from the page, its status card at the foot.
         var sidebar = app.Named<ContentControl>("Sidebar");
         var page = app.Named<ContentControl>("PageHost");

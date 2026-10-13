@@ -64,10 +64,22 @@ internal static class WpfApp
         window.SourceInitialized += (_, _) =>
             HwndSource.FromHwnd(new WindowInteropHelper(window).Handle)?.AddHook(AllowSizesBeyondTheDesktop);
 
+        // Windows cuts a new window down to the desktop before the hook above exists, so the size that
+        // was asked for is given again once the window is there.
+        var (width, height) = (window.Width, window.Height);
         var previous = NativeMethods.SetThreadDpiAwarenessContext(NativeMethods.DpiAwarenessContextUnaware);
         try
         {
             window.Show();
+            if (!double.IsNaN(width))
+            {
+                window.Width = width;
+            }
+
+            if (!double.IsNaN(height))
+            {
+                window.Height = height;
+            }
         }
         finally
         {

@@ -239,6 +239,7 @@ public sealed class ComponentGalleryTests
         {
             WpfApp.ShowOffScreen(window);
             WpfApp.Settle(TimeSpan.FromMilliseconds(100));
+            Assert.Equal((1240d, 1640d), (gallery.ActualWidth, gallery.ActualHeight));
 
             // Daylight: every control has taken a template and a size, text is crisp, and every shadow is
             // on a caster layer that holds no text (the two-layer glass of design system 3.5).
