@@ -165,6 +165,14 @@ jobs:
         timeout-minutes: 10
         run: bash scripts/ci/generate_project.sh "$RUNNER_TEMP/DerivedData"
 
+      # What the pinned Xcode resolved, kept with the evidence: this is the file that is committed as
+      # ios/Package.resolved.
+      - name: Keep the package resolution
+        continue-on-error: true
+        run: |
+          mkdir -p artifacts
+          cp "$PROJECT/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" artifacts/Package.resolved
+
       - name: Select a simulator
         id: simulator
         run: python3 scripts/ci/select_simulator.py --runtime "${{ matrix.runtime }}"
