@@ -1,36 +1,60 @@
 import Foundation
 import Observation
 
-/// Meta API key (screens 9).
+/// Meta API key (screens 9): save, test and remove the key.
+///
+/// The key itself is only ever in the draft while it is typed and in the Keychain once saved. The
+/// actions and their messages are those of `SpeechSettings`.
 @MainActor @Observable final class MetaKeyViewModel {
     var keyDraft: String = ""
 
+    private let speech: SpeechSettings
+
     init(speech: SpeechSettings) {
-        // STUB(WP-11)
+        self.speech = speech
     }
 
-    var hasKey: Bool { false } // STUB(WP-11)
-    var stateChip: StatusChipModel { StatusChipModel("", tone: .neutral, mark: .none) } // STUB(WP-11)
-    var message: InlineMessage? { nil } // STUB(WP-11)
-    var isTesting: Bool { false } // STUB(WP-11)
+    var hasKey: Bool {
+        speech.hasMetaKey
+    }
+
+    var stateChip: StatusChipModel {
+        if speech.hasMetaKey {
+            return StatusChipModel("Key saved", tone: .success, mark: .check)
+        }
+        return StatusChipModel("No key saved", tone: .neutral, mark: .ring)
+    }
+
+    var message: InlineMessage? {
+        speech.metaKeyMessage
+    }
+
+    var isTesting: Bool {
+        speech.isTestingMetaKey
+    }
+
     /// The draft is not empty and no test is running.
-    var canSave: Bool { false } // STUB(WP-11)
+    var canSave: Bool {
+        !keyDraft.isEmpty && !speech.isTestingMetaKey
+    }
 
     /// Clears the draft.
     func appeared() {
-        // STUB(WP-11)
+        keyDraft = ""
     }
 
     /// Clears the draft on success.
     func save() {
-        // STUB(WP-11)
+        if speech.saveMetaKey(keyDraft) {
+            keyDraft = ""
+        }
     }
 
     func test() async {
-        // STUB(WP-11)
+        await speech.testMetaKey()
     }
 
     func remove() {
-        // STUB(WP-11)
+        speech.removeMetaKey()
     }
 }
