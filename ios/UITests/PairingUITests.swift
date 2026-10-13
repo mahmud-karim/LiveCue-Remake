@@ -14,10 +14,10 @@ final class PairingUITests: XCTestCase {
         // Pictures of the first run, taken while this simulator has no test pairing yet. Nothing is
         // asserted here: on a simulator that ran this test before, the pairing is already saved.
         UITestWalk.launchToHome(["-pairing-persistence-test", "-meta-no-key"])
-        if UITestWalk.anyLabelled("PC offline").waitForExistence(timeout: 5) {
+        if UITestWalk.anyLabelled("PC offline").appears(within: 5) {
             shot("t7-home-first-run")
             UITestWalk.tap("pair-pc")
-            if UITestSupport.element("scan-pairing-qr").waitForExistence(timeout: UITestSupport.timeout) {
+            if UITestSupport.element("scan-pairing-qr").appears(within: UITestSupport.timeout) {
                 shot("t7-pairing-not-paired")
             }
         } else {
@@ -28,7 +28,7 @@ final class PairingUITests: XCTestCase {
         UITestWalk.launchToHome(["-pairing-persistence-test", "-save-pairing-fixture"])
         UITestWalk.openSettings()
         UITestWalk.tap("pair-pc")
-        UITestSupport.waitFor("saved-pc-state")
+        UITestWalk.waitFor("saved-pc-state")
         XCTAssertTrue(
             UITestWalk.waitForText("saved-pc-address", equals: UITestWalk.pairingAddress),
             "The saved address reads \"\(UITestWalk.text(of: UITestSupport.element("saved-pc-address")))\"."
@@ -42,10 +42,10 @@ final class PairingUITests: XCTestCase {
         // AC-IOS-132 and 133: after a relaunch, with the Keychain copy gone, the pairing is restored
         // from the file and the address is shown exactly as saved, port and trailing slash included.
         UITestWalk.launchToHome(["-pairing-persistence-test", "-drop-test-keychain"])
-        XCTAssertTrue(UITestWalk.anyLabelled("Saved · connected").waitForExistence(timeout: UITestSupport.timeout), "Home does not show the saved PC after the relaunch.")
+        XCTAssertTrue(UITestWalk.anyLabelled("Saved · connected").appears(within: UITestSupport.timeout), "Home does not show the saved PC after the relaunch.")
         UITestWalk.openSettings()
         UITestWalk.tap("pair-pc")
-        UITestSupport.waitFor("saved-pc-state")
+        UITestWalk.waitFor("saved-pc-state")
         XCTAssertTrue(
             UITestWalk.waitForText("saved-pc-address", equals: UITestWalk.pairingAddress),
             "The restored address reads \"\(UITestWalk.text(of: UITestSupport.element("saved-pc-address")))\"."
@@ -56,10 +56,10 @@ final class PairingUITests: XCTestCase {
         // AC-IOS-135: Reconnect with a reachable PC reads "Connected".
         UITestWalk.tap("reconnect-pc")
         XCTAssertTrue(
-            UITestSupport.waitForLabel("saved-pc-state", contains: "Connected"),
+            UITestWalk.waitForLabel("saved-pc-state", contains: "Connected"),
             "The state reads \"\(UITestSupport.element("saved-pc-state").label)\" after Reconnect."
         )
-        XCTAssertTrue(UITestSupport.waitForLabel("reconnect-pc", equals: "Reconnect"), "Reconnect is still checking.")
+        XCTAssertTrue(UITestWalk.waitForLabel("reconnect-pc", equals: "Reconnect"), "Reconnect is still checking.")
         XCTAssertTrue(UITestWalk.anyLabelContaining("Your pairing is saved on this iPhone").exists, "The connected message is not shown.")
         shot("t7-pairing-restored")
     }
@@ -70,14 +70,14 @@ final class PairingUITests: XCTestCase {
         let app = UITestWalk.launchToHome()
         UITestWalk.openSettings()
         UITestWalk.tap("pair-pc")
-        UITestSupport.waitFor("saved-pc-state")
-        XCTAssertTrue(UITestSupport.waitForLabel("saved-pc-state", equals: "Connected"), "The saved PC is not connected.")
+        UITestWalk.waitFor("saved-pc-state")
+        XCTAssertTrue(UITestWalk.waitForLabel("saved-pc-state", equals: "Connected"), "The saved PC is not connected.")
         XCTAssertFalse(UITestSupport.element("scan-pairing-qr").exists, "The QR option is shown before the options are opened.")
         shot("t13-pairing-saved")
 
         // AC-IOS-127: with a saved pairing the options are opened first; then "Scan PC QR code" is offered.
         UITestWalk.tap("show-pairing-options")
-        let scan = UITestSupport.waitFor("scan-pairing-qr")
+        let scan = UITestWalk.waitFor("scan-pairing-qr")
         XCTAssertEqual(scan.label, "Scan PC QR code")
         XCTAssertTrue(scan.isEnabled, "\"Scan PC QR code\" is disabled.")
         XCTAssertTrue(UITestWalk.button("Verify and pair").exists, "Manual pairing is not offered beside the scanner.")
@@ -90,7 +90,7 @@ final class PairingUITests: XCTestCase {
         // and not asserted, because the test seam has no camera.
         UITestWalk.tap("scan-pairing-qr")
         let alert = app.alerts.firstMatch
-        if alert.waitForExistence(timeout: UITestSupport.timeout) {
+        if alert.appears(within: UITestSupport.timeout) {
             shot("t13-qr-camera-unavailable")
             if alert.buttons["OK"].exists {
                 alert.buttons["OK"].tap()

@@ -21,7 +21,7 @@ final class CloudOnlyUITests: XCTestCase {
         XCTAssertTrue(UITestWalk.waitForText("home-meta-state", equals: "Add API key"), "Home does not ask for the Meta key.")
         XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a model download for Meta.")
         // The PC is paired and switched off, and Codex answers need it.
-        XCTAssertTrue(UITestWalk.anyLabelled("PC reconnecting").waitForExistence(timeout: UITestSupport.timeout), "Home does not read \"PC reconnecting\".")
+        XCTAssertTrue(UITestWalk.anyLabelled("PC reconnecting").appears(within: UITestSupport.timeout), "Home does not read \"PC reconnecting\".")
         shot("t3-home-no-meta-key")
 
         // AC-IOS-016: Start without a key raises the alert, and no session starts.
@@ -36,21 +36,21 @@ final class CloudOnlyUITests: XCTestCase {
         UITestWalk.openSettings()
         XCTAssertTrue(UITestWalk.waitForValue("meta-key-settings", equals: "Required"), "The Meta API key row does not read \"Required\".")
         UITestWalk.tap("meta-key-settings")
-        UITestSupport.waitFor("meta-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("meta-key-state", equals: "No key saved"), "The key state does not read \"No key saved\".")
+        UITestWalk.waitFor("meta-key")
+        XCTAssertTrue(UITestWalk.waitForLabel("meta-key-state", equals: "No key saved"), "The key state does not read \"No key saved\".")
         XCTAssertFalse(UITestSupport.element("verify-meta-key").exists, "A key can be tested before one is saved.")
         shot("t3-meta-key-empty")
 
         // AC-IOS-107 and 108: saving shows "Key saved", empties the field, and the key is never readable.
         UITestWalk.saveKey(CloudOnlyUITests.metaKey, field: "meta-key", save: "save-meta-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("meta-key-state", equals: "Key saved"), "The key state does not read \"Key saved\".")
+        XCTAssertTrue(UITestWalk.waitForLabel("meta-key-state", equals: "Key saved"), "The key state does not read \"Key saved\".")
         XCTAssertTrue(UITestWalk.waitUntilDisabled(UITestSupport.element("save-meta-key")), "The field was not emptied by the save.")
         XCTAssertTrue(UITestWalk.nothingShows(CloudOnlyUITests.metaKey), "The saved key can be read on screen.")
 
         // AC-IOS-110: the test says that no microphone audio was sent.
         UITestWalk.tap("verify-meta-key")
         XCTAssertTrue(
-            UITestSupport.waitForLabel("meta-key-message", contains: "No microphone audio"),
+            UITestWalk.waitForLabel("meta-key-message", contains: "No microphone audio"),
             "The connection test did not report: \(UITestSupport.element("meta-key-message").label)"
         )
         shot("t3-meta-key-tested")
@@ -61,15 +61,15 @@ final class CloudOnlyUITests: XCTestCase {
         UITestWalk.openAssistantLab()
         UITestWalk.tap("assistant-provider-openrouter")
         UITestWalk.saveKey(CloudOnlyUITests.openRouterKey, field: "openrouter-key", save: "save-openrouter-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("openrouter-key-state", equals: "Key saved"), "The OpenRouter key was not saved.")
+        XCTAssertTrue(UITestWalk.waitForLabel("openrouter-key-state", equals: "Key saved"), "The OpenRouter key was not saved.")
         UITestWalk.tap("openrouter-model-picker")
         UITestWalk.tap("choose-test/direct")
         XCTAssertTrue(UITestWalk.waitForText("selected-assistant-model", equals: "test/direct"), "The OpenRouter model was not selected.")
 
         // AC-IOS-005 and 007: all cloud, whatever the PC does.
         UITestWalk.openTab("Live")
-        UITestSupport.waitFor("start-session")
-        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").waitForExistence(timeout: UITestSupport.timeout), "Home does not read \"Cloud direct · no PC\".")
+        UITestWalk.waitFor("start-session")
+        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").appears(within: UITestSupport.timeout), "Home does not read \"Cloud direct · no PC\".")
         XCTAssertTrue(UITestWalk.waitForText("home-meta-state", equals: "Key saved · direct"), "Home does not read \"Key saved · direct\".")
         XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a model download for Meta.")
         shot("t3-home-cloud-direct")
@@ -77,12 +77,12 @@ final class CloudOnlyUITests: XCTestCase {
         // AC-IOS-111: the key is still there after a relaunch that does not seed one.
         let app = UITestWalk.launchToHome(["-meta-key-persistence", "-openrouter-persistence-test", "-pc-offline"])
         XCTAssertTrue(UITestWalk.waitForText("home-meta-state", equals: "Key saved · direct"), "The Meta key did not survive the relaunch.")
-        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").waitForExistence(timeout: UITestSupport.timeout), "The answer service did not survive the relaunch.")
+        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").appears(within: UITestSupport.timeout), "The answer service did not survive the relaunch.")
         XCTAssertTrue(UITestWalk.nothingShows(CloudOnlyUITests.metaKey), "The saved key can be read on Home.")
 
         // AC-IOS-053: a conversation with three answers, with the PC switched off.
         UITestWalk.startSession()
-        XCTAssertTrue(UITestWalk.sessionState("Listening").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Listening\".")
+        XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\".")
         UITestWalk.assist(reaching: 1)
         UITestWalk.assist(reaching: 2)
         UITestWalk.assist(reaching: 3)
@@ -98,7 +98,7 @@ final class CloudOnlyUITests: XCTestCase {
         XCTAssertTrue(UITestWalk.waitForValue("meta-key-settings", equals: "Saved on iPhone"), "The Meta API key row does not read \"Saved on iPhone\".")
         UITestWalk.tap("meta-key-settings")
         UITestWalk.tap("remove-meta-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("meta-key-state", equals: "No key saved"), "The key state does not read \"No key saved\" after the removal.")
+        XCTAssertTrue(UITestWalk.waitForLabel("meta-key-state", equals: "No key saved"), "The key state does not read \"No key saved\" after the removal.")
         shot("t3-meta-key-removed")
         UITestWalk.openTab("Live")
         UITestWalk.tap("start-session")
@@ -111,7 +111,7 @@ final class CloudOnlyUITests: XCTestCase {
     @MainActor
     func testOpenRouterKeyModelAndThreeAssists() throws {
         var app = UITestWalk.launchToHome(["-openrouter-ui-reset", "-pc-offline", "-pc-catalog-slow"])
-        XCTAssertTrue(UITestWalk.anyLabelled("PC reconnecting").waitForExistence(timeout: UITestSupport.timeout), "Home does not read \"PC reconnecting\".")
+        XCTAssertTrue(UITestWalk.anyLabelled("PC reconnecting").appears(within: UITestSupport.timeout), "Home does not read \"PC reconnecting\".")
 
         // AC-IOS-123: the service is switched while the PC's catalogue, which takes 8 seconds here, is
         // still loading.
@@ -121,20 +121,20 @@ final class CloudOnlyUITests: XCTestCase {
         UITestWalk.tap("assistant-provider-openrouter")
 
         // AC-IOS-118: the key section appears.
-        UITestSupport.waitFor("openrouter-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("openrouter-key-state", equals: "No key saved"), "The key state does not read \"No key saved\".")
+        UITestWalk.waitFor("openrouter-key")
+        XCTAssertTrue(UITestWalk.waitForLabel("openrouter-key-state", equals: "No key saved"), "The key state does not read \"No key saved\".")
         shot("t4-assistant-openrouter-no-key")
 
         // AC-IOS-123: OpenRouter's catalogue is there within 5 seconds, and the PC's never replaces it.
         UITestWalk.tap("openrouter-model-picker")
         XCTAssertTrue(
-            UITestSupport.element("choose-test/direct").waitForExistence(timeout: 5),
+            UITestSupport.element("choose-test/direct").appears(within: 5),
             "OpenRouter's catalogue did not appear within 5 seconds of the switch."
         )
         shot("t4-openrouter-models")
         let untilThePCWouldAnswer = max(1, 10 - Date().timeIntervalSince(labAppeared))
         XCTAssertFalse(
-            UITestSupport.element("choose-gpt-6-astra").waitForExistence(timeout: untilThePCWouldAnswer),
+            UITestSupport.element("choose-gpt-6-astra").appears(within: untilThePCWouldAnswer),
             "The PC's catalogue replaced OpenRouter's."
         )
         XCTAssertTrue(UITestSupport.element("choose-test/direct").exists, "OpenRouter's catalogue went away.")
@@ -143,32 +143,32 @@ final class CloudOnlyUITests: XCTestCase {
         // a search by id keeps it, a search that matches nothing hides it.
         XCTAssertTrue(UITestWalk.anyLabelContaining("Input Unknown · output Unknown").exists, "The model row shows no prices.")
         let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: UITestSupport.timeout), "The model picker has no search field.")
+        XCTAssertTrue(search.appears(within: UITestSupport.timeout), "The model picker has no search field.")
         search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        _ = app.keyboards.firstMatch.appears(within: 5)
         app.typeText("t/d")
-        XCTAssertTrue(UITestSupport.element("choose-test/direct").waitForExistence(timeout: 5), "A search by id hides the model.")
+        XCTAssertTrue(UITestSupport.element("choose-test/direct").appears(within: 5), "A search by id hides the model.")
         app.typeText("zz")
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "choose-test/direct"), "A search that matches nothing still lists the model.")
-        XCTAssertTrue(UITestWalk.anyLabelContaining("No models").waitForExistence(timeout: 5), "An empty result is not explained.")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "choose-test/direct"), "A search that matches nothing still lists the model.")
+        XCTAssertTrue(UITestWalk.anyLabelContaining("No models").appears(within: 5), "An empty result is not explained.")
         shot("t4-openrouter-search-empty")
         app.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 2))
         // Choosing closes the picker and shows the id as selected.
         UITestWalk.tap("choose-test/direct")
         XCTAssertTrue(UITestWalk.waitForText("selected-assistant-model", equals: "test/direct"), "The chosen model is not shown as selected.")
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "choose-test/direct"), "The picker stayed open.")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "choose-test/direct"), "The picker stayed open.")
         UITestWalk.back()
 
         // AC-IOS-005: Meta speech with OpenRouter answers reads "Cloud direct · no PC".
-        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").waitForExistence(timeout: UITestSupport.timeout), "Home does not read \"Cloud direct · no PC\".")
+        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").appears(within: UITestSupport.timeout), "Home does not read \"Cloud direct · no PC\".")
 
         // AC-IOS-056: without a key the Assist fails inline, with no alert. AC-IOS-061: nothing was
         // sent, so there is nothing to retry.
         UITestWalk.startSession()
         UITestWalk.tap("assist-button")
-        UITestSupport.waitFor("assist-error")
+        UITestWalk.waitFor("assist-error")
         XCTAssertTrue(
-            UITestSupport.waitForLabel("assist-error", contains: "OpenRouter API key"),
+            UITestWalk.waitForLabel("assist-error", contains: "OpenRouter API key"),
             "The error card does not ask for the key: \(UITestSupport.element("assist-error").label)"
         )
         XCTAssertEqual(app.alerts.count, 0, "The missing key raised an alert.")
@@ -180,13 +180,13 @@ final class CloudOnlyUITests: XCTestCase {
         // AC-IOS-118: saving shows "Key saved"; the key is never readable.
         UITestWalk.openAssistantLab()
         UITestWalk.saveKey(CloudOnlyUITests.openRouterKey, field: "openrouter-key", save: "save-openrouter-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("openrouter-key-state", equals: "Key saved"), "The key state does not read \"Key saved\".")
+        XCTAssertTrue(UITestWalk.waitForLabel("openrouter-key-state", equals: "Key saved"), "The key state does not read \"Key saved\".")
         XCTAssertTrue(UITestWalk.waitUntilDisabled(UITestSupport.element("save-openrouter-key")), "The field was not emptied by the save.")
         XCTAssertTrue(UITestWalk.nothingShows(CloudOnlyUITests.openRouterKey), "The saved key can be read on screen.")
         // AC-IOS-119: the check says that no inference request was made.
         UITestWalk.tap("verify-openrouter-key")
         XCTAssertTrue(
-            UITestWalk.anyLabelContaining("No inference request was made").waitForExistence(timeout: UITestSupport.timeout),
+            UITestWalk.anyLabelContaining("No inference request was made").appears(within: UITestSupport.timeout),
             "The key check did not report its result."
         )
         shot("t4-assistant-openrouter")
@@ -196,20 +196,20 @@ final class CloudOnlyUITests: XCTestCase {
         UITestWalk.openTranscription()
         UITestWalk.selectProvider("provider-voz")
         UITestWalk.openTab("Live")
-        UITestSupport.waitFor("download-model")
-        XCTAssertTrue(UITestWalk.anyLabelled("OpenRouter direct").waitForExistence(timeout: UITestSupport.timeout), "Home does not read \"OpenRouter direct\".")
+        UITestWalk.waitFor("download-model")
+        XCTAssertTrue(UITestWalk.anyLabelled("OpenRouter direct").appears(within: UITestSupport.timeout), "Home does not read \"OpenRouter direct\".")
         shot("t4-home-openrouter-direct")
 
         // AC-IOS-121: key and model are still there after a relaunch.
         app = UITestWalk.launchToHome(["-openrouter-persistence-test", "-pc-offline"])
-        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").waitForExistence(timeout: UITestSupport.timeout), "The answer service did not survive the relaunch.")
+        XCTAssertTrue(UITestWalk.anyLabelled("Cloud direct · no PC").appears(within: UITestSupport.timeout), "The answer service did not survive the relaunch.")
         UITestWalk.openAssistantLab()
         XCTAssertTrue(
-            UITestSupport.waitUntilSelected(UITestSupport.element("assistant-provider-openrouter")),
+            UITestWalk.waitUntilSelected(UITestSupport.element("assistant-provider-openrouter")),
             "OpenRouter is not the selected service after the relaunch."
         )
         XCTAssertTrue(UITestWalk.waitForText("selected-assistant-model", equals: "test/direct"), "The chosen model did not survive the relaunch.")
-        XCTAssertTrue(UITestSupport.waitForLabel("openrouter-key-state", equals: "Key saved"), "The key did not survive the relaunch.")
+        XCTAssertTrue(UITestWalk.waitForLabel("openrouter-key-state", equals: "Key saved"), "The key did not survive the relaunch.")
         XCTAssertTrue(UITestWalk.nothingShows(CloudOnlyUITests.openRouterKey), "The saved key can be read after the relaunch.")
         UITestWalk.back()
 
@@ -229,7 +229,7 @@ final class CloudOnlyUITests: XCTestCase {
         // gave it. (The fixture summary would rename it at once.)
         UITestWalk.openTab("History")
         XCTAssertTrue(
-            UITestWalk.historyRow("1 transcript segments · 3 assists").waitForExistence(timeout: UITestSupport.timeout),
+            UITestWalk.historyRow("1 transcript segments · 3 assists").appears(within: UITestSupport.timeout),
             "History does not list the conversation."
         )
         XCTAssertTrue(UITestWalk.anyLabelContaining("What is the main advantage of local").exists, "The conversation lost its own title.")
@@ -242,7 +242,7 @@ final class CloudOnlyUITests: XCTestCase {
         // The button is low on the screen; the scroll brings it clear of the tab bar.
         app.swipeUp()
         UITestWalk.tap("remove-openrouter-key")
-        XCTAssertTrue(UITestSupport.waitForLabel("openrouter-key-state", equals: "No key saved"), "The key state does not read \"No key saved\" after the removal.")
+        XCTAssertTrue(UITestWalk.waitForLabel("openrouter-key-state", equals: "No key saved"), "The key state does not read \"No key saved\" after the removal.")
         shot("t4-openrouter-key-removed")
     }
 

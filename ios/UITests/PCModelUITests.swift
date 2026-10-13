@@ -21,15 +21,15 @@ final class PCModelUITests: XCTestCase {
         // AC-IOS-093: five providers.
         UITestWalk.tap("speech-provider")
         for identifier in ["provider-meta", "provider-nemotron", "provider-qwen3", "provider-voz", "provider-parakeet"] {
-            XCTAssertTrue(UITestSupport.element(identifier).waitForExistence(timeout: UITestSupport.timeout), "\"\(identifier)\" is not listed.")
+            XCTAssertTrue(UITestSupport.element(identifier).appears(within: UITestSupport.timeout), "\"\(identifier)\" is not listed.")
         }
-        XCTAssertTrue(UITestSupport.waitUntilSelected(UITestSupport.element("provider-meta")), "Meta is not the selected provider.")
+        XCTAssertTrue(UITestWalk.waitUntilSelected(UITestSupport.element("provider-meta")), "Meta is not the selected provider.")
         shot("t5-transcription-meta")
 
         // AC-IOS-093 and 097: the choice applies at once, on this screen, and brings the PC speech model row.
         UITestWalk.selectProvider("provider-nemotron")
         XCTAssertFalse(UITestSupport.element("provider-meta").isSelected, "Meta stayed selected.")
-        XCTAssertTrue(UITestWalk.button("PC speech model").waitForExistence(timeout: UITestSupport.timeout), "There is no PC speech model row for a PC provider.")
+        XCTAssertTrue(UITestWalk.button("PC speech model").appears(within: UITestSupport.timeout), "There is no PC speech model row for a PC provider.")
         XCTAssertFalse(UITestSupport.element("meta-key-settings").exists, "The Meta API key row stayed for a PC provider.")
         shot("t5-transcription-pc-provider")
 
@@ -44,9 +44,9 @@ final class PCModelUITests: XCTestCase {
         // Back on Settings the provider row names the choice, and the PC speech model row is there.
         UITestWalk.back()
         UITestWalk.back()
-        UITestSupport.waitFor("speech-provider")
+        UITestWalk.waitFor("speech-provider")
         XCTAssertTrue(UITestWalk.waitForValue("speech-provider", equals: "Qwen3 1.7B · PC"), "Settings does not name the chosen provider.")
-        XCTAssertTrue(UITestWalk.button("PC speech model").waitForExistence(timeout: UITestSupport.timeout), "Settings has no PC speech model row.")
+        XCTAssertTrue(UITestWalk.button("PC speech model").appears(within: UITestSupport.timeout), "Settings has no PC speech model row.")
         XCTAssertFalse(UITestSupport.element("meta-key-settings").exists, "Settings kept the Meta API key row.")
         XCTAssertEqual(app.alerts.count, 0, "An alert appeared.")
         shot("t5-settings-pc-provider")
@@ -64,7 +64,7 @@ final class PCModelUITests: XCTestCase {
         UITestWalk.tapStartPCModel()
         XCTAssertTrue(UITestWalk.waitForText("pc-model-state", equals: "Error", timeout: 30), "The state does not read \"Error\".")
         XCTAssertTrue(
-            UITestSupport.waitForLabel("pc-model-message", contains: "Docker Desktop"),
+            UITestWalk.waitForLabel("pc-model-message", contains: "Docker Desktop"),
             "The PC's message is not shown: \(UITestSupport.element("pc-model-message").label)"
         )
         XCTAssertTrue(UITestWalk.waitUntilEnabled(UITestSupport.element("start-pc-model")), "\"Start model\" is not enabled after a failed start.")
@@ -72,14 +72,14 @@ final class PCModelUITests: XCTestCase {
 
         // AC-IOS-014: Home reads "Error" and Start is disabled.
         UITestWalk.openTab("Live")
-        UITestSupport.waitFor("start-session")
-        XCTAssertTrue(UITestSupport.waitForLabel("home-pc-model-state", contains: "Error"), "Home does not read \"Error\".")
+        UITestWalk.waitFor("start-session")
+        XCTAssertTrue(UITestWalk.waitForLabel("home-pc-model-state", contains: "Error"), "Home does not read \"Error\".")
         XCTAssertTrue(UITestWalk.waitUntilDisabled(UITestSupport.element("start-session")), "Start is enabled after a failed model start.")
         shot("t6-home-error")
 
         // The retry is taken: the start runs again and ends in the same error.
         UITestWalk.openTab("Settings")
-        let start = UITestSupport.waitFor("start-pc-model")
+        let start = UITestWalk.waitFor("start-pc-model")
         XCTAssertTrue(UITestWalk.waitUntilEnabled(start), "\"Start model\" is not enabled for the retry.")
         start.tap()
         XCTAssertTrue(UITestWalk.waitForText("pc-model-state", equals: "Error", timeout: 30), "The retry did not end in \"Error\".")
@@ -98,34 +98,34 @@ final class PCModelUITests: XCTestCase {
 
         // AC-IOS-010: a streaming provider never offers the download.
         UITestWalk.openTab("Live")
-        UITestSupport.waitFor("start-session")
+        UITestWalk.waitFor("start-session")
         XCTAssertTrue(UITestWalk.waitForText("home-pc-model-state", equals: "Ready"), "Home does not read \"Ready\".")
         XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a model download for a PC provider.")
         UITestWalk.startSession()
 
         // AC-IOS-031: no cost for a PC provider.
-        XCTAssertTrue(UITestWalk.sessionState("Listening").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Listening\".")
+        XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\".")
         XCTAssertFalse(UITestSupport.element("live-transcription-cost").exists, "A PC provider shows a cost.")
         XCTAssertFalse(UITestWalk.anyLabelContaining("USD").exists, "A PC provider shows a cost.")
         shot("t8-live-pc-speech")
 
         // AC-IOS-039: Pause, Resume, Pause.
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Paused").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Paused\".")
+        XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\".")
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Listening").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Listening\" after Resume.")
+        XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\" after Resume.")
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Paused").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Paused\" again.")
+        XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\" again.")
         XCTAssertFalse(UITestSupport.element("live-transcription-cost").exists, "A paused PC session shows a cost.")
 
         // AC-IOS-077: Stop while paused ends the session normally.
         UITestWalk.stopSession()
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: UITestSupport.timeout), "The tabs did not come back.")
+        XCTAssertTrue(app.tabBars.firstMatch.appears(within: UITestSupport.timeout), "The tabs did not come back.")
         XCTAssertEqual(app.alerts.count, 0, "Stopping while paused raised an alert.")
 
         // AC-IOS-081: History reads "… · Local", with no cost.
         UITestWalk.openTab("History")
-        let local = UITestSupport.waitFor("history-local-transcription")
+        let local = UITestWalk.waitFor("history-local-transcription")
         let label = UITestWalk.text(of: local)
         XCTAssertTrue(label.hasSuffix("· Local"), "The History row reads \"\(label)\".")
         XCTAssertFalse(label.contains("$"), "The History row shows a currency sign: \"\(label)\".")
@@ -143,9 +143,9 @@ final class PCModelUITests: XCTestCase {
 
         // AC-IOS-011 and 013: Home has the PC speech model line; a stopped model keeps Start disabled.
         UITestWalk.openTab("Live")
-        let start = UITestSupport.waitFor("start-session")
-        XCTAssertTrue(UITestWalk.anyLabelled("PC speech model:").waitForExistence(timeout: UITestSupport.timeout), "Home has no PC speech model line.")
-        XCTAssertTrue(UITestSupport.waitForLabel("home-pc-model-state", contains: "Stopped"), "Home does not read \"Stopped\".")
+        let start = UITestWalk.waitFor("start-session")
+        XCTAssertTrue(UITestWalk.anyLabelled("PC speech model:").appears(within: UITestSupport.timeout), "Home has no PC speech model line.")
+        XCTAssertTrue(UITestWalk.waitForLabel("home-pc-model-state", contains: "Stopped"), "Home does not read \"Stopped\".")
         XCTAssertTrue(UITestWalk.waitUntilDisabled(start), "Start is enabled for a stopped model.")
         XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a model download for a PC provider.")
         shot("t9-home-stopped")
@@ -158,7 +158,7 @@ final class PCModelUITests: XCTestCase {
 
         // AC-IOS-012: "Loading" with Start disabled. Both are read from one snapshot, so that they belong
         // to the same moment.
-        XCTAssertTrue(UITestSupport.waitForLabel("home-pc-model-state", contains: "Loading", timeout: 6), "Home did not read \"Loading\" while the model started.")
+        XCTAssertTrue(UITestWalk.waitForLabel("home-pc-model-state", contains: "Loading", timeout: 6), "Home did not read \"Loading\" while the model started.")
         let loading = try app.snapshot()
         let label = UITestWalk.find("home-pc-model-state", in: loading)?.label ?? ""
         let startWhileLoading = UITestWalk.find("start-session", in: loading)
@@ -175,23 +175,23 @@ final class PCModelUITests: XCTestCase {
         XCTAssertTrue(UITestWalk.waitForText("home-pc-model-state", equals: "Ready", timeout: 30), "Home did not become \"Ready\" by itself.")
         XCTAssertTrue(UITestWalk.waitUntilEnabled(start), "Start did not become enabled when the model was ready.")
         XCTAssertTrue(UITestWalk.isOnScreen(start), "Start is not on screen.")
-        let transcription = UITestSupport.waitFor("transcription-settings")
+        let transcription = UITestWalk.waitFor("transcription-settings")
         XCTAssertTrue(UITestWalk.isOnScreen(transcription), "The transcription row is not on screen.")
         XCTAssertLessThanOrEqual(transcription.frame.maxY, start.frame.minY, "The transcription row is under Start.")
         shot("t9-home-ready")
         transcription.tap()
-        UITestSupport.waitFor("provider-nemotron")
+        UITestWalk.waitFor("provider-nemotron")
 
         // AC-IOS-013: after a stop Home reads "Stopped" and Start is disabled again.
         UITestWalk.openPCSpeechModel()
-        let stop = UITestSupport.waitFor("stop-pc-model")
+        let stop = UITestWalk.waitFor("stop-pc-model")
         XCTAssertTrue(UITestWalk.waitUntilEnabled(stop), "\"Stop model\" is not enabled for a ready model.")
         stop.tap()
         XCTAssertTrue(UITestWalk.waitForText("pc-model-state", equals: "Stopped", timeout: 30), "The model did not stop.")
         UITestWalk.back()
         UITestWalk.back()
-        UITestSupport.waitFor("start-session")
-        XCTAssertTrue(UITestSupport.waitForLabel("home-pc-model-state", contains: "Stopped"), "Home does not read \"Stopped\" after the stop.")
+        UITestWalk.waitFor("start-session")
+        XCTAssertTrue(UITestWalk.waitForLabel("home-pc-model-state", contains: "Stopped"), "Home does not read \"Stopped\" after the stop.")
         XCTAssertTrue(UITestWalk.waitUntilDisabled(start), "Start is enabled after the model was stopped.")
         shot("t9-home-stopped-again")
     }
@@ -207,8 +207,8 @@ final class PCModelUITests: XCTestCase {
     /// the two buttons checked in each state (AC-IOS-099, 100).
     @MainActor
     private func startAndStopTheModel(named title: String, picture: String) {
-        let start = UITestSupport.waitFor("start-pc-model")
-        let stop = UITestSupport.waitFor("stop-pc-model")
+        let start = UITestWalk.waitFor("start-pc-model")
+        let stop = UITestWalk.waitFor("stop-pc-model")
         XCTAssertTrue(UITestWalk.anyLabelled(title).exists, "The screen is not titled \"\(title)\".")
 
         XCTAssertTrue(UITestWalk.waitForText("pc-model-state", equals: "Stopped"), "\(title) is not reported stopped.")

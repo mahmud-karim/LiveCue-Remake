@@ -16,7 +16,7 @@ final class SettingsUITests: XCTestCase {
         let app = UITestWalk.launchToHome()
         UITestWalk.openSettings()
         // The first health check of the fixture relay turns the pairing row to "connected".
-        _ = UITestWalk.anyLabelled("Saved · connected").waitForExistence(timeout: UITestSupport.timeout)
+        _ = UITestWalk.anyLabelled("Saved · connected").appears(within: UITestSupport.timeout)
 
         // AC-IOS-089: with Meta, Settings says where the audio goes.
         XCTAssertTrue(
@@ -52,7 +52,7 @@ final class SettingsUITests: XCTestCase {
         UITestWalk.openSettings()
 
         // What an earlier run left in the field is removed first; the caret goes to the end of the text.
-        let field = UITestSupport.waitFor("assistant-instruction")
+        let field = UITestWalk.waitFor("assistant-instruction")
         let left = field.value as? String ?? ""
         let end = CGVector(dx: 0.9, dy: 0.9)
         if left.isEmpty || left == SettingsUITests.instructionPlaceholder {
@@ -69,11 +69,11 @@ final class SettingsUITests: XCTestCase {
 
         // AC-IOS-092: the keyboard's "Done" closes the keyboard.
         var done = UITestSupport.element("finish-instruction")
-        if !done.waitForExistence(timeout: 5) {
+        if !done.appears(within: 5) {
             UITestWalk.note("The keyboard's Done button is not found by \"finish-instruction\".")
             done = app.toolbars.buttons["Done"].firstMatch
         }
-        XCTAssertTrue(done.waitForExistence(timeout: 5), "The keyboard has no \"Done\".")
+        XCTAssertTrue(done.appears(within: 5), "The keyboard has no \"Done\".")
         done.tap()
         XCTAssertTrue(UITestWalk.waitUntilGone(app.keyboards.firstMatch), "The keyboard stayed after \"Done\".")
         XCTAssertTrue(UITestWalk.waitUntilGone(done), "\"Done\" stayed after it was pressed.")

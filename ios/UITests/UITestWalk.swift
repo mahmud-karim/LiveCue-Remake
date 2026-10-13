@@ -90,6 +90,49 @@ enum UITestWalk {
     }
 
     // MARK: - Waits
+    //
+    // Every wait here looks once before it waits. XCTest's own waits check for the first time after a
+    // second, and a walk through the app is hundreds of waits for something that is already there.
+
+    /// Waits for the element with this identifier and fails the test when it does not appear.
+    @MainActor @discardableResult
+    static func waitFor(
+        _ identifier: String,
+        timeout: TimeInterval = 15,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> XCUIElement {
+        let found = UITestSupport.element(identifier)
+        XCTAssertTrue(found.appears(within: timeout), "\"\(identifier)\" did not appear.", file: file, line: line)
+        return found
+    }
+
+    /// True once the element with this identifier has this label.
+    @MainActor
+    static func waitForLabel(_ identifier: String, equals label: String, timeout: TimeInterval = 15) -> Bool {
+        anyElement("identifier == %@ AND label == %@", identifier, label).appears(within: timeout)
+    }
+
+    /// True once the element with this identifier has a label that contains this text.
+    @MainActor
+    static func waitForLabel(_ identifier: String, contains text: String, timeout: TimeInterval = 15) -> Bool {
+        anyElement("identifier == %@ AND label CONTAINS %@", identifier, text).appears(within: timeout)
+    }
+
+    /// True once no element has this identifier.
+    @MainActor
+    static func waitForDisappearance(of identifier: String, timeout: TimeInterval = 15) -> Bool {
+        waitUntilGone(UITestSupport.element(identifier), timeout: timeout)
+    }
+
+    /// True once the element is the selected one of its group: a tab, a choice row.
+    @MainActor
+    static func waitUntilSelected(_ element: XCUIElement, timeout: TimeInterval = 15) -> Bool {
+        if element.exists && element.isSelected {
+            return true
+        }
+        return wait(for: element, toSatisfy: "exists == true AND isSelected == true", timeout: timeout)
+    }
 
     /// Waits until `format`, a predicate over the element, holds.
     @MainActor
@@ -97,9 +140,6 @@ enum UITestWalk {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: format), object: element)
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
-
-    // The three waits below look once before they wait: a predicate expectation takes about a second
-    // even when its condition already holds.
 
     @MainActor
     static func waitUntilEnabled(_ element: XCUIElement, timeout: TimeInterval = 15) -> Bool {
@@ -129,7 +169,7 @@ enum UITestWalk {
     @MainActor
     static func waitForText(_ identifier: String, equals text: String, timeout: TimeInterval = 15) -> Bool {
         anyElement("identifier == %@ AND (label == %@ OR value == %@)", identifier, text, text)
-            .waitForExistence(timeout: timeout)
+            .appears(within: timeout)
     }
 
     /// True once the element with this identifier has this accessibility value. A row that shows its
@@ -137,7 +177,7 @@ enum UITestWalk {
     @MainActor
     static func waitForValue(_ identifier: String, equals value: String, timeout: TimeInterval = 15) -> Bool {
         anyElement("identifier == %@ AND (value == %@ OR label CONTAINS %@)", identifier, value, value)
-            .waitForExistence(timeout: timeout)
+            .appears(within: timeout)
     }
 
     /// True once no tab bar is on screen.
@@ -156,28 +196,28 @@ enum UITestWalk {
         line: UInt = #line
     ) -> XCUIApplication {
         let app = UITestSupport.launch(arguments)
-        UITestSupport.waitFor("start-session", timeout: UITestSupport.launchTimeout, file: file, line: line)
+        waitFor("start-session", timeout: UITestSupport.launchTimeout, file: file, line: line)
         return app
     }
 
     /// Waits for the element with this identifier and taps it.
     @MainActor
     static func tap(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
-        UITestSupport.waitFor(identifier, file: file, line: line).tap()
+        waitFor(identifier, file: file, line: line).tap()
     }
 
     /// Waits for the button with this label and taps it.
     @MainActor
     static func tapButton(_ label: String, file: StaticString = #filePath, line: UInt = #line) {
         let found = button(label)
-        XCTAssertTrue(found.waitForExistence(timeout: UITestSupport.timeout), "There is no \"\(label)\" button.", file: file, line: line)
+        XCTAssertTrue(found.appears(within: UITestSupport.timeout), "There is no \"\(label)\" button.", file: file, line: line)
         found.tap()
     }
 
     @MainActor
     static func openTab(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         let anyButton = app.buttons[title].firstMatch
-        XCTAssertTrue(anyButton.waitForExistence(timeout: UITestSupport.timeout), "There is no \(title) tab.", file: file, line: line)
+        XCTAssertTrue(anyButton.appears(within: UITestSupport.timeout), "There is no \(title) tab.", file: file, line: line)
         UITestSupport.tabButton(title).tap()
     }
 
@@ -185,14 +225,14 @@ enum UITestWalk {
     @MainActor
     static func back(file: StaticString = #filePath, line: UInt = #line) {
         let button = app.navigationBars.buttons.firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: UITestSupport.timeout), "There is no back button.", file: file, line: line)
+        XCTAssertTrue(button.appears(within: UITestSupport.timeout), "There is no back button.", file: file, line: line)
         button.tap()
     }
 
     @MainActor
     static func openSettings(file: StaticString = #filePath, line: UInt = #line) {
         openTab("Settings", file: file, line: line)
-        UITestSupport.waitFor("speech-provider", file: file, line: line)
+        waitFor("speech-provider", file: file, line: line)
     }
 
     /// Settings, then the Transcription screen with its five providers.
@@ -200,7 +240,7 @@ enum UITestWalk {
     static func openTranscription(file: StaticString = #filePath, line: UInt = #line) {
         openSettings(file: file, line: line)
         tap("speech-provider", file: file, line: line)
-        UITestSupport.waitFor("provider-meta", file: file, line: line)
+        waitFor("provider-meta", file: file, line: line)
     }
 
     /// Chooses a provider on the Transcription screen and waits until its row is the selected one.
@@ -208,7 +248,7 @@ enum UITestWalk {
     static func selectProvider(_ identifier: String, file: StaticString = #filePath, line: UInt = #line) {
         tap(identifier, file: file, line: line)
         XCTAssertTrue(
-            UITestSupport.waitUntilSelected(UITestSupport.element(identifier)),
+            waitUntilSelected(UITestSupport.element(identifier)),
             "\"\(identifier)\" did not become the selected provider.",
             file: file,
             line: line
@@ -219,7 +259,7 @@ enum UITestWalk {
     @MainActor
     static func openAssistantLab(file: StaticString = #filePath, line: UInt = #line) {
         tap("assistant-lab", file: file, line: line)
-        UITestSupport.waitFor("assistant-provider", file: file, line: line)
+        waitFor("assistant-provider", file: file, line: line)
     }
 
     // MARK: - PC speech model
@@ -228,14 +268,14 @@ enum UITestWalk {
     @MainActor
     static func openPCSpeechModel(file: StaticString = #filePath, line: UInt = #line) {
         tapButton("PC speech model", file: file, line: line)
-        UITestSupport.waitFor("pc-model-state", file: file, line: line)
+        waitFor("pc-model-state", file: file, line: line)
     }
 
     /// On the PC speech model screen: "Start model", once the status is known and the control is enabled.
     @MainActor
     static func tapStartPCModel(file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(waitForText("pc-model-state", equals: "Stopped"), "The PC model is not reported stopped.", file: file, line: line)
-        let start = UITestSupport.waitFor("start-pc-model", file: file, line: line)
+        let start = waitFor("start-pc-model", file: file, line: line)
         XCTAssertTrue(waitUntilEnabled(start), "\"Start model\" is not enabled for a stopped model.", file: file, line: line)
         start.tap()
     }
@@ -245,19 +285,19 @@ enum UITestWalk {
     /// From Home: taps Start and waits for the live screen.
     @MainActor
     static func startSession(file: StaticString = #filePath, line: UInt = #line) {
-        let start = UITestSupport.waitFor("start-session", timeout: UITestSupport.launchTimeout, file: file, line: line)
+        let start = waitFor("start-session", timeout: UITestSupport.launchTimeout, file: file, line: line)
         XCTAssertTrue(waitUntilEnabled(start), "Start is not enabled.", file: file, line: line)
         start.tap()
-        UITestSupport.waitFor("assist-button", file: file, line: line)
+        waitFor("assist-button", file: file, line: line)
     }
 
     /// Taps Stop and waits for Home.
     @MainActor
     static func stopSession(file: StaticString = #filePath, line: UInt = #line) {
-        let stop = UITestSupport.waitFor("end-session", file: file, line: line)
+        let stop = waitFor("end-session", file: file, line: line)
         XCTAssertTrue(waitUntilEnabled(stop), "Stop is not enabled.", file: file, line: line)
         stop.tap()
-        UITestSupport.waitFor("start-session", file: file, line: line)
+        waitFor("start-session", file: file, line: line)
     }
 
     /// The element that reads the session's state: its label is the chip text, its value the elapsed
@@ -273,7 +313,7 @@ enum UITestWalk {
         var last = sessionState(state).value as? String ?? ""
         for _ in 0..<times {
             let changed = anyElement("label == %@ AND identifier != %@ AND value != %@", state, "transcriber-status", last)
-            guard changed.waitForExistence(timeout: 5) else {
+            guard changed.appears(within: 5) else {
                 return false
             }
             last = changed.value as? String ?? ""
@@ -294,22 +334,22 @@ enum UITestWalk {
     /// Taps Assist and waits until the session shows `answers` answers and the control reads "Assist" again.
     @MainActor
     static func assist(reaching answers: Int, file: StaticString = #filePath, line: UInt = #line) {
-        let button = UITestSupport.waitFor("assist-button", file: file, line: line)
-        XCTAssertTrue(UITestSupport.waitForLabel("assist-button", equals: "Assist"), "Assist is still busy.", file: file, line: line)
+        let button = waitFor("assist-button", file: file, line: line)
+        XCTAssertTrue(waitForLabel("assist-button", equals: "Assist"), "Assist is still busy.", file: file, line: line)
         XCTAssertTrue(waitUntilEnabled(button), "Assist is not enabled.", file: file, line: line)
         button.tap()
         if answers <= 1 {
-            UITestSupport.waitFor("assistant-answer", file: file, line: line)
+            waitFor("assistant-answer", file: file, line: line)
         } else {
             let earlier = app.descendants(matching: .any).matching(identifier: "previous-assistant-answer")
             XCTAssertTrue(
-                earlier.element(boundBy: answers - 2).waitForExistence(timeout: UITestSupport.timeout),
+                earlier.element(boundBy: answers - 2).appears(within: UITestSupport.timeout),
                 "Answer \(answers) did not arrive.",
                 file: file,
                 line: line
             )
         }
-        XCTAssertTrue(UITestSupport.waitForLabel("assist-button", equals: "Assist"), "Assist did not finish.", file: file, line: line)
+        XCTAssertTrue(waitForLabel("assist-button", equals: "Assist"), "Assist did not finish.", file: file, line: line)
     }
 
     /// Opens the timing of the latest answer.
@@ -317,14 +357,14 @@ enum UITestWalk {
     static func openLatestTiming(file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertFalse(UITestSupport.element("response-timing").exists, "The timing of a new answer starts closed.", file: file, line: line)
         tap("timing-disclosure", file: file, line: line)
-        UITestSupport.waitFor("response-timing", file: file, line: line)
+        waitFor("response-timing", file: file, line: line)
     }
 
     /// Closes the timing of the latest answer, so that what is below it comes back into reach.
     @MainActor
     static func closeLatestTiming(file: StaticString = #filePath, line: UInt = #line) {
         tap("timing-disclosure", file: file, line: line)
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "response-timing"), "The timing did not close.", file: file, line: line)
+        XCTAssertTrue(waitForDisappearance(of: "response-timing"), "The timing did not close.", file: file, line: line)
     }
 
     // MARK: - Alerts
@@ -333,9 +373,9 @@ enum UITestWalk {
     @MainActor @discardableResult
     static func waitForAlert(containing text: String, file: StaticString = #filePath, line: UInt = #line) -> XCUIElement {
         let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: UITestSupport.timeout), "No alert appeared.", file: file, line: line)
+        XCTAssertTrue(alert.appears(within: UITestSupport.timeout), "No alert appeared.", file: file, line: line)
         let message = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
-        XCTAssertTrue(message.waitForExistence(timeout: 5), "The alert does not mention \"\(text)\".", file: file, line: line)
+        XCTAssertTrue(message.appears(within: 5), "The alert does not mention \"\(text)\".", file: file, line: line)
         return alert
     }
 
@@ -359,10 +399,10 @@ enum UITestWalk {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let field = UITestSupport.waitFor(identifier, file: file, line: line)
+        let field = waitFor(identifier, file: file, line: line)
         field.coordinate(withNormalizedOffset: offset).tap()
         // A simulator with a hardware keyboard shows none on screen, so this only gives focus time to settle.
-        _ = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        _ = app.keyboards.firstMatch.appears(within: 5)
         app.typeText(text)
     }
 
@@ -376,7 +416,7 @@ enum UITestWalk {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let saveButton = UITestSupport.waitFor(save, file: file, line: line)
+        let saveButton = waitFor(save, file: file, line: line)
         enter(key, into: field, file: file, line: line)
         if !waitUntilEnabled(saveButton, timeout: 5) {
             note("The key did not reach \"\(field)\" at the first try.")
@@ -418,5 +458,13 @@ enum UITestWalk {
             }
         }
         return nil
+    }
+}
+
+extension XCUIElement {
+    /// `waitForExistence`, with a look first: true at once when the element is already there.
+    @MainActor
+    func appears(within timeout: TimeInterval) -> Bool {
+        exists || waitForExistence(timeout: timeout)
     }
 }

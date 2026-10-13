@@ -29,17 +29,17 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-026: a tap shows every committed segment, a second tap hides them, and Stop stays usable.
         UITestWalk.tap("expand-transcript")
-        UITestSupport.waitFor("live-transcript")
+        UITestWalk.waitFor("live-transcript")
         XCTAssertTrue(
-            UITestWalk.anyShowing(UITestWalk.segment).waitForExistence(timeout: UITestSupport.timeout),
+            UITestWalk.anyShowing(UITestWalk.segment).appears(within: UITestSupport.timeout),
             "The expanded transcript does not list the committed segment."
         )
         XCTAssertFalse(UITestSupport.element("transcript-preview").exists, "The preview stays beside the expanded transcript.")
         XCTAssertTrue(UITestSupport.element("end-session").isEnabled, "Stop cannot be used while the transcript is expanded.")
         shot("t1-transcript-expanded")
         UITestWalk.tap("expand-transcript")
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "live-transcript"), "The transcript did not collapse.")
-        UITestSupport.waitFor("transcript-preview")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "live-transcript"), "The transcript did not collapse.")
+        UITestWalk.waitFor("transcript-preview")
         XCTAssertTrue(UITestSupport.element("end-session").isEnabled, "Stop cannot be used after the transcript collapsed.")
 
         // AC-IOS-049: the answer is a card in the feed; no alert, no sheet, nothing to dismiss.
@@ -80,8 +80,8 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-074: Stop returns to the tabs with Home and Start.
         UITestWalk.stopSession()
-        XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: UITestSupport.timeout), "The tabs did not come back.")
-        XCTAssertTrue(UITestSupport.waitUntilSelected(UITestSupport.tabButton("Live")), "Home is not the selected tab after Stop.")
+        XCTAssertTrue(app.tabBars.firstMatch.appears(within: UITestSupport.timeout), "The tabs did not come back.")
+        XCTAssertTrue(UITestWalk.waitUntilSelected(UITestSupport.tabButton("Live")), "Home is not the selected tab after Stop.")
         XCTAssertTrue(UITestWalk.isOnScreen(UITestSupport.element("start-session")), "Start is not on screen after Stop.")
         shot("t1-home-after-stop")
     }
@@ -97,12 +97,12 @@ final class ConversationUITests: XCTestCase {
         XCTAssertFalse(UITestSupport.element("retry-same-text").exists, "A same-text retry is offered before any Assist.")
 
         UITestWalk.tap("assist-button")
-        UITestSupport.waitFor("assist-error")
-        XCTAssertTrue(UITestSupport.waitForLabel("assist-button", equals: "Assist"), "Assist did not finish.")
+        UITestWalk.waitFor("assist-error")
+        XCTAssertTrue(UITestWalk.waitForLabel("assist-button", equals: "Assist"), "Assist did not finish.")
 
         // AC-IOS-057: an inline error, the partial text labelled as incomplete, no answer, no alert, no sheet.
         XCTAssertTrue(
-            UITestSupport.waitForLabel("assist-error", contains: "OpenRouter could not complete this request"),
+            UITestWalk.waitForLabel("assist-error", contains: "OpenRouter could not complete this request"),
             "The error card does not show the reason: \(UITestSupport.element("assist-error").label)"
         )
         XCTAssertTrue(
@@ -121,10 +121,10 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-058: the retry succeeds; error and partial text go, one answer is left.
         UITestWalk.tap("retry-failed-assist")
-        UITestSupport.waitFor("assistant-answer")
-        XCTAssertTrue(UITestSupport.waitForLabel("assist-button", equals: "Assist"), "The retry did not finish.")
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "assist-error"), "The error stayed after a successful retry.")
-        XCTAssertTrue(UITestSupport.waitForDisappearance(of: "streaming-answer"), "The partial text stayed after a successful retry.")
+        UITestWalk.waitFor("assistant-answer")
+        XCTAssertTrue(UITestWalk.waitForLabel("assist-button", equals: "Assist"), "The retry did not finish.")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "assist-error"), "The error stayed after a successful retry.")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "streaming-answer"), "The partial text stayed after a successful retry.")
         XCTAssertFalse(UITestWalk.anyLabelled("Incomplete answer").exists, "\"Incomplete answer\" stayed after a successful retry.")
         XCTAssertEqual(UITestWalk.count(of: "assistant-answer"), 1, "Exactly one answer exists after the retry.")
         XCTAssertEqual(UITestWalk.count(of: "previous-assistant-answer"), 0, "The retry left an earlier answer.")
@@ -144,12 +144,12 @@ final class ConversationUITests: XCTestCase {
         // AC-IOS-001: exactly three tabs, Live selected.
         let titles = app.tabBars.buttons.allElementsBoundByIndex.map(\.label)
         XCTAssertEqual(titles.sorted(), ["History", "Live", "Settings"], "The tab bar has exactly Live, History and Settings.")
-        XCTAssertTrue(UITestSupport.waitUntilSelected(UITestSupport.tabButton("Live")), "Live is not the selected tab at launch.")
+        XCTAssertTrue(UITestWalk.waitUntilSelected(UITestSupport.tabButton("Live")), "Live is not the selected tab at launch.")
 
         // AC-IOS-002: the pairing row, the assistant row and Start are on screen without scrolling, the
         // rows above Start and Start above the tab bar.
-        let pairing = UITestSupport.waitFor("pair-pc")
-        let assistant = UITestSupport.waitFor("assistant-lab")
+        let pairing = UITestWalk.waitFor("pair-pc")
+        let assistant = UITestWalk.waitFor("assistant-lab")
         let start = UITestSupport.element("start-session")
         for element in [pairing, assistant, start] {
             XCTAssertTrue(UITestWalk.isOnScreen(element), "\"\(element.identifier)\" is not on screen: \(element.frame)")
@@ -167,7 +167,7 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-002, continued: both rows take a tap where they are.
         pairing.tap()
-        UITestSupport.waitFor("saved-pc-state")
+        UITestWalk.waitFor("saved-pc-state")
         UITestWalk.back()
         UITestWalk.openAssistantLab()
         UITestWalk.back()
@@ -175,16 +175,16 @@ final class ConversationUITests: XCTestCase {
         UITestWalk.startSession()
 
         // AC-IOS-031 and 032: Meta shows a cost, and it leaves zero while audio is streaming.
-        UITestSupport.waitFor("live-transcription-cost")
+        UITestWalk.waitFor("live-transcription-cost")
         let movedCost = UITestWalk.anyElement(
             "identifier == %@ AND label != %@ AND label ENDSWITH %@",
             "live-transcription-cost",
             "$0.00000 USD",
             " USD"
         )
-        XCTAssertTrue(movedCost.waitForExistence(timeout: 5), "The cost did not leave $0.00000 USD within 5 seconds.")
+        XCTAssertTrue(movedCost.appears(within: 5), "The cost did not leave $0.00000 USD within 5 seconds.")
         // AC-IOS-029: the state reads "Listening".
-        XCTAssertTrue(UITestWalk.sessionState("Listening").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Listening\".")
+        XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\".")
         // AC-IOS-034 and 035: no instruction field and no tab bar on the live screen.
         XCTAssertFalse(UITestSupport.element("assistant-instruction").exists, "The live screen has the instruction field.")
         XCTAssertEqual(app.textFields.count + app.textViews.count, 0, "The live screen has a text field.")
@@ -193,8 +193,8 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-039 and 029: Pause shows "Paused".
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Paused").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Paused\".")
-        XCTAssertTrue(UITestSupport.waitForLabel("pause-session", equals: "Resume"), "The pause control does not offer Resume.")
+        XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\".")
+        XCTAssertTrue(UITestWalk.waitForLabel("pause-session", equals: "Resume"), "The pause control does not offer Resume.")
         XCTAssertFalse(app.tabBars.firstMatch.exists, "The tab bar is there while paused.")
         // AC-IOS-033: the cost stands still while the elapsed time goes on.
         let pausedCost = UITestSupport.element("live-transcription-cost").label
@@ -204,22 +204,22 @@ final class ConversationUITests: XCTestCase {
 
         // AC-IOS-039: Resume shows "Listening" again, and the cost moves again.
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Listening").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Listening\" after Resume.")
+        XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\" after Resume.")
         let resumedCost = UITestWalk.anyElement("identifier == %@ AND label != %@", "live-transcription-cost", pausedCost)
-        XCTAssertTrue(resumedCost.waitForExistence(timeout: 10), "The cost did not move after Resume.")
+        XCTAssertTrue(resumedCost.appears(within: 10), "The cost did not move after Resume.")
 
         // AC-IOS-080: the cost the live screen shows at the end is the cost of the History row. The
         // session is paused first, so that the last cost can be read.
         UITestWalk.tap("pause-session")
-        XCTAssertTrue(UITestWalk.sessionState("Paused").waitForExistence(timeout: UITestSupport.timeout), "The state does not read \"Paused\" again.")
+        XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\" again.")
         let finalCost = UITestSupport.element("live-transcription-cost").label
         XCTAssertTrue(finalCost.hasSuffix(" USD") && finalCost != "$0.00000 USD", "The final cost reads \"\(finalCost)\".")
         UITestWalk.stopSession()
 
         UITestWalk.openTab("History")
-        UITestSupport.waitFor("history-transcription-cost")
+        UITestWalk.waitFor("history-transcription-cost")
         XCTAssertTrue(
-            UITestSupport.waitForLabel("history-transcription-cost", contains: finalCost),
+            UITestWalk.waitForLabel("history-transcription-cost", contains: finalCost),
             "History shows \"\(UITestSupport.element("history-transcription-cost").label)\", the live screen ended at \(finalCost)."
         )
         shot("t16-history")
@@ -240,6 +240,6 @@ final class ConversationUITests: XCTestCase {
             return scrollView
         }
         UITestWalk.note("\"assistant-feed\" is not a scroll view.")
-        return UITestSupport.waitFor("assistant-feed")
+        return UITestWalk.waitFor("assistant-feed")
     }
 }

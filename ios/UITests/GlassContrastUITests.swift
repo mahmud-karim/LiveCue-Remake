@@ -19,7 +19,7 @@ final class GlassContrastUITests: XCTestCase {
         }
 
         UITestWalk.launchToHome()
-        let control = UITestSupport.waitFor("start-session")
+        let control = UITestWalk.waitFor("start-session")
         XCTAssertTrue(UITestWalk.waitUntilEnabled(control), "Start is not enabled, so it does not show its fill.")
         UITestSupport.attachScreenshot(named: "glass-home", to: self)
 
