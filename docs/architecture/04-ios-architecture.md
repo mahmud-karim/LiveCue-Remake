@@ -4011,7 +4011,8 @@ in another form than the statement's own words, this is the form:
 | 019, 051 "tappable" | The control exists, is enabled and lies on screen; the walk then taps it. `isHittable` is not used: on iOS 26 it is not reliable for every control |
 | 002 | The pairing row, the assistant row and Start lie on screen, the rows above Start and Start above the tab buttons; both rows are then tapped where they are |
 | 029, 039 | The state element has no identifier. It is found by its label, the chip text, among the elements that are not `transcriber-status`; its value is the elapsed time |
-| 033 | The cost is read when "Paused" appears and again after the elapsed time changed twice |
+| 033 | The cost is read when "Paused" appears. A change of it is then waited for during three seconds, and none may come |
+| 039, 081 with a PC provider | A fixture stream reports its first second of audio after one second. A stream that is paused or stopped before that has no usage to show, and History then reads "… · Local · incomplete". The test leaves each stream listening for 2.5 s before it pauses, during which the session must not pause by itself |
 | 080 | The session is paused before Stop, so that the last cost can be read; the History row must contain that text |
 | 061 | T2: no retry control exists before the first Assist; "Retry same text" is enabled after the failure and the same-text retry after the answer. T4: after an Assist that sent nothing (no OpenRouter key) "Retry same text" is shown disabled. That both are disabled while an Assist runs, 0.4 s in the fixture, is left to the unit tests of 6.2 |
 | 012 | "Loading" and the disabled Start are read from one snapshot of the app, so that they belong to the same moment |

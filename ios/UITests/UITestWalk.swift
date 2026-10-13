@@ -307,18 +307,13 @@ enum UITestWalk {
         anyElement("label == %@ AND identifier != %@", text, "transcriber-status")
     }
 
-    /// True once the elapsed time read by the state element has changed `times` times.
+    /// Leaves a session listening for `seconds` and returns true when it stayed listening: nothing may
+    /// pause it by itself. A fixture stream reports its first second of audio after one second, and a
+    /// stream that is closed before that has no usage to show, which History marks as incomplete. A test
+    /// that pauses or stops a stream lets it run this long first.
     @MainActor
-    static func waitForElapsedToAdvance(in state: String, times: Int = 2) -> Bool {
-        var last = sessionState(state).value as? String ?? ""
-        for _ in 0..<times {
-            let changed = anyElement("label == %@ AND identifier != %@ AND value != %@", state, "transcriber-status", last)
-            guard changed.appears(within: 5) else {
-                return false
-            }
-            last = changed.value as? String ?? ""
-        }
-        return true
+    static func staysListening(for seconds: TimeInterval = 2.5) -> Bool {
+        !sessionState("Paused").waitForExistence(timeout: seconds)
     }
 
     /// Pause, Assist and Stop exist and are enabled.

@@ -109,11 +109,14 @@ final class PCModelUITests: XCTestCase {
         XCTAssertFalse(UITestWalk.anyLabelContaining("USD").exists, "A PC provider shows a cost.")
         shot("t8-live-pc-speech")
 
-        // AC-IOS-039: Pause, Resume, Pause.
+        // AC-IOS-039: Pause, Resume, Pause. Each stream is left running for more than a second before it
+        // is closed, so that it has usage to show.
+        XCTAssertTrue(UITestWalk.staysListening(), "The session paused by itself.")
         UITestWalk.tap("pause-session")
         XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\".")
         UITestWalk.tap("pause-session")
         XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\" after Resume.")
+        XCTAssertTrue(UITestWalk.staysListening(), "The session paused by itself after Resume.")
         UITestWalk.tap("pause-session")
         XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\" again.")
         XCTAssertFalse(UITestSupport.element("live-transcription-cost").exists, "A paused PC session shows a cost.")

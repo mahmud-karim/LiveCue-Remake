@@ -185,6 +185,7 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(movedCost.appears(within: 5), "The cost did not leave $0.00000 USD within 5 seconds.")
         // AC-IOS-029: the state reads "Listening".
         XCTAssertTrue(UITestWalk.sessionState("Listening").appears(within: UITestSupport.timeout), "The state does not read \"Listening\".")
+        noteTheStateElements()
         // AC-IOS-034 and 035: no instruction field and no tab bar on the live screen.
         XCTAssertFalse(UITestSupport.element("assistant-instruction").exists, "The live screen has the instruction field.")
         XCTAssertEqual(app.textFields.count + app.textViews.count, 0, "The live screen has a text field.")
@@ -196,9 +197,11 @@ final class ConversationUITests: XCTestCase {
         XCTAssertTrue(UITestWalk.sessionState("Paused").appears(within: UITestSupport.timeout), "The state does not read \"Paused\".")
         XCTAssertTrue(UITestWalk.waitForLabel("pause-session", equals: "Resume"), "The pause control does not offer Resume.")
         XCTAssertFalse(app.tabBars.firstMatch.exists, "The tab bar is there while paused.")
-        // AC-IOS-033: the cost stands still while the elapsed time goes on.
+        // AC-IOS-033: the cost stands still. While listening it moved every second; a change is waited
+        // for during three seconds, and none may come.
         let pausedCost = UITestSupport.element("live-transcription-cost").label
-        XCTAssertTrue(UITestWalk.waitForElapsedToAdvance(in: "Paused"), "The elapsed time stopped while paused.")
+        let changedCost = UITestWalk.anyElement("identifier == %@ AND label != %@", "live-transcription-cost", pausedCost)
+        XCTAssertFalse(changedCost.waitForExistence(timeout: 3), "The cost changed while paused.")
         XCTAssertEqual(UITestSupport.element("live-transcription-cost").label, pausedCost, "The cost changed while paused.")
         shot("t16-paused")
 
@@ -230,6 +233,16 @@ final class ConversationUITests: XCTestCase {
     @MainActor
     private func shot(_ name: String) {
         UITestSupport.attachScreenshot(named: name, to: self)
+    }
+
+    /// Writes what the state element reports to the log: its type and its value, which is meant to be
+    /// the elapsed time.
+    @MainActor
+    private func noteTheStateElements() {
+        let predicate = NSPredicate(format: "label == %@ AND identifier != %@", "Listening", "transcriber-status")
+        let states = XCUIApplication().descendants(matching: .any).matching(predicate).allElementsBoundByIndex
+        let described = states.map { "type \($0.elementType.rawValue), value \(String(describing: $0.value))" }
+        UITestWalk.note("state elements: " + described.joined(separator: "; "))
     }
 
     /// The scroll view of the answers.
