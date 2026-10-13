@@ -348,7 +348,7 @@ internal sealed partial class SelfTestSession
         });
         await SceneAsync(Scenes.LivePaused);
 
-        Press(AutomationIds.PauseRelayButton);
+        await PressUntilAsync(AutomationIds.PauseRelayButton, () => _script.Current is { Accepting: true }, "Resume relay to reach the relay");
         await WaitForAsync(() => Session.State == RelayUiState.Ready, "Resume relay to resume the relay");
         _assert.Check("resume", () =>
         {
@@ -453,11 +453,12 @@ internal sealed partial class SelfTestSession
         await SettleAsync();
         Require(Shell.Settings is { Mode: ConnectionMode.Public, HasChanges: true }, "the form to hold the Public mode, unsaved");
 
-        var inspections = Hosting.Mappings.Inspections;
+        // A save reads the mapping again; the new inspection is another object than the one before.
+        var inspected = Session.Connection;
         Press(AutomationIds.SaveSettingsButton);
         await WaitForAsync(
             () => Session.Settings.ConnectionMode == ConnectionMode.Public
-                && Hosting.Mappings.Inspections > inspections
+                && !ReferenceEquals(Session.Connection, inspected)
                 && !Shell.Settings.IsCheckingAssistant
                 && Session.Connection?.Public.State == MappingState.Absent,
             "the saved Public mode to be inspected");
@@ -482,11 +483,9 @@ internal sealed partial class SelfTestSession
         Hosting.Mappings.PublicState = MappingState.Blocked;
         Hosting.Mappings.PublicBlockedBy = MappingRefusal.PublicPortWouldPublishOthers;
         var inspections = Hosting.Mappings.Inspections;
-        Press(AutomationIds.CheckMappingButton);
+        await PressUntilAsync(AutomationIds.CheckMappingButton, () => Hosting.Mappings.Inspections > inspections, "Check again to read the mapping");
         await WaitForAsync(
-            () => Hosting.Mappings.Inspections > inspections
-                && !Shell.Settings.IsCheckingAssistant
-                && Session.Connection?.Public.State == MappingState.Blocked,
+            () => !Shell.Settings.IsCheckingAssistant && Session.Connection?.Public.State == MappingState.Blocked,
             "the blocked mapping to be inspected");
 
         var reason = MappingTexts.Refusal(MappingRefusal.PublicPortWouldPublishOthers, 10000, "/livecue");
@@ -507,11 +506,12 @@ internal sealed partial class SelfTestSession
         Begin(16, "Stop relay; then a start that finds the port in use");
         await ShowAsync(AppPage.Live);
         Press(AutomationIds.StopRelayButton);
-        await WaitForAsync(() => Session.State == RelayUiState.Stopped, "Stop relay to stop the relay");
-        Require(Hosting.Services.Supervisor.State == SupervisorState.Stopped, "the supervisor to have stopped the relay");
+        await WaitForAsync(
+            () => Session.State == RelayUiState.Stopped && Hosting.Services.Supervisor.State == SupervisorState.Stopped,
+            "Stop relay to stop the relay");
 
         _script.NextStartFault = RelayFaultCode.PortInUse;
-        Press(AutomationIds.StartRelayButton);
+        await PressUntilAsync(AutomationIds.StartRelayButton, () => _script.Created == 2, "Start relay to ask for a new relay");
         await WaitForAsync(() => Session.State == RelayUiState.Faulted, "a port-in-use fault to leave the relay faulted");
 
         _assert.Check("fault", () =>

@@ -306,6 +306,34 @@ internal sealed partial class SelfTestSession
     }
 
     /// <summary>
+    /// Presses a button whose command does nothing while the command before it is still finishing (the
+    /// session's commands are single-flight): presses, waits a moment for <paramref name="taken"/> to
+    /// hold, and presses again if it does not. <paramref name="taken"/> is something only the command
+    /// itself brings about, so a press never takes effect twice. While the button cannot be pressed (its
+    /// command is running) it only waits.
+    /// </summary>
+    private async Task PressUntilAsync(string automationId, Func<bool> taken, string expectation)
+    {
+        Require(Button(automationId) is { IsVisible: true }, $"{automationId} to be there to press");
+        var until = DateTime.UtcNow + Patience;
+        while (!taken())
+        {
+            Require(DateTime.UtcNow < until, expectation);
+            if (Button(automationId) is { IsVisible: true, IsEnabled: true, Command: { } command } button
+                && command.CanExecute(button.CommandParameter))
+            {
+                command.Execute(button.CommandParameter);
+            }
+
+            var retryAt = DateTime.UtcNow + TimeSpan.FromSeconds(1);
+            while (!taken() && DateTime.UtcNow < retryAt)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(15));
+            }
+        }
+    }
+
+    /// <summary>
     /// Waits until the supervisor's events have reached the session and the window shows them. Events
     /// travel from a thread-pool task to the dispatcher, so there is nothing to await but the result.
     /// </summary>

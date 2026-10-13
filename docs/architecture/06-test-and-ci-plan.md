@@ -420,6 +420,15 @@ the toast); without it they write nothing.
 | A usage error exits 2 | `AppEnvironmentTests.Parse_cases` | any |
 | The committed icon has the nine frames of DS 8.2 | `IconFileTests.The_ico_has_the_nine_frames` (WP-W12) | any |
 
+As built. The three `SelfTestRunTests` start the app as a child process with the dotnet host that runs the
+tests; `Screenshots_are_written` runs at `--scale 1.5`, so the pixel sizes it checks are 1860 x 990 and
+1440 x 930 (the published build's own run in CI is the one at scale 1). The hidden switch is
+`--self-test-fail <assertion>`. `SelfTestIsolationTests.The_recording_seams_see_no_call` makes the whole run
+inside the test process and is in the `Ui` collection. `IconFileTests` reads the icon out of the app's
+assembly and also checks that the window and the executable name that file. Added beside them:
+`SelfTestRunTests.A_usage_error_exits_2`, two small `SelfTestIsolationTests` (the scripted file system, the
+synthetic data) and `AppEnvironmentTests` for the exit codes and the hidden switch.
+
 ---
 
 ## 3. Live smoke tests
@@ -437,6 +446,17 @@ standing permission for "a few small live calls with the sign-in already on the 
 Rules for all three: synthetic input only, never a microphone and never a real conversation; nothing is
 written into the repository; a failure is reported to the orchestrator, not retried in a loop. L-1 is run
 at most once per relay change that touches `Catalog/` or `Answers/`, and once before a release.
+
+As built (WP-W12). L-2 takes one optional argument, `--timeout SECONDS` (1 to 120, default 20); anything
+else prints the usage and exits 2; it exits 0 for `PASS` and 1 for `FAIL`. It also checks the two modality
+arrays and `supported_parameters`, which the phone's parser needs as well. Its rules and its arguments have
+unit tests that make no request: `python3 -B -m unittest discover -s scripts/smoke/tests -t scripts/smoke/tests`
+(no workflow runs them yet; `ci.yml` can add the folder beside `scripts/tests`). L-3 is
+`powershell -File scripts/verify-pc-asr.ps1 <model> <wav> [repeats] [-RelayHost <exe>] [-LabFolder <folder>] [-KeepModel] [-CheckOnly]`:
+it needs a published build (default `artifacts\publish`), and, because the relay does not start without
+it, Codex installed and signed in, although no Codex request is made. `-CheckOnly` stops after P2-M01 and
+starts nothing. It exits 0 for `PASS`, 1 for `FAIL` and 2 when it refuses its arguments. Neither L-2 nor
+L-3 has been run for real yet.
 
 **L-4, the containment check** (security review, SEC-01 and SEC-10; protocol 12.6). Opt-in like the three
 above, and under the same rules.
