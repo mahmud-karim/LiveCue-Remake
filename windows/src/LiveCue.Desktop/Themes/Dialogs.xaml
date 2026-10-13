@@ -53,9 +53,12 @@
                     CornerRadius="{DynamicResource RadiusPanel}"
                     Background="{DynamicResource GlassSheenBrush}"
                     BorderBrush="{DynamicResource StrokeEdgeBrush}"
-                    BorderThickness="1"
-                    Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    BorderThickness="1">
+              <!-- The 24 is measured from the card's outer edge: the 1 of the stroke lies inside it. -->
+              <Grid Margin="-1">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+              </Grid>
             </Border>
           </Grid>
         </ControlTemplate>
@@ -194,6 +197,13 @@
       </Setter.Value>
     </Setter>
     <Style.Triggers>
+      <!-- A banner with nothing to say takes no room: a model that is null, or one never set. -->
+      <Trigger Property="Body" Value="">
+        <Setter Property="Visibility" Value="Collapsed" />
+      </Trigger>
+      <Trigger Property="Body" Value="{x:Null}">
+        <Setter Property="Visibility" Value="Collapsed" />
+      </Trigger>
       <Trigger Property="Tone" Value="Success">
         <Setter Property="Foreground" Value="{DynamicResource StatusSuccessBrush}" />
       </Trigger>

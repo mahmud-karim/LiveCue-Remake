@@ -23,6 +23,16 @@ public sealed class CheckRow : Control
     public static readonly DependencyProperty ShowSeparatorProperty = DependencyProperty.Register(
         nameof(ShowSeparator), typeof(bool), typeof(CheckRow), new PropertyMetadata(true));
 
+    private static readonly DependencyPropertyKey IsFirstInListPropertyKey = DependencyProperty.RegisterReadOnly(
+        nameof(IsFirstInList), typeof(bool), typeof(CheckRow), new PropertyMetadata(false));
+
+    public static readonly DependencyProperty IsFirstInListProperty = IsFirstInListPropertyKey.DependencyProperty;
+
+    public CheckRow()
+    {
+        Loaded += (_, _) => SetValue(IsFirstInListPropertyKey, FindIsFirstInList());
+    }
+
     public PrerequisiteState State
     {
         get => (PrerequisiteState)GetValue(StateProperty);
@@ -49,5 +59,21 @@ public sealed class CheckRow : Control
     {
         get => (bool)GetValue(ShowSeparatorProperty);
         set => SetValue(ShowSeparatorProperty, value);
+    }
+
+    /// <summary>True when an items control made this row for its first item: nothing is above it to be separated from.</summary>
+    public bool IsFirstInList => (bool)GetValue(IsFirstInListProperty);
+
+    private bool FindIsFirstInList()
+    {
+        for (DependencyObject? current = this; current is not null; current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (ItemsControl.ItemsControlFromItemContainer(current) is { } list)
+            {
+                return list.ItemContainerGenerator.IndexFromContainer(current) == 0;
+            }
+        }
+
+        return false;
     }
 }

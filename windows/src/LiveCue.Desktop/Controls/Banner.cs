@@ -11,6 +11,7 @@ namespace LiveCue.Desktop.Controls;
 /// title, a body and at most one quiet button. Bind <see cref="Model"/> to a <see cref="BannerModel"/>,
 /// or set the parts one by one. Its look is the <c>Banner</c> style: a raised base under the tone's
 /// tint, and the tone's glyph (information, check or alert), so the tone never rests on colour alone.
+/// A banner without a body takes no room: a model that is null, or was never set, shows nothing.
 ///
 /// A banner is read as one element. When it appears or its text changes it is announced once:
 /// assertively for a warning or a danger, politely otherwise (design system 6.2).
@@ -35,7 +36,7 @@ public sealed class Banner : Control
     public static readonly DependencyProperty CommandProperty = DependencyProperty.Register(
         nameof(Command), typeof(ICommand), typeof(Banner), new PropertyMetadata(null));
 
-    /// <summary>Sets tone, title, body and action label together. Null hides the banner.</summary>
+    /// <summary>Sets tone, title, body and action label together. Null empties the banner, which hides it.</summary>
     public BannerModel? Model
     {
         get => (BannerModel?)GetValue(ModelProperty);
@@ -103,9 +104,12 @@ public sealed class Banner : Control
     {
         var banner = (Banner)element;
         var model = (BannerModel?)change.NewValue;
-        banner.SetCurrentValue(VisibilityProperty, model is null ? Visibility.Collapsed : Visibility.Visible);
         if (model is null)
         {
+            // Nothing to say: the style hides a banner without a body.
+            banner.SetCurrentValue(TitleProperty, null);
+            banner.SetCurrentValue(BodyProperty, string.Empty);
+            banner.SetCurrentValue(ActionLabelProperty, null);
             return;
         }
 

@@ -247,10 +247,10 @@
             <Trigger Property="ShowSeparator" Value="False">
               <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
             </Trigger>
-            <!-- The first row of a list has nothing above it to be separated from. -->
-            <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+            <!-- The first row an items control makes has nothing above it to be separated from. -->
+            <Trigger Property="IsFirstInList" Value="True">
               <Setter TargetName="Separator" Property="Visibility" Value="Collapsed" />
-            </DataTrigger>
+            </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>

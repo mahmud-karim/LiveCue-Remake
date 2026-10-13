@@ -34,6 +34,9 @@ internal sealed class AppServices : IAsyncDisposable
 
     public ShellViewModel Shell { get; }
 
+    /// <summary>The toast layer of the window, as the page view models reach it.</summary>
+    public IToastHost Toasts => _toasts;
+
     /// <summary>The real application: the data folder of architecture 3.5 and the real relay.</summary>
     public static AppServices CreateForUser(IUiDispatcher ui) => Create(
         HostingFactory.Create(new SupervisorOptions(DataFolder.Resolve(), AppEnvironment.Version)),

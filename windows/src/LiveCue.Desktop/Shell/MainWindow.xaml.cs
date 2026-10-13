@@ -51,6 +51,16 @@ public partial class MainWindow : Window
         CommandBindings.Add(new CommandBinding(SystemCommands.RestoreWindowCommand, (_, _) => SystemCommands.RestoreWindow(this)));
         CommandBindings.Add(new CommandBinding(SystemCommands.CloseWindowCommand, (_, _) => SystemCommands.CloseWindow(this)));
 
+        // One row is always selected (W-design 5.2). A list box lets Ctrl+click take the selection
+        // away; an empty selection cannot travel through the binding, so it is put back here.
+        Navigation.SelectionChanged += (_, _) =>
+        {
+            if (Navigation.SelectedItem is null)
+            {
+                Navigation.SelectedValue = _shell.SelectedPage;
+            }
+        };
+
         Toast.MouseEnter += (_, _) => (_shell as ShellViewModel)?.HoldToast();
         Toast.MouseLeave += (_, _) => (_shell as ShellViewModel)?.ReleaseToast();
 

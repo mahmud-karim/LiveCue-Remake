@@ -17,6 +17,9 @@
 
     The radius is ui:Glass.CornerRadius, set by each style to its token. Override it where a surface
     is nested and must stay concentric (inner radius = outer radius minus the gap).
+
+    Padding is the inset token and is measured from the surface's outer edge, as in the mockups: the
+    1 of the stroke lies inside it. So the content of a panel with inset.panel starts 20 from its edge.
   -->
 
   <!-- Panel: on the ground. surface.panel + glass.sheen, stroke.edge, shadow.panel, radius.panel. -->
@@ -39,10 +42,12 @@
                     CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                     Background="{DynamicResource GlassSheenBrush}"
                     BorderBrush="{DynamicResource StrokeEdgeBrush}"
-                    BorderThickness="1"
-                    Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    BorderThickness="1">
+              <Grid Margin="-1">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+              </Grid>
             </Border>
           </Grid>
         </ControlTemplate>
@@ -70,10 +75,12 @@
           <Border CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                   Background="{DynamicResource SurfaceInsetBrush}"
                   BorderBrush="{DynamicResource StrokeInsetBrush}"
-                  BorderThickness="1"
-                  Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                  BorderThickness="1">
+            <Grid Margin="-1">
+              <ContentPresenter Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Grid>
           </Border>
         </ControlTemplate>
       </Setter.Value>
@@ -99,10 +106,12 @@
             <Border x:Name="Face"
                     CornerRadius="{Binding Path=(ui:Glass.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                     BorderBrush="{DynamicResource StrokeRaisedBrush}"
-                    BorderThickness="1"
-                    Padding="{TemplateBinding Padding}">
-              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    BorderThickness="1">
+              <Grid Margin="-1">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+              </Grid>
             </Border>
           </Grid>
         </ControlTemplate>

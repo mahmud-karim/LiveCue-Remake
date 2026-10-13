@@ -33,10 +33,13 @@
           <Border CornerRadius="{DynamicResource RadiusField}"
                   Background="{DynamicResource SurfaceInsetBrush}"
                   BorderBrush="{DynamicResource StrokeHairlineBrush}"
-                  BorderThickness="1"
-                  Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                  BorderThickness="1">
+            <!-- 14 from the field's outer edge, as in the text field: the outline lies inside the padding. -->
+            <Grid Margin="-1">
+              <ContentPresenter Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Grid>
           </Border>
         </ControlTemplate>
       </Setter.Value>
@@ -100,8 +103,8 @@
                        TextTrimming="CharacterEllipsis"
                        IsHitTestVisible="False"
                        Visibility="Collapsed" />
+            <!-- No margin here: a text box gives its own Padding to its content host. -->
             <ScrollViewer x:Name="PART_ContentHost"
-                          Margin="{TemplateBinding Padding}"
                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                           Focusable="False" />
           </Grid>
