@@ -5059,6 +5059,52 @@ the workflow's restore step (`--locked-mode`).
   Funnel-capable port, which `PlanApply` reports as `InvalidSettings`.
 - Adds: ST-08 (four tests; its serve-status documents live in the package's own test folder, not in the
   frozen `ServeStatusFixtures.cs`), ST-11 (`TailscaleLocatorTests`).
+- As built, where 4.15 left a choice. Each goes towards running less; no contract file or signature changed.
+  - **What runs is never the plan's command object.** `MappingCommand.Arguments` is an array behind a
+    read-only view, so a caller could alter it. `ExecuteAsync` builds the command again from the settings saved
+    now (apply) or from the ledger entry (removal), runs that, and refuses with `PlanOutOfDate` when the plan's
+    list differs. `TailscaleCli.RunAsync` builds every command once more through its factory and starts
+    nothing when the list it was handed is not, text for text, the factory's.
+  - **A ledger entry the application cannot have written is not a ledger entry**: a target that is not
+    `http://127.0.0.1:<1024 to 65535, not 47831>`, or a mode, port and path for which no remove form exists.
+    It is never `Present`, never stale, never the `LedgerEntry` of an exposure row, and `ExecuteAsync`
+    refuses it with `NotInLedger`. `PlanRemoval` throws `ArgumentException` for an entry without a remove
+    form; no inspection hands one out.
+  - **Removal and the path with a final slash.** A removal is also refused with `LedgerMismatch` when a
+    background handler exists at the entry's path plus `/`: Tailscale treats the two as one mount when it sets
+    a handler, and nobody's handler is removed on a guess that it does not when it removes one.
+  - **Apply and settings that a save would reject.** An apply is refused with `InvalidSettings` when
+    `Validate` reports a problem for the saved settings, whatever the field: the ledger entry could not be
+    recorded afterwards. A removal is not held back by this.
+  - `InspectAsync` reports `Blocked(InvalidSettings)` or `Blocked(ForbiddenRelayPort)` for both modes when
+    the settings make no command, and an empty exposure report for a relay port no relay may use.
+  - A refusal that comes after the status was read carries `After` (the inspection of that status); the
+    three refusals before it (`TailscaleNotInstalled`, `StatusUnavailable`, `StatusUnreadable`) carry null.
+  - The ledger entry is added only when the command reported success **and** the handler was then seen
+    (with Funnel on, for Public). A command that failed or timed out and still left the handler behind gives
+    `PresentNotOwned` and an exposure row with its removal command as text.
+  - After the command has returned, the caller's cancellation is no longer followed: the second read and the
+    ledger save always happen. One `ExecuteAsync` runs at a time.
+  - `MappingTexts.Outcome(outcome, action)` and `MappingTexts.Failure(result, plan)` are additions beside the
+    fixed helpers. `NotVerified` for a removal reads "Tailscale reported success, but LiveCue could not
+    confirm that the mapping is gone. Choose Check again." `MappingTexts.Exposure` shows the mount without
+    control or format characters and cut at 128 characters. `MappingTexts.ManualRemovalUnavailable` is the
+    sentence of the Settings row without a command.
+  - The serve status parser also refuses a document that names a member twice, a port key with a sign, a
+    space or a leading zero, and anything deeper than 32 levels. TS-7 additionally compares the parsed view
+    (handlers and the three port sets), so a snapshot without leaves cannot hide a change.
+  - `TailscaleCli` keeps at most 16 MiB of `status --json` and 4 MiB of `serve status --json`; more than
+    that is `Unparseable`. A path that was found is remembered; while none is found every use looks again.
+- Not changed, for the reviewer: the exposure report matches the `Proxy` text exactly, as 4.15 says. A
+  handler made by hand whose target is written another way (`http://localhost:<port>`, a final slash, a
+  path) and a raw `TCPForward` to the relay port are not listed.
+- To confirm on a real machine before a mapping is written (the fixtures follow Tailscale's documented
+  shapes; no Tailscale command was run for this package): `serve status --json` prints `{}` when nothing is
+  configured; the member names `TCP`, `Web`, `AllowFunnel`, `Foreground`, `Services`, `Handlers`, `Proxy`,
+  `TCPForward`; the stored `Proxy` text of the two apply forms is exactly `http://127.0.0.1:<port>`; the
+  mount is stored as `/livecue` and the private one as `/`; `funnel --https=<p> --set-path=<prefix> off`
+  on a shared port leaves the other mounts and the port's `AllowFunnel` entry alone; `status --json` has
+  `BackendState` and `Self.Online`, `Self.DNSName`, and exits with 0 when Tailscale is stopped.
 
 **WP-W08 Desktop core**
 
