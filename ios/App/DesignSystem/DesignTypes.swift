@@ -4,8 +4,9 @@ import SwiftUI
 enum TextRole: CaseIterable, Sendable {
     case display, title, headline, cue, transcript, body, label, caption, micro, mono
 
+    /// The Dynamic Type text style and weight of the role. Sizes are never fixed, so every role follows
+    /// the text size and Bold Text settings.
     var font: Font {
-        // STUB(WP-05)
         switch self {
         case .display: return .largeTitle.bold()
         case .title: return .title2.bold()
@@ -60,7 +61,15 @@ private struct LCTextStyle: ViewModifier {
     @Environment(\.theme) private var theme
 
     func body(content: Content) -> some View {
-        // STUB(WP-05)
+        if role == .transcript {
+            // Transcript text is body text with more room between its lines (design system 2.10).
+            styled(content).lineSpacing(theme.component.transcriptLineSpacing)
+        } else {
+            styled(content)
+        }
+    }
+
+    private func styled(_ content: Content) -> some View {
         content
             .font(isTabular ? role.font.monospacedDigit() : role.font)
             .foregroundStyle(color ?? theme.ink.primary)
