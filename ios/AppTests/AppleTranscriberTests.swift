@@ -80,6 +80,29 @@ final class AppleTranscriberTests: XCTestCase {
         await rig.end()
     }
 
+    /// 1.1.0: a capture that says what it found is quoted, so the user reads why there is no microphone.
+    @MainActor
+    func testACaptureThatSaysWhatItFoundIsQuotedInTheStartFailure() async {
+        let rig = AppleRig()
+        let report = AudioStartReport(
+            stage: .input,
+            isInputAvailable: false,
+            routeInputs: [],
+            sampleRate: 0,
+            channelCount: 0,
+            converterBuilt: false
+        )
+        rig.audio.startFailure = .unusable(report)
+        let failure = await rig.startFailure()
+
+        XCTAssertEqual(failure?.reason, .noMicrophone)
+        XCTAssertEqual(
+            failure?.message,
+            "iOS is giving this app no microphone. In LiveContainer, open the app normally, not in a multitasking window, and check that LiveContainer has microphone access in Settings. (input 0 Hz, 0 ch, route: none, input unavailable)"
+        )
+        await rig.end()
+    }
+
     // MARK: - While listening
 
     @MainActor

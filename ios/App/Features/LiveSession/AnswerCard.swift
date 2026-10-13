@@ -5,8 +5,9 @@ import SwiftUI
 ///
 /// The latest answer is the prominent cue card: the chip "Latest", the answer in `type.cue`, and the
 /// retry. An earlier answer is a plain card with its total time in the header and the answer in
-/// `type.body`. Everything a model wrote (question, answer, details) is drawn as it is: nothing in it is
-/// read as formatting or as a link.
+/// `type.body`. The answer and the details are drawn through `MarkupText`: bold, italic, code, headings
+/// and lists are shown as styling, and nothing in them is ever a link. The detected question is drawn as
+/// it is.
 struct AnswerCard: View {
     private let turn: AssistantTurn
     private let isLatest: Bool
@@ -104,11 +105,11 @@ struct AnswerCard: View {
                     .lcText(.label, color: theme.ink.secondary)
                     .lineLimit(2)
             }
-            Text(verbatim: turn.answer)
-                .lcText(isLatest ? .cue : .body)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-                .accessibilityIdentifier(isLatest ? "assistant-answer" : "previous-assistant-answer")
+            MarkupText(
+                turn.answer,
+                role: isLatest ? .cue : .body,
+                identifier: isLatest ? "assistant-answer" : "previous-assistant-answer"
+            )
         }
     }
 
@@ -149,16 +150,13 @@ struct AnswerCard: View {
     }
 }
 
-/// The details of an answer, drawn as plain text.
+/// The details of an answer, with their formatting shown and no link in them.
 struct AnswerDetailsText: View {
     let details: String
 
     @Environment(\.theme) private var theme
 
     var body: some View {
-        Text(verbatim: details)
-            .lcText(.body, color: theme.ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
+        MarkupText(details, role: .body, color: theme.ink.secondary)
     }
 }

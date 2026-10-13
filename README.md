@@ -4,7 +4,7 @@ A from-scratch remake of LiveCue: an iPhone conversation assistant with a privat
 
 The iPhone app listens to a conversation and shows a live transcript. Tap **Assist** and it shows an answer to the latest question, either from Codex running on your own PC or from a model you choose on OpenRouter.
 
-> **Status: iPhone app 1.1.0.** Everything here is tested in simulators and on a Windows PC with automated tests. Real microphone capture, on-device speech models, the phone talking to a real PC, and the PC speech models on a GPU are only now being tried on a real iPhone. 1.1.0 adds Apple speech, which no simulator can exercise: its recognition has only been tested with a stand-in. Expect bugs on first use.
+> **Status: iPhone app 1.1.0.** Everything here is tested in simulators and on a Windows PC with automated tests. On a real iPhone, recording, Meta Muse, OpenRouter answers and History have worked; the on-device speech models, the phone talking to a real PC, and the PC speech models on a GPU have not been tried yet. 1.1.0 adds Apple speech, which no simulator can exercise (its recognition has only been tested with a stand-in), shows the formatting of answers, and fixes a false alert after Stop. Expect bugs on first use.
 
 ## What is in this repository
 
@@ -49,7 +49,7 @@ The app is built unsigned, for installing through LiveContainer.
    - **Assistant models & timing**: pick Codex on your PC, or OpenRouter with your key and a model.
 4. Tap **Start conversation**.
 
-Microphone and camera permission are asked for by LiveContainer, not by the app, so the prompt shows LiveContainer's wording.
+Microphone and camera permission are asked for by LiveContainer, not by the app, so the prompt shows LiveContainer's wording. Open the app normally, not in a LiveContainer multitasking window: there iOS gives the app no microphone, and Start says so.
 
 ## PC speech models (optional)
 

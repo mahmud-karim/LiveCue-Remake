@@ -4,8 +4,9 @@ import SwiftUI
 ///
 /// While it is the newest thing in the feed it is the prominent cue card: a spinner with the stage label,
 /// and the streamed text with the live caret. Under an error card it is a plain card in a compact panel,
-/// labelled "Incomplete answer", with its text in the secondary ink. The streamed text is drawn as it is:
-/// nothing in it is read as formatting or as a link.
+/// labelled "Incomplete answer", with its text in the secondary ink. The streamed text is drawn through
+/// `MarkupText`: formatting that is complete is shown as styling, a marker that is not closed yet stays
+/// as written, and nothing in it is ever a link.
 struct InProgressCard: View {
     private let state: InProgressState
 
@@ -48,24 +49,20 @@ struct InProgressCard: View {
     private var text: some View {
         if !state.text.isEmpty {
             if state.showsSpinner {
-                // Still arriving: the caret follows the last character.
-                streamedText
-                    .modifier(StreamingCaret())
-                    .accessibilityAddTraits(.updatesFrequently)
-                    .accessibilityIdentifier("streaming-answer")
+                // Still arriving: the caret follows the last character of the last block.
+                MarkupText(state.text, role: .cue, color: ink, identifier: "streaming-answer", isSelectable: false) { (last: Text) in
+                    last
+                        .modifier(StreamingCaret())
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
             } else {
-                streamedText
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("streaming-answer")
+                MarkupText(state.text, role: .cue, color: ink, identifier: "streaming-answer")
             }
         }
     }
 
-    private var streamedText: some View {
-        Text(verbatim: state.text)
-            .lcText(.cue, color: state.isIncomplete ? theme.ink.secondary : theme.ink.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
+    private var ink: Color {
+        state.isIncomplete ? theme.ink.secondary : theme.ink.primary
     }
 }
 

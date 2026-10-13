@@ -21,6 +21,7 @@ Contents
 8. [Compile-risk checklist](#8-compile-risk-checklist)
 9. [Changes after review](#9-changes-after-review)
 10. [Apple speech (D-28), as built by WP-13](#10-apple-speech-d-28-as-built-by-wp-13)
+11. [Changes in 1.1.0 after the first use on a real iPhone](#11-changes-in-110-after-the-first-use-on-a-real-iphone)
 
 Conventions
 
@@ -3341,6 +3342,7 @@ Launch order: `LaunchConfiguration.current`; `AppEnvironment.make` (in fixture m
 | Relay phone timeouts: health, status, cancel / verify, start, stop / models / assist, summary | 8 s / 15 s / 45 s / 70 s | protocol 6.1, A-21 |
 | PC speech connect plus model loading | 180 s | C-59 |
 | Finalisation wait after `endStream` (relay and Meta) | 15 s | C-60, IOS-A11 |
+| Quiet period after `endStream`, once every started turn is final (1.1.0) | 1.5 s | IOS-A11, 11.2 |
 | Meta connect plus handshake / key test | 30 s / 15 s | spec 01 section 3.6 |
 | OpenRouter key check and catalogue / chat idle / chat total | 20 s / 65 s / 120 s | spec 02 section 4.7 |
 | OpenRouter limits: response / SSE line or event / answer text | 8 MiB / 128 KiB / 1 MiB | spec 02 section 4.7 |
@@ -4089,7 +4091,8 @@ The workflow starts only when a file under `ios/`, `scripts/ci/` or the workflow
    listening is not reported by design: check whether capture goes on or the level meter falls flat.
 5. Parakeet: whether the partial text is cumulative for the whole stretch or resets after an utterance
    (IOS-A1), and that Pause commits one segment.
-6. Meta closes with code 1000 after `endStream`, so a Pause is recorded completed (IOS-A11).
+6. Pause and Stop with Meta end without the finalise alert, within about two seconds (IOS-A11 as changed
+   in 1.1.0: Meta did not close with code 1000, see 11.2).
 7. Voz: first load time, that "Reload" does not download again (4.6, `Voz.download` is assumed idempotent),
    and one Assist with real audio.
 8. Model folders are excluded from backup after preparation.
@@ -4665,3 +4668,95 @@ No test reaches the real recogniser: the simulator may not have it.
 6. Whether the format the analyzer asks for needs resampling on this iPhone (the conversion path is
    untested on hardware), and whether segment times look right in History.
 7. Assist reads the Apple transcript like any other.
+
+---
+
+## 11. Changes in 1.1.0 after the first use on a real iPhone
+
+The owner ran 1.0.0 on an iPhone inside LiveContainer. Three things came back. Each changed frozen files;
+the declarations and tables above that they touch are read with this section.
+
+### 11.1 The microphone start says why it failed, and tries again
+
+Seen: "Transcription could not start. No usable microphone." The cause was LiveContainer's multitasking
+mode, in which iOS gives the guest app no audio input; opened normally, the app records.
+
+- `Audio/AudioCapture.swift`: after activating the session, an input without a usable format (or one for
+  which no converter can be built) is read again with a new `AVAudioEngine`: three attempts in all, 0.2 s
+  apart. `start` keeps its synchronous signature, so the pause blocks the main actor; it happens only on
+  the way to a failure and lasts 0.4 s at most. Every failure now throws
+  `AudioCaptureFailure.unusable(AudioStartReport)`.
+- `Audio/AudioCapturing.swift`: `AudioStartReport` (the stage: session, input or engine, with the system's
+  error code; `isInputAvailable`; the port types of the route's inputs; the input's sample rate and channel
+  count; whether a converter was built) and the new failure case. The two old cases stay for fakes.
+- `Audio/AudioInputDiagnosis.swift` (new): the decisions, without the audio session, so they are unit
+  tested: when to try again, when iOS "gives no input" (`isInputAvailable` is false, or the active
+  session's route has no input), and the text.
+- `Audio/AudioSessionPolicy.swift`: `report(_:stage:format:converterBuilt:)` reads the session.
+- `TranscriberFailureText.microphone(_:)`: the four transcribers quote the report. The reason stays
+  `.noMicrophone`.
+
+Texts. When iOS gives no input: "iOS is giving this app no microphone. In LiveContainer, open the app
+normally, not in a multitasking window, and check that LiveContainer has microphone access in Settings."
+Otherwise "No usable microphone.". Both are followed by the figures in brackets, for example
+"(input 0 Hz, 0 ch, route: none)", "(input 48000 Hz, 1 ch, route: MicrophoneBuiltIn, no converter)",
+"(audio session error 561017449, route: none)", "(audio engine error -10851, input 44100 Hz, 2 ch, route:
+MicrophoneWired)"; ", input unavailable" is added when iOS says so. A route is named by port type only.
+
+Tests: `AudioInputDiagnosisTests`; one case each in `StreamingTranscriberEngineTests` and
+`AppleTranscriberTests`.
+
+### 11.2 A clean end of a stream (IOS-A11)
+
+Seen: after every Stop with Meta Muse, "Could not finalize the transcript. Some final words may be
+missing.", with a complete transcript. The provider does not close with code 1000 after `endStream`.
+
+The rule now is the IOS-A11 row of the decisions. Where it lives:
+
+- `LiveCueCore/Transcript/SpeechStreamSession.swift`: `quietSeconds` (1.5 s); after `endStream` has left,
+  every inbound message restarts a quiet period, which runs only while no started turn is without its
+  final text (relay: and `streamComplete` was seen); when it passes the phone closes with 1000 and the
+  stream is completed. A close with 1000, 1001 or 1005 is completed. Any other close, a drop, and the
+  15 s limit are completed when nothing is missing and interrupted otherwise. Meta's finalisation time
+  is measured to the provider's last word, not to the end of the quiet period.
+- `LiveCueCore/Transcript/StreamTranscript.swift`: `hasUnfinishedTurn`.
+- `LiveCueCore/Relay/RelaySpeechNegotiation.swift`: `ending` also accepts 1001 and 1005 after `endStream`,
+  unless the reason is a code of the relay.
+- `Speech/StreamingTranscriberEngine.swift`: its own limit waits 0.5 s longer than the session's
+  (`finalizeGraceSeconds`), so the session, which knows whether anything is missing, decides first.
+
+What it cannot tell apart: a connection that ends in an orderly way without a close frame reaches the
+session as a drop. It is completed when nothing is missing, and interrupted when a started turn has no
+final text. If the provider ever leaves a started turn without a final text (a noise it began to
+transcribe, say), Pause waits the 15 s and shows the alert; that would be the next thing to look at.
+
+Tests: `SpeechStreamSessionMetaTests`, `SpeechStreamSessionRelayTests`, `RelaySpeechNegotiationTests`,
+`StreamTranscriptTests` (core); `StreamingTranscriberEngineTests` (app), each case with the scripted
+socket. Pause takes the same path as Stop, so neither shows the alert.
+
+### 11.3 Answers show their formatting, and still no link
+
+Seen: answers printed `**bold**`, `- ` bullets and headings literally.
+
+- `DesignSystem/AnswerMarkup.swift` (new): a formatter written by hand. It reads bold (`**`, `__`), italic
+  (`*`, `_`), both (`***`), inline code, headings (`#` to `######`, shown as a bold line), bullet lists
+  (`-`, `*`, `+`, `•`) and numbered lists (`1.`, `1)`) with up to three levels of indentation, code
+  fences, paragraphs and line breaks. A link `[text](address)` and an image `![text](address)` become
+  "text (address)" as plain text; `<https://…>` becomes the address. A backslash before a symbol shows the
+  symbol. Whatever it does not recognise stays as written: a marker that is not closed (the end of an
+  answer that is still streaming), an underscore inside a word, a lone asterisk, tables, quotes, rules.
+  Every search is bounded and the nesting it follows is capped, so its time grows with the length of the
+  text and nothing else.
+- `DesignSystem/MarkupText.swift` (new): one `Text` per block, in the role's Dynamic Type font, with the
+  styling as presentation intents on a string put together by hand; a list item sits beside its marker
+  in a hanging indent. Each block is selectable. No link attribute is ever set, and the rule of 8.6
+  stands: the Markdown initialiser of attributed strings stays forbidden by the lint.
+- Used for the answer and the details on the live cards, the streaming card (the caret follows the last
+  block), Session detail (summary, key points, action items, answer, details) and Run details. The
+  detected question, error messages and every text of the relay are still drawn with `Text(verbatim:)`.
+- "Copy answer" and the VoiceOver announcement use `AnswerMarkup.plainText`: the text without the symbols.
+
+Tests: `AnswerMarkupTests` (each construct, nesting, unclosed markers, every prefix of an answer, links
+and images, tens of thousands of markers); `AnswerPlainTextTests` and `SessionDetailContentTests` now
+assert "no active link, no image, the address is drawn as text" where they asserted "drawn as written".
+`RelayTextPlainTextTests` is unchanged, because relay texts are still drawn as written.

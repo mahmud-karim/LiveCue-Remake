@@ -113,6 +113,7 @@ private struct AnswerFeedContent: View {
         guard let answer = model.latestTurn?.answer, !answer.isEmpty else {
             return
         }
-        AccessibilityNotification.Announcement(AttributedString(answer)).post()
+        // Read without the symbols of its formatting.
+        AccessibilityNotification.Announcement(AttributedString(AnswerMarkup.plainText(answer))).post()
     }
 }
