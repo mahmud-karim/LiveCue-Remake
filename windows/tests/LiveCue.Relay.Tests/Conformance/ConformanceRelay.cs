@@ -3,7 +3,9 @@ using System.Text;
 using System.Text.Json;
 using LiveCue.Relay.Core;
 using LiveCue.Relay.Edge;
+using LiveCue.Relay.LocalModel;
 using LiveCue.Relay.Processes;
+using LiveCue.Relay.Speech;
 using LiveCue.Relay.Tests.Processes;
 using LiveCue.Relay.Tests.Speech;
 using LiveCue.Relay.Tests.Support;
@@ -32,6 +34,12 @@ internal sealed class ConformanceOptions
     public string? DataDirectory { get; set; }
 
     public bool WarmCatalogOnStart { get; set; }
+
+    /// <summary>Replaces the fake lab runtime (<see cref="ConformanceRelay.Lab"/> is then unused).</summary>
+    public ILabRuntime? LabRuntime { get; set; }
+
+    /// <summary>Replaces the fake lab socket connector (<see cref="ConformanceRelay.LabSockets"/> is then unused).</summary>
+    public ILabSocketConnector? LabSocketConnector { get; set; }
 }
 
 /// <summary>
@@ -84,8 +92,8 @@ internal sealed class ConformanceRelay : IAsyncDisposable
             Clock = clock,
             Processes = Codex,
             SelfCheckClient = SelfCheck,
-            LabRuntime = Lab,
-            LabSocketConnector = LabSockets,
+            LabRuntime = options.LabRuntime ?? Lab,
+            LabSocketConnector = options.LabSocketConnector ?? LabSockets,
         });
         Events = new EventCollector(Relay.Events);
     }
@@ -342,6 +350,12 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
     /// <summary>What <c>codex app-server</c> plays next: ok, early-exit, silent, flood or error.</summary>
     public string CatalogScenario { get; set; } = "ok";
 
+    /// <summary>
+    /// When it returns an exception, the runner throws it instead of starting anything: a collaborator
+    /// that breaks in a way no area expects.
+    /// </summary>
+    public Func<ProcessRequest, Exception?>? Fault { get; set; }
+
     /// <summary>Every request as the relay made it, in order.</summary>
     public IReadOnlyList<ProcessRequest> Requests
     {
@@ -417,6 +431,11 @@ internal sealed class ScriptedCodexRunner : IProcessRunner
         lock (_gate)
         {
             _requests.Add(request);
+            if (Fault?.Invoke(request) is { } failure)
+            {
+                throw failure;
+            }
+
             report = Path.Combine(_reports, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"run-{_next++}.json"));
             if (IsMode(request, "exec"))
             {
