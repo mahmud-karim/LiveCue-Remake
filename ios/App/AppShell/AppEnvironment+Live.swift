@@ -39,6 +39,7 @@ extension AppDependencies {
             openRouterKeyVerifier: openRouter,
             metaKeyTester: LiveMetaKeyTester(transport: socketTransport, clock: clock),
             engineLoader: LiveOnDeviceEngineLoader(),
+            systemSpeech: AppleSpeech.makeEngine(),
             makeTranscriberFactory: { models in
                 LiveTranscriberFactory(
                     audio: audio,

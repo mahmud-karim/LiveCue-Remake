@@ -40,6 +40,21 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(rows(.parakeet), [.modelLibrary(value: "Not loaded"), .benchmark])
         XCTAssertEqual(rows(.voz, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
         XCTAssertEqual(rows(.parakeet, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
+
+        // Apple has the same two rows; its Model Library row also says why it cannot be used (D-28).
+        XCTAssertEqual(rows(.apple), [.modelLibrary(value: "Not downloaded"), .benchmark])
+        XCTAssertEqual(rows(.apple, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
+        let older = ProviderSetupState(
+            provider: .apple,
+            hasMetaKey: false,
+            pcModelLabel: "Ready",
+            isModelLoaded: false,
+            modelNote: "Requires iOS 26 or later"
+        )
+        XCTAssertEqual(older.rows, [.modelLibrary(value: "Requires iOS 26 or later"), .benchmark])
+        // The note is Apple's only.
+        let voz = ProviderSetupState(provider: .voz, hasMetaKey: false, pcModelLabel: "Ready", isModelLoaded: false, modelNote: "Requires iOS 26 or later")
+        XCTAssertEqual(voz.rows, [.modelLibrary(value: "Not loaded"), .benchmark])
     }
 
     @MainActor

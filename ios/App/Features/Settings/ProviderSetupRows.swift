@@ -8,14 +8,15 @@ struct ProviderSetupState: Equatable {
         case metaKey(value: String, needsAttention: Bool)
         /// The home label.
         case pcSpeechModel(value: String)
-        /// "Ready" / "Not loaded"
+        /// "Ready" / "Not loaded"; for Apple "Ready", "Not downloaded" or why it cannot be used.
         case modelLibrary(value: String)
         case benchmark
     }
 
     let rows: [Row]
 
-    init(provider: SpeechProvider, hasMetaKey: Bool, pcModelLabel: String, isModelLoaded: Bool) {
+    /// `modelNote` is Apple's: why its recogniser cannot start, when that is not a missing download.
+    init(provider: SpeechProvider, hasMetaKey: Bool, pcModelLabel: String, isModelLoaded: Bool, modelNote: String? = nil) {
         switch provider {
         case .meta:
             rows = [.metaKey(value: hasMetaKey ? "Saved on iPhone" : "Required", needsAttention: !hasMetaKey)]
@@ -23,6 +24,9 @@ struct ProviderSetupState: Equatable {
             rows = [.pcSpeechModel(value: pcModelLabel)]
         case .voz, .parakeet:
             rows = [.modelLibrary(value: isModelLoaded ? "Ready" : "Not loaded"), .benchmark]
+        case .apple:
+            let missing = modelNote ?? SystemSpeechText.notDownloaded
+            rows = [.modelLibrary(value: isModelLoaded ? "Ready" : missing), .benchmark]
         }
     }
 }

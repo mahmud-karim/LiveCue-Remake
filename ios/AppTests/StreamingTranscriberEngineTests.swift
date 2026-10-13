@@ -204,6 +204,31 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         await rig.end()
     }
 
+    /// 1.1.0: a capture that says what it found is quoted, so the user reads why there is no microphone.
+    @MainActor
+    func testACaptureThatSaysWhatItFoundIsQuotedInTheStartFailure() async {
+        let report = AudioStartReport(
+            stage: .input,
+            isInputAvailable: true,
+            routeInputs: ["MicrophoneBuiltIn"],
+            sampleRate: 0,
+            channelCount: 0,
+            converterBuilt: false
+        )
+        let rig = StreamingRig.meta()
+        rig.audio.startFailure = .unusable(report)
+        await rig.socket.deliver(.text(SpeechTest.metaAcknowledgement))
+        let thrown = await rig.startFailure()
+
+        XCTAssertEqual(
+            thrown,
+            TranscriberFailure(.noMicrophone, message: "No usable microphone. (input 0 Hz, 0 ch, route: MicrophoneBuiltIn)")
+        )
+        XCTAssertFalse(rig.audio.isRunning)
+        await rig.socket.waitForCloseCalls(count: 1)
+        await rig.end()
+    }
+
     @MainActor
     func testWithoutAUsableMicrophoneTheStartFailsAndTheStreamIsClosed() async {
         for failure in [AudioCaptureFailure.noUsableMicrophone, AudioCaptureFailure.couldNotStart] {
@@ -513,6 +538,9 @@ final class StreamingTranscriberEngineTests: XCTestCase {
     func testFinalizeThatDoesNotEndInFifteenSecondsThrowsTheFinaliseText() async throws {
         let rig = StreamingRig.relay(.nemotron)
         try await rig.startStreaming()
+        // A turn started and never gets its final text: that is what makes the limit a failure (IOS-A11).
+        await rig.socket.deliver(.text(#"{"type":"speechStart","turnId":1,"audioProcessedMs":0}"#))
+        await rig.socket.waitForReceive()
 
         let finalizing = Task { () -> TranscriberFailure? in
             do {
@@ -543,6 +571,9 @@ final class StreamingTranscriberEngineTests: XCTestCase {
     func testFinalizeEndedByAnotherCloseCodeThrowsTheFinaliseText() async throws {
         let rig = StreamingRig.meta()
         try await rig.startStreaming()
+        // A turn started and never gets its final text: only then is such a close a failure (IOS-A11).
+        await rig.socket.deliver(.text(#"{"type":"speechStart","turnId":1,"audioProcessedMs":0}"#))
+        await rig.socket.waitForReceive()
 
         let finalizing = Task { () -> TranscriberFailure? in
             do {
@@ -560,6 +591,116 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         await rig.log.wait(for: rig.transcriber.emittedEventCount)
         XCTAssertTrue(rig.log.lines.contains("usage finish false"))
         XCTAssertFalse(rig.log.lines.contains { $0.hasPrefix("failed") }, "A failure inside finalize is the call's own outcome.")
+        await rig.end()
+    }
+
+    // IOS-A11 as changed in 1.1.0: on a real iPhone the cloud provider did not close with code 1000, and
+    // every Stop showed the finalise alert.
+
+    @MainActor
+    func testMetaFinalizeIsCompletedAfterAQuietPeriodWhenMetaDoesNotClose() async throws {
+        let rig = StreamingRig.meta()
+        try await rig.startStreaming()
+
+        let finalizing = Task { try await rig.transcriber.finalize() }
+        await rig.socket.waitForSentTexts(count: 2)
+        // The two 15 s limits and the quiet period after `endStream`.
+        await rig.clock.waitForSleepers(count: 3)
+        await rig.clock.advance(by: SpeechStreamSession.quietSeconds)
+        // No throw: Pause and Stop show no alert.
+        try await finalizing.value
+
+        await rig.log.wait(for: rig.transcriber.emittedEventCount)
+        XCTAssertEqual(Array(rig.log.lines.suffix(3)), [
+            "usage finalization 0.0",
+            "status Meta direct · 0.00 s setup · Final 0.00 s",
+            "usage finish true"
+        ])
+        XCTAssertFalse(rig.log.lines.contains { $0.hasPrefix("failed") })
+        let closes = await rig.socket.closeCalls
+        XCTAssertEqual(closes, [1000], "The phone closes the stream itself.")
+        XCTAssertEqual(rig.clock.sleeperCount, 0)
+        XCTAssertEqual(rig.audio.stops, [true])
+        await rig.end()
+    }
+
+    @MainActor
+    func testMetaFinalizeIsCompletedByACloseWithoutAStatusCodeOrADrop() async throws {
+        // No status code (1005), going away (1001), another code with nothing missing, and a drop.
+        let endings: [WebSocketMessage?] = [
+            .closed(code: 1005, reason: ""),
+            .closed(code: 1001, reason: ""),
+            .closed(code: 1011, reason: ""),
+            nil
+        ]
+        for ending in endings {
+            let rig = StreamingRig.meta()
+            try await rig.startStreaming()
+            // A turn that got its final text before Stop.
+            await rig.socket.deliver(.text(#"{"type":"speechStart","turnId":1,"audioProcessedMs":0}"#))
+            await rig.socket.deliver(.text(#"{"type":"speechComplete","turnId":1,"audioProcessedMs":900,"transcript":"All of it."}"#))
+            await rig.socket.waitForReceive()
+
+            let finalizing = Task { try await rig.transcriber.finalize() }
+            await rig.socket.waitForSentTexts(count: 2)
+            if let ending {
+                await rig.socket.deliver(ending)
+            } else {
+                await rig.socket.drop()
+            }
+            try await finalizing.value
+
+            await rig.log.wait(for: rig.transcriber.emittedEventCount)
+            XCTAssertEqual(rig.log.lines.last, "usage finish true", "\(String(describing: ending))")
+            XCTAssertTrue(rig.log.lines.contains { $0.hasPrefix("segment All of it.") })
+            XCTAssertFalse(rig.log.lines.contains { $0.hasPrefix("failed") })
+            await rig.end()
+        }
+    }
+
+    @MainActor
+    func testMetaFinalizeWaitsForTheFinalTextOfAStartedTurn() async throws {
+        let rig = StreamingRig.meta()
+        try await rig.startStreaming()
+        await rig.socket.deliver(.text(#"{"type":"speechStart","turnId":1,"audioProcessedMs":0}"#))
+        await rig.socket.waitForReceive()
+
+        let finalizing = Task { try await rig.transcriber.finalize() }
+        await rig.socket.waitForSentTexts(count: 2)
+        // Only the two limits wait: the turn has no final text, so no quiet period runs.
+        await rig.clock.waitForSleepers(count: 2)
+        await rig.clock.advance(by: 4)
+        XCTAssertEqual(rig.clock.sleeperCount, 2)
+
+        await rig.socket.deliver(.text(#"{"type":"speechComplete","turnId":1,"audioProcessedMs":900,"transcript":"The last words."}"#))
+        await rig.clock.waitForSleepers(count: 3)
+        await rig.clock.advance(by: SpeechStreamSession.quietSeconds)
+        try await finalizing.value
+
+        await rig.log.wait(for: rig.transcriber.emittedEventCount)
+        XCTAssertTrue(rig.log.lines.contains { $0.hasPrefix("segment The last words.") })
+        XCTAssertEqual(rig.log.lines.last, "usage finish true")
+        await rig.end()
+    }
+
+    @MainActor
+    func testRelayFinalizeThatTimesOutWithNothingMissingIsCompleted() async throws {
+        let rig = StreamingRig.relay(.nemotron)
+        try await rig.startStreaming()
+
+        let finalizing = Task { try await rig.transcriber.finalize() }
+        await rig.socket.waitForSentTexts(count: 1)
+        // The PC never closes and never says `streamComplete`. No turn started, so nothing is missing.
+        await rig.clock.waitForSleepers(count: 2)
+        await rig.clock.advance(by: 15)
+        try await finalizing.value
+
+        await rig.log.wait(for: rig.transcriber.emittedEventCount)
+        XCTAssertEqual(rig.log.lines.last, "usage finish true")
+        XCTAssertFalse(rig.log.lines.contains { $0.hasPrefix("failed") })
+        let closes = await rig.socket.closeCalls
+        XCTAssertEqual(closes.count, 1)
+        XCTAssertEqual(rig.clock.sleeperCount, 0)
         await rig.end()
     }
 
@@ -638,12 +779,18 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         XCTAssertTrue(factory.makeTranscriber(for: .qwen3) is RelayTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .voz) is VozTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .parakeet) is ParakeetTranscriber)
+        XCTAssertTrue(factory.makeTranscriber(for: .apple) is AppleTranscriber)
         for provider in SpeechProvider.allCases {
             XCTAssertEqual(factory.makeTranscriber(for: provider).provider, provider)
         }
 
         // Nothing is loaded: an on-device transcriber says what is missing.
-        for (provider, text) in [(SpeechProvider.voz, "Prepare Voz first."), (SpeechProvider.parakeet, "Prepare Parakeet first.")] {
+        let missing = [
+            (SpeechProvider.voz, "Prepare Voz first."),
+            (SpeechProvider.parakeet, "Prepare Parakeet first."),
+            (SpeechProvider.apple, "Prepare Apple speech first.")
+        ]
+        for (provider, text) in missing {
             let transcriber = factory.makeTranscriber(for: provider)
             do {
                 try await transcriber.start(TranscriberStart(generation: UUID(), streamOffsetSeconds: 0))

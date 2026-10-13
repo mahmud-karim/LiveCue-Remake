@@ -2,7 +2,7 @@
 """Validate an unsigned IPA meant for LiveContainer.
 
     python3 scripts/ci/validate_ipa.py LiveCue-Remake.ipa \
-        --bundle-id com.mahmudkarim.LiveCueRemake --version 1.0.0 --build 1 --minimum-os 18.0
+        --bundle-id com.mahmudkarim.LiveCueRemake --version 1.1.0 --build 2 --minimum-os 18.0
 
 Checks, all of which must pass:
 

@@ -44,7 +44,8 @@ import Observation
             provider: provider,
             hasMetaKey: speech.hasMetaKey,
             pcModelLabel: relay.homeLabel(for: provider),
-            isModelLoaded: models.isLoaded(for: provider)
+            isModelLoaded: models.isLoaded(for: provider),
+            modelNote: models.systemSpeechNote
         )
     }
 

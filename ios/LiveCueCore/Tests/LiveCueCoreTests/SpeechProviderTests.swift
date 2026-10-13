@@ -17,6 +17,7 @@ final class SpeechProviderTests: XCTestCase {
 
         XCTAssertFalse(SpeechProvider.voz.streamsAudio)
         XCTAssertFalse(SpeechProvider.parakeet.streamsAudio)
+        XCTAssertFalse(SpeechProvider.apple.streamsAudio)
     }
 
     /// AC-CORE-081.
@@ -39,8 +40,8 @@ final class SpeechProviderTests: XCTestCase {
     // MARK: - The catalogue (spec 02 section 7.1)
 
     func testCatalogueOrderAndRawValues() {
-        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet])
-        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet"])
+        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple])
+        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet", "apple"])
         XCTAssertEqual(RelayConstants.speechModels, [SpeechProvider.nemotron.rawValue, SpeechProvider.qwen3.rawValue])
     }
 
@@ -59,7 +60,8 @@ final class SpeechProviderTests: XCTestCase {
             Row(provider: .nemotron, name: "Nemotron 3.5 \u{00B7} PC", isCloud: false, isPCLocal: true, isOnDevice: false, streamsAudio: true, sampleRate: 16_000),
             Row(provider: .qwen3, name: "Qwen3 1.7B \u{00B7} PC", isCloud: false, isPCLocal: true, isOnDevice: false, streamsAudio: true, sampleRate: 16_000),
             Row(provider: .voz, name: "Voz \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000),
-            Row(provider: .parakeet, name: "Parakeet \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000)
+            Row(provider: .parakeet, name: "Parakeet \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000),
+            Row(provider: .apple, name: "Apple \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000)
         ]
         XCTAssertEqual(rows.map(\.provider), SpeechProvider.allCases)
         for row in rows {
@@ -71,6 +73,26 @@ final class SpeechProviderTests: XCTestCase {
             XCTAssertEqual(provider.streamsAudio, row.streamsAudio, provider.rawValue)
             XCTAssertEqual(provider.sampleRate, row.sampleRate, provider.rawValue)
         }
+    }
+
+    /// D-28: the recogniser built into iOS is the sixth provider, last in the catalogue.
+    func testAppleIsOnDeviceAndNeedsNeitherCloudNorPC() {
+        let apple = SpeechProvider.apple
+        XCTAssertEqual(apple.rawValue, "apple")
+        XCTAssertEqual(SpeechProvider(rawValue: "apple"), .apple)
+        XCTAssertEqual(SpeechProvider.allCases.last, .apple)
+        XCTAssertEqual(SpeechProvider.allCases.count, 6)
+        XCTAssertEqual(apple.displayName, "Apple \u{00B7} iPhone")
+        XCTAssertTrue(apple.isOnDevice)
+        XCTAssertFalse(apple.isCloud)
+        XCTAssertFalse(apple.isPCLocal)
+        XCTAssertFalse(apple.streamsAudio)
+        XCTAssertEqual(apple.sampleRate, 16_000)
+        XCTAssertEqual(SpeechProvider.stored("apple"), .apple)
+        XCTAssertEqual(SpeechProvider.stored("Apple"), .meta, "Raw values are compared exactly.")
+        XCTAssertFalse(RelayConstants.speechModels.contains(apple.rawValue), "The PC has no model of this name.")
+        XCTAssertEqual(TranscriptionUsage(provider: apple.rawValue).hourlyRateUSD, 0)
+        XCTAssertFalse(PCRequirement.needsPC(speech: apple, answers: .openrouter))
     }
 
     func testEveryProviderIsExactlyOneKind() {
@@ -85,6 +107,7 @@ final class SpeechProviderTests: XCTestCase {
     func testOnDeviceCatalogueEntries() {
         XCTAssertEqual(TranscriptionModel.onDevice(for: .voz), TranscriptionModel.voz)
         XCTAssertEqual(TranscriptionModel.onDevice(for: .parakeet), TranscriptionModel.parakeet)
+        XCTAssertEqual(TranscriptionModel.onDevice(for: .apple), TranscriptionModel.apple)
         XCTAssertNil(TranscriptionModel.onDevice(for: .meta))
         XCTAssertNil(TranscriptionModel.onDevice(for: .nemotron))
         XCTAssertNil(TranscriptionModel.onDevice(for: .qwen3))
@@ -109,6 +132,18 @@ final class SpeechProviderTests: XCTestCase {
                 recommended: true
             )
         )
+        // The system keeps Apple's language asset, so the entry names no size.
+        XCTAssertEqual(
+            TranscriptionModel.apple,
+            TranscriptionModel(
+                variant: "apple",
+                displayName: "Apple live captions",
+                approximateMegabytes: 0,
+                quality: "English live captions \u{00B7} built into iOS",
+                recommended: false
+            )
+        )
+        XCTAssertEqual(TranscriptionModel.apple.id, SpeechProvider.apple.rawValue)
         XCTAssertEqual(TranscriptionModel.voz.id, SpeechProvider.voz.rawValue)
         XCTAssertEqual(TranscriptionModel.parakeet.id, SpeechProvider.parakeet.rawValue)
     }
@@ -133,7 +168,7 @@ final class SpeechProviderTests: XCTestCase {
 
     // MARK: - Is the PC needed
 
-    func testNeedsPCForAllTenPairs() {
+    func testNeedsPCForEveryPair() {
         let expected: [(speech: SpeechProvider, answers: AssistantProvider, needsPC: Bool)] = [
             (.meta, .codex, true),
             (.meta, .openrouter, false),
@@ -144,7 +179,9 @@ final class SpeechProviderTests: XCTestCase {
             (.voz, .codex, true),
             (.voz, .openrouter, false),
             (.parakeet, .codex, true),
-            (.parakeet, .openrouter, false)
+            (.parakeet, .openrouter, false),
+            (.apple, .codex, true),
+            (.apple, .openrouter, false)
         ]
         XCTAssertEqual(expected.count, SpeechProvider.allCases.count * AssistantProvider.allCases.count)
         for row in expected {

@@ -27,7 +27,8 @@ import LiveCueCore
     }
 
     /// An on-device transcriber takes the recogniser that is loaded now. Without one its start fails
-    /// with "Prepare Voz first." or "Prepare Parakeet first.".
+    /// with "Prepare Voz first." or "Prepare Parakeet first.". Apple takes the system recogniser, which is
+    /// there once its language asset is installed.
     func makeTranscriber(for provider: SpeechProvider) -> any SpeechTranscriber {
         switch provider {
         case .meta:
@@ -38,6 +39,8 @@ import LiveCueCore
             return VozTranscriber(engine: models.vozEngine, audio: audio, clock: clock, models: models)
         case .parakeet:
             return ParakeetTranscriber(engine: models.parakeetEngine, audio: audio, clock: clock, models: models)
+        case .apple:
+            return AppleTranscriber(engine: models.systemSpeechEngine, audio: audio, clock: clock, models: models)
         }
     }
 }

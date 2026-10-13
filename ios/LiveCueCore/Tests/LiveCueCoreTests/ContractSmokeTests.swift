@@ -138,8 +138,8 @@ final class ContractSmokeTests: XCTestCase {
     }
 
     func testProviderCatalogueIsThatOfSpec02Section7() {
-        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet])
-        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet"])
+        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple])
+        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet", "apple"])
         XCTAssertEqual(RelayConstants.speechModels, SpeechProvider.allCases.filter(\.isPCLocal).map(\.rawValue))
         XCTAssertEqual(SpeechProvider.meta.sampleRate, MetaRealtimeAPI.sampleRate)
         XCTAssertEqual(SpeechProvider.nemotron.sampleRate, RelayConstants.speechSampleRate)

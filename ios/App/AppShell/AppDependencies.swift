@@ -15,6 +15,8 @@ import Foundation
     var openRouterKeyVerifier: any OpenRouterKeyVerifying
     var metaKeyTester: any MetaKeyTesting
     var engineLoader: any OnDeviceEngineLoading
+    /// The recogniser built into iOS. The default is the one of an iPhone that has none.
+    var systemSpeech: any SystemSpeechRecognizing = UnavailableSystemSpeech()
     /// Built after the model manager exists, because on-device transcribers take their engine from it.
     var makeTranscriberFactory: @MainActor (OnDeviceModelManager) -> any SpeechTranscriberFactory
 }

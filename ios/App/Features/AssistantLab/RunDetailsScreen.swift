@@ -3,8 +3,8 @@ import SwiftUI
 
 /// The details of one compared answer, with its timing shown open.
 ///
-/// Question and answer came from a model and are drawn as they are: nothing in them is read as
-/// formatting or as a link.
+/// Question and answer came from a model. The answer is drawn through `MarkupText`: its formatting is
+/// shown as styling and nothing in it is ever a link. The question is drawn as it is.
 struct RunDetailsScreen: View {
     private let turnID: UUID
 
@@ -26,10 +26,7 @@ struct RunDetailsScreen: View {
                     }
                 }
                 Panel("Answer") {
-                    Text(verbatim: turn.answer)
-                        .lcText(.cue)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
+                    MarkupText(turn.answer, role: .cue)
                 }
                 Panel("Response timing") {
                     TimingView(turn: turn)

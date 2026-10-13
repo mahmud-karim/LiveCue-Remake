@@ -26,7 +26,7 @@ struct TranscriptionScreen: View {
     }
 }
 
-/// The five providers as choice rows.
+/// The six providers as choice rows. A provider this iPhone cannot run says why and cannot be chosen.
 private struct TranscriptionProviderPanel: View {
     @Environment(TranscriptionViewModel.self) private var model
 
@@ -35,10 +35,14 @@ private struct TranscriptionProviderPanel: View {
     var body: some View {
         Panel {
             ForEach(model.providers, id: \.self) { (provider: SpeechProvider) in
-                ChoiceRow(title: provider.pickerTitle, isSelected: provider == model.selected) {
+                ChoiceRow(
+                    title: provider.pickerTitle,
+                    subtitle: model.unavailableReason(for: provider),
+                    isSelected: provider == model.selected
+                ) {
                     model.select(provider)
                 }
-                .disabled(model.lockCaption != nil)
+                .disabled(model.lockCaption != nil || model.unavailableReason(for: provider) != nil)
                 .accessibilityIdentifier(TranscriptionProviderPanel.identifier(of: provider))
             }
             CaptionText(TranscriptionProviderPanel.caption)
@@ -48,7 +52,8 @@ private struct TranscriptionProviderPanel: View {
         }
     }
 
-    /// `provider-meta`, `provider-nemotron`, `provider-qwen3`, `provider-voz`, `provider-parakeet`
+    /// `provider-meta`, `provider-nemotron`, `provider-qwen3`, `provider-voz`, `provider-parakeet`,
+    /// `provider-apple`
     private static func identifier(of provider: SpeechProvider) -> String {
         "provider-" + provider.rawValue
     }

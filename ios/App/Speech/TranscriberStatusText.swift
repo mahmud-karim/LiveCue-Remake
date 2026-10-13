@@ -65,6 +65,15 @@ enum TranscriberStatusText {
 enum TranscriberFailureText {
     static let noMicrophone = TranscriberFailure(.noMicrophone, message: "No usable microphone.")
 
+    /// The failure of a capture that could not start. When the capture says what it found, that is the
+    /// text: no microphone given by iOS, or "No usable microphone." with the figures in brackets.
+    static func microphone(_ error: any Error) -> TranscriberFailure {
+        guard case .unusable(let report)? = error as? AudioCaptureFailure else {
+            return noMicrophone
+        }
+        return TranscriberFailure(.noMicrophone, message: AudioInputDiagnosis.message(for: report))
+    }
+
     static let microphoneInterrupted = TranscriberFailure(
         .microphoneInterrupted,
         message: "Microphone interrupted. Resume when your call or other audio finishes."
@@ -105,7 +114,13 @@ enum TranscriberFailureText {
         message: "Could not finalize the transcript. Some final words may be missing."
     )
 
-    /// "Prepare Voz first." / "Prepare Parakeet first."
+    /// Apple: the system recogniser could not be started. Its own text is never shown during a session.
+    static let systemSpeechStart = TranscriberFailure(
+        .processingFailed,
+        message: "Apple speech could not start on this iPhone."
+    )
+
+    /// "Prepare Voz first." / "Prepare Parakeet first." / "Prepare Apple speech first."
     static func notPrepared(_ provider: SpeechProvider) -> TranscriberFailure {
         TranscriberFailure(.notPrepared, message: "Prepare \(provider.shortName) first.")
     }

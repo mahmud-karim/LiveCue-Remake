@@ -338,6 +338,35 @@ final class StreamTranscriptTests: XCTestCase {
         XCTAssertEqual(transcript.partialText, "Words")
     }
 
+    /// IOS-A11 (1.1.0): the end of a stream is judged by whether a started turn has no final text yet.
+    func testAStartedTurnIsUnfinishedUntilItsFinalText() {
+        var transcript = StreamTranscript()
+        XCTAssertFalse(transcript.hasUnfinishedTurn)
+
+        // A partial without a started turn starts nothing.
+        _ = transcript.apply(.transcript(turn: 1, text: "ignored", processedMs: 0))
+        XCTAssertFalse(transcript.hasUnfinishedTurn)
+
+        _ = transcript.apply(.speechStart(turn: 1, processedMs: 0))
+        XCTAssertTrue(transcript.hasUnfinishedTurn)
+        _ = transcript.apply(.transcript(turn: 1, text: "Hello", processedMs: 100))
+        _ = transcript.apply(.other)
+        XCTAssertTrue(transcript.hasUnfinishedTurn)
+
+        // Two turns open: both need their final text.
+        _ = transcript.apply(.speechStart(turn: 2, processedMs: 500))
+        _ = transcript.apply(.speechComplete(turn: 1, text: "Hello.", processedMs: 600))
+        XCTAssertTrue(transcript.hasUnfinishedTurn)
+        // An empty final still finishes its turn.
+        _ = transcript.apply(.speechComplete(turn: 2, text: "", processedMs: 900))
+        XCTAssertFalse(transcript.hasUnfinishedTurn)
+
+        // A turn that never started and a start without a number open nothing.
+        _ = transcript.apply(.speechComplete(turn: 7, text: "Late.", processedMs: 1_000))
+        _ = transcript.apply(.speechStart(turn: nil, processedMs: 1_100))
+        XCTAssertFalse(transcript.hasUnfinishedTurn)
+    }
+
     func testAFreshValueStartsEmpty() {
         var first = StreamTranscript()
         _ = first.apply(.speechStart(turn: 1, processedMs: 0))

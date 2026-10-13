@@ -70,7 +70,12 @@ import Observation
             keyVerifier: dependencies.openRouterKeyVerifier,
             activity: activity
         )
-        let models = OnDeviceModelManager(loader: dependencies.engineLoader, activity: activity, clock: dependencies.clock)
+        let models = OnDeviceModelManager(
+            loader: dependencies.engineLoader,
+            activity: activity,
+            clock: dependencies.clock,
+            systemSpeech: dependencies.systemSpeech
+        )
         let relay = RelayMonitor(
             gateway: dependencies.relayGateway,
             pairingStore: dependencies.pairingStore,
@@ -155,6 +160,9 @@ import Observation
         speech.changeIsBlocked = { [readiness] in
             readiness.providerLockReason != nil
         }
+        speech.selectionIsUnavailable = { [readiness] provider in
+            readiness.unavailableReason(for: provider) != nil
+        }
         assistant.onProviderChanged = { [relay] in
             relay.selectionChanged()
         }
@@ -168,16 +176,26 @@ import Observation
     }
 
     /// Once, from the root view's task: close interrupted sessions, load History, start the relay monitor.
-    /// A second call does nothing.
+    /// With Apple speech selected, the system is then asked whether its language asset is installed, so
+    /// that the provider is ready without a manual step. A second call does nothing.
     func bootstrap() async {
         guard !didBootstrap else { return }
         didBootstrap = true
         await dependencies.sessions.closeInterruptedSessions()
         await history.reload()
         relay.start()
+        if speech.provider == .apple {
+            await models.refreshSystemSpeech()
+        }
     }
 
+    /// The language asset may have been installed or removed while the app was away.
     func sceneBecameActive() {
         relay.appBecameActive()
+        if didBootstrap, speech.provider == .apple {
+            Task { [models] in
+                await models.refreshSystemSpeech()
+            }
+        }
     }
 }

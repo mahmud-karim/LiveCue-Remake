@@ -36,11 +36,22 @@ public struct TranscriptionModel: Codable, Equatable, Sendable, Identifiable {
         recommended: true
     )
 
+    /// The recogniser built into iOS (D-28). The system downloads and keeps its language asset, so no
+    /// size is named: `approximateMegabytes` is 0.
+    public static let apple = TranscriptionModel(
+        variant: "apple",
+        displayName: "Apple live captions",
+        approximateMegabytes: 0,
+        quality: "English live captions · built into iOS",
+        recommended: false
+    )
+
     /// The catalogue entry of an on-device provider; nil for a provider that streams audio.
     public static func onDevice(for provider: SpeechProvider) -> TranscriptionModel? {
         switch provider {
         case .voz: return TranscriptionModel.voz
         case .parakeet: return TranscriptionModel.parakeet
+        case .apple: return TranscriptionModel.apple
         case .meta, .nemotron, .qwen3: return nil
         }
     }

@@ -336,9 +336,9 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         XCTAssertEqual(describe(events).suffix(2), ["usage finish completed=false", "failed"])
     }
 
-    func testADropAfterEndStreamIsInterrupted() async throws {
+    func testADropAfterEndStreamIsInterruptedWhileATurnHasNoFinalText() async throws {
         let transport = FakeWebSocketTransport()
-        let session = try await startedSession(transport)
+        let session = try await sessionWithAnOpenTurn(transport)
 
         let finishing = Task { await session.finish() }
         await transport.waitForSentTexts(count: 1)
@@ -351,10 +351,103 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         XCTAssertEqual(describe(events).suffix(2), ["usage finish completed=false", "failed"])
     }
 
-    func testNoCloseWithinC60IsInterruptedWithStreamDropped() async throws {
+    func testADropAfterEndStreamIsCompletedWhenNothingIsMissing() async throws {
+        let transport = FakeWebSocketTransport()
+        let session = try await startedSession(transport)
+
+        let finishing = Task { await session.finish() }
+        await transport.waitForSentTexts(count: 1)
+        await transport.drop()
+
+        let ending = await finishing.value
+        XCTAssertEqual(ending, .completed)
+        let events = await allEvents(of: session)
+        XCTAssertEqual(describe(events).last, "usage finish completed=true")
+        XCTAssertFalse(describe(events).contains("failed"))
+    }
+
+    func testAnUnexplainedCloseAfterEndStreamIsJudgedByWhatIsMissing() async throws {
+        // Going away and no status code are the relay ending the stream, whatever is open.
+        for code in [1001, 1005] {
+            let transport = FakeWebSocketTransport()
+            let session = try await sessionWithAnOpenTurn(transport)
+            let finishing = Task { await session.finish() }
+            await transport.waitForSentTexts(count: 1)
+            await transport.deliver(.closed(code: code, reason: ""))
+            let ending = await finishing.value
+            XCTAssertEqual(ending, .completed, "\(code)")
+        }
+
+        // Another code with a reason that is no code of the relay: completed when nothing is missing.
+        let quiet = FakeWebSocketTransport()
+        let nothingOpen = try await startedSession(quiet)
+        let finishingQuiet = Task { await nothingOpen.finish() }
+        await quiet.waitForSentTexts(count: 1)
+        await quiet.deliver(.closed(code: 1011, reason: "going away"))
+        let quietEnding = await finishingQuiet.value
+        XCTAssertEqual(quietEnding, .completed)
+
+        // The same close while a turn has no final text: interrupted.
+        let open = FakeWebSocketTransport()
+        let turnOpen = try await sessionWithAnOpenTurn(open)
+        let finishingOpen = Task { await turnOpen.finish() }
+        await open.waitForSentTexts(count: 1)
+        await open.deliver(.closed(code: 1011, reason: "going away"))
+        let openEnding = await finishingOpen.value
+        XCTAssertEqual(openEnding, .interrupted)
+        let events = await allEvents(of: turnOpen)
+        XCTAssertEqual(events.last, .failed(streamDropped))
+
+        // A code of the relay as the reason is that failure even when nothing is missing.
+        let refusing = FakeWebSocketTransport()
+        let refused = try await startedSession(refusing)
+        let finishingRefused = Task { await refused.finish() }
+        await refusing.waitForSentTexts(count: 1)
+        await refusing.deliver(.closed(code: 1001, reason: "FINALIZE_TIMEOUT"))
+        let refusedEnding = await finishingRefused.value
+        XCTAssertEqual(refusedEnding, .interrupted)
+    }
+
+    func testAfterStreamCompleteThePhoneClosesItselfWhenTheRelayDoesNot() async throws {
         let transport = FakeWebSocketTransport()
         let time = ManualTime()
         let session = try await startedSession(transport, time: time)
+
+        let finishing = Task { await session.finish() }
+        await transport.waitForSentTexts(count: 1)
+        await time.waitForSleepers()
+
+        // Before `streamComplete` a silent PC model may still be working: only C-60 is waiting.
+        await time.advance(by: 3)
+        XCTAssertEqual(time.sleeperCount, 1)
+        let closesBefore = await transport.closeCalls
+        XCTAssertEqual(closesBefore, [])
+
+        await transport.deliver(.text(#"{"type":"streamComplete","audioProcessedMs":0,"finalizationMs":35}"#))
+        await time.waitForSleepers(count: 2)
+        await time.advance(by: 1)
+        let closesInsideTheQuietPeriod = await transport.closeCalls
+        XCTAssertEqual(closesInsideTheQuietPeriod, [])
+        await time.advance(by: 0.5)
+
+        let ending = await finishing.value
+        XCTAssertEqual(ending, .completed)
+        XCTAssertEqual(time.now, 4.5)
+        let events = await allEvents(of: session)
+        XCTAssertEqual(describe(events).suffix(4), [
+            "usage update sent=- processed=0.0 text=false",
+            "usage finalization 35.0",
+            "status finalized 0.035",
+            "usage finish completed=true"
+        ])
+        let closes = await transport.closeCalls
+        XCTAssertEqual(closes, [1000])
+    }
+
+    func testNoFinalTextWithinC60IsInterruptedWithStreamDropped() async throws {
+        let transport = FakeWebSocketTransport()
+        let time = ManualTime()
+        let session = try await sessionWithAnOpenTurn(transport, time: time)
 
         let finishing = Task { await session.finish() }
         await transport.waitForSentTexts(count: 1)
@@ -373,6 +466,29 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         let events = await allEvents(of: session)
         XCTAssertEqual(events.last, .failed(streamDropped))
         XCTAssertEqual(describe(events).suffix(2), ["usage finish completed=false", "failed"])
+        let closes = await transport.closeCalls
+        XCTAssertEqual(closes.count, 1)
+    }
+
+    func testNoCloseWithinC60IsCompletedWhenNothingIsMissing() async throws {
+        let transport = FakeWebSocketTransport()
+        let time = ManualTime()
+        let session = try await startedSession(transport, time: time)
+
+        let finishing = Task { await session.finish() }
+        await transport.waitForSentTexts(count: 1)
+        await time.waitForSleepers()
+
+        await time.advance(by: 14)
+        let closesInsideTheLimit = await transport.closeCalls
+        XCTAssertEqual(closesInsideTheLimit, [], "Without `streamComplete` the phone waits up to C-60.")
+
+        await time.advance(by: 1)
+        let ending = await finishing.value
+        XCTAssertEqual(ending, .completed, "No started turn is without its final text.")
+        let events = await allEvents(of: session)
+        XCTAssertEqual(describe(events).last, "usage finish completed=true")
+        XCTAssertFalse(describe(events).contains("failed"))
         let closes = await transport.closeCalls
         XCTAssertEqual(closes.count, 1)
     }
@@ -855,6 +971,14 @@ final class SpeechStreamSessionRelayTests: XCTestCase {
         let session = makeSession(transport, time: time)
         await transport.deliver(.text(readyFrame("nemotron")))
         try await session.start()
+        await transport.waitForReceive()
+        return session
+    }
+
+    /// A session in which turn 1 has started and has no final text yet.
+    private func sessionWithAnOpenTurn(_ transport: FakeWebSocketTransport, time: ManualTime = ManualTime()) async throws -> SpeechStreamSession {
+        let session = try await startedSession(transport, time: time)
+        await transport.deliver(.text(#"{"type":"speechStart","turnId":1,"audioProcessedMs":0}"#))
         await transport.waitForReceive()
         return session
     }

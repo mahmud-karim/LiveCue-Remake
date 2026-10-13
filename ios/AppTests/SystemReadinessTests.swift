@@ -51,7 +51,9 @@ final class SystemReadinessTests: XCTestCase {
             (.voz, .codex, true),
             (.voz, .openrouter, false),
             (.parakeet, .codex, true),
-            (.parakeet, .openrouter, false)
+            (.parakeet, .openrouter, false),
+            (.apple, .codex, true),
+            (.apple, .openrouter, false)
         ]
         for row in expected {
             let owners = TestOwners(provider: row.speech, answers: row.answers)

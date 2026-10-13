@@ -8,7 +8,7 @@ enum HomeTranscriptionDetail: Equatable {
     case meta(state: String, isReady: Bool)
     /// The home label of spec 01 section 3.7.
     case pcModel(label: String, canStart: Bool, isChanging: Bool)
-    /// The model description, or "Download a model to start".
+    /// The model description, or "Download a model to start"; for Apple also why it cannot be used.
     case onDevice(text: String)
 }
 
@@ -116,7 +116,11 @@ enum HomeStartControl: Equatable {
                 isChanging: isChanging
             )
         }
-        return .onDevice(text: models.loadedModel(for: provider)?.quality ?? "Download a model to start")
+        if let model = models.loadedModel(for: provider) {
+            return .onDevice(text: model.quality)
+        }
+        let note = provider == .apple ? models.systemSpeechNote : nil
+        return .onDevice(text: note ?? "Download a model to start")
     }
 
     /// "PC connection" / "Pair Windows PC"

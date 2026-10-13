@@ -173,6 +173,36 @@ final class HomeViewModelTests: XCTestCase {
     }
 
     @MainActor
+    func testAppleSaysWhatItNeedsAndStartsOnceItsAssetIsInstalled() async {
+        // iOS 18 to 25: the reason takes the place of the download hint.
+        let older = makeModel(TestOwners(provider: .apple, answers: .openrouter))
+        XCTAssertEqual(older.startControl, .download)
+        XCTAssertEqual(older.transcriptionValue, "Not configured")
+        XCTAssertTrue(older.transcriptionValueNeedsAttention)
+        XCTAssertEqual(older.transcriptionDetail, .onDevice(text: "Requires iOS 26 or later"))
+        XCTAssertEqual(older.captionLine1, "Transcription on your iPhone.")
+        XCTAssertEqual(older.statusChip.text, "OpenRouter direct")
+
+        // iOS 26, asset missing: the download is offered as for the other on-device providers.
+        let engine = FakeSystemSpeech(answer: .needsDownload)
+        let owners = TestOwners(provider: .apple, answers: .openrouter, systemSpeech: engine)
+        let model = makeModel(owners)
+        XCTAssertEqual(model.transcriptionDetail, .onDevice(text: "Checking Apple speech…"))
+        await owners.models.refreshSystemSpeech()
+        XCTAssertEqual(model.startControl, .download)
+        XCTAssertEqual(model.transcriptionDetail, .onDevice(text: "Download a model to start"))
+
+        // Installed: ready, with no manual step.
+        await engine.setAnswer(.installed)
+        await owners.models.refreshSystemSpeech()
+        XCTAssertEqual(model.startControl, .start(isBusy: false, isEnabled: true, caption: nil))
+        XCTAssertEqual(model.transcriptionValue, "Apple live captions")
+        XCTAssertFalse(model.transcriptionValueNeedsAttention)
+        XCTAssertEqual(model.transcriptionDetail, .onDevice(text: "English live captions · built into iOS"))
+        XCTAssertTrue(owners.readiness.speechReady)
+    }
+
+    @MainActor
     func testAStreamingProviderNeverOffersTheDownload() async {
         for provider in [SpeechProvider.meta, .nemotron, .qwen3] {
             for answers in AssistantProvider.allCases {

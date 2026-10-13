@@ -12,7 +12,8 @@ public struct RelaySpeechNegotiation: Sendable {
     }
 
     public enum Ending: Equatable, Sendable {
-        /// endStream sent, close code 1000, inside C-60.
+        /// endStream sent, then a clean close inside C-60: code 1000, or 1001 or no status code (1005)
+        /// with no code of the relay as the reason.
         case completed
         case interrupted(RelayFailure)
     }
@@ -99,6 +100,11 @@ public struct RelaySpeechNegotiation: Sendable {
             return .interrupted(RelayFailure.local(.streamDropped, origin: .stream))
         }
         if endStreamSent, closeCode == 1000 {
+            return .completed
+        }
+        // "Going away" and "no status code" after `endStream` are the peer ending the stream too, unless
+        // the relay named a code of its own as the reason.
+        if endStreamSent, closeCode == 1001 || closeCode == 1005, RelayWireCode(rawValue: closeReason) == nil {
             return .completed
         }
         // Step 7: a close that no `error` frame explained. The reason text of a refusing relay is the code.

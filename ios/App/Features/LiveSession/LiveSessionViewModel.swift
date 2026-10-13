@@ -206,9 +206,10 @@ struct InProgressState: Equatable {
         await session.stop()
     }
 
-    /// Clipboard, then the toast "Copied".
+    /// Clipboard, then the toast "Copied". The answer is copied as plain text, without the symbols of
+    /// its formatting.
     func copy(_ turn: AssistantTurn) {
-        clipboard.copy(turn.answer)
+        clipboard.copy(AnswerMarkup.plainText(turn.answer))
         toasts.show("Copied")
     }
 

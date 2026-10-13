@@ -38,12 +38,14 @@ import LiveCueCore
     ///   - answers: the stored answer service, with its default selection.
     ///   - metaKey: the stored Meta key, or nil for none.
     ///   - microphoneGranted: what the microphone permission request answers.
+    ///   - systemSpeech: the recogniser built into iOS; nil for an iPhone that has none (iOS 18 to 25).
     init(
         paired: Bool = true,
         provider: SpeechProvider = .meta,
         answers: AssistantProvider = .codex,
         metaKey: String? = "fixture-meta-key",
-        microphoneGranted: Bool = true
+        microphoneGranted: Bool = true,
+        systemSpeech: (any SystemSpeechRecognizing)? = nil
     ) {
         let clock = ManualClock()
         let preferences = FakePreferences()
@@ -82,7 +84,8 @@ import LiveCueCore
         let models = OnDeviceModelManager(
             loader: FakeEngineLoader(voz: vozEngine, parakeet: parakeetEngine),
             activity: activity,
-            clock: clock
+            clock: clock,
+            systemSpeech: systemSpeech ?? UnavailableSystemSpeech()
         )
         let relay = RelayMonitor(
             gateway: gateway,
@@ -121,6 +124,9 @@ import LiveCueCore
         }
         speech.changeIsBlocked = { [readiness] in
             readiness.providerLockReason != nil
+        }
+        speech.selectionIsUnavailable = { [readiness] provider in
+            readiness.unavailableReason(for: provider) != nil
         }
         assistant.onProviderChanged = { [relay] in
             relay.selectionChanged()

@@ -45,6 +45,34 @@ struct FixtureBatchEngine: BatchRecognizing {
     }
 }
 
+/// The system recogniser of the test seam: its language asset is installed, on every iOS, so a UI test
+/// can choose Apple speech and start at once. It hears nothing; the fixture transcriber never calls it.
+struct FixtureSystemSpeech: SystemSpeechRecognizing {
+    init() {}
+
+    var knownAvailability: SystemSpeechAvailability {
+        .installed
+    }
+
+    func availability() async -> SystemSpeechAvailability {
+        .installed
+    }
+
+    func install(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws {}
+
+    func begin() async throws -> AsyncThrowingStream<SystemSpeechResult, any Error> {
+        let (results, sink) = AsyncThrowingStream<SystemSpeechResult, any Error>.makeStream()
+        sink.finish()
+        return results
+    }
+
+    func process(samples: [Float]) async throws {}
+
+    func finish() async throws {}
+
+    func cancel() async {}
+}
+
 /// A streaming recogniser that hears nothing. It keeps no state, so every call returns at once.
 struct FixtureStreamingEngine: StreamingRecognizing {
     init() {}

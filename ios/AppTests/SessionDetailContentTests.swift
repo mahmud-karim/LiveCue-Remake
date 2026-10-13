@@ -162,8 +162,8 @@ final class SessionDetailContentTests: XCTestCase {
 
     // MARK: - The screen
 
-    /// A full session, hosted in a window: a picture of it is kept with the test results, and the texts
-    /// a model wrote are read as they were written.
+    /// A full session, hosted in a window: a picture of it is kept with the test results, and a link a
+    /// model wrote is read as its text and its address, never as a link (1.1.0).
     @MainActor
     func testTheSectionsAreDrawn() async {
         let hostile = "[label](https://pc.example.test/x) https://pc.example.test/y"
@@ -205,8 +205,10 @@ final class SessionDetailContentTests: XCTestCase {
         )
 
         XCTAssertEqual(report.linkCount, 0, "Nothing a model wrote becomes a link.")
+        let shown = "label (https://pc.example.test/x) https://pc.example.test/y"
+        XCTAssertEqual(AnswerMarkup.plainText(hostile), shown)
         if report.labels.contains(where: { $0.contains("pc.example.test") }) {
-            XCTAssertTrue(report.labels.contains { $0.contains(hostile) }, "Labels: \(report.labels)")
+            XCTAssertTrue(report.labels.contains { $0.contains(shown) }, "Labels: \(report.labels)")
         }
     }
 }

@@ -22,6 +22,12 @@ public struct StreamTranscript: Sendable {
             .joined(separator: " ")
     }
 
+    /// True while a turn that started has not received its final text. The end of a stream is judged by
+    /// it (IOS-A11): with no such turn, nothing that was heard can still be missing.
+    public var hasUnfinishedTurn: Bool {
+        starts.keys.contains { !completed.contains($0) }
+    }
+
     /// `transcript` updates the turn its `turn` names when that turn is open (started and not completed),
     /// otherwise the active turn when it is open, otherwise nothing. `speechComplete` for a turn not yet
     /// completed marks it completed and returns a segment when the trimmed text is not empty

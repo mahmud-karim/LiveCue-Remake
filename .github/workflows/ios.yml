@@ -64,8 +64,8 @@ env:
   APP_NAME: LiveCueRemake
   # What the built app must report. Change these together with ios/project.yml.
   BUNDLE_ID: com.mahmudkarim.LiveCueRemake
-  APP_VERSION: "1.0.0"
-  APP_BUILD: "1"
+  APP_VERSION: "1.1.0"
+  APP_BUILD: "2"
   MINIMUM_IOS: "18.0"
 
 jobs:

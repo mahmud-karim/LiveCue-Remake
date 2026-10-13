@@ -27,7 +27,8 @@ struct SessionDetailScreen: View {
 /// One panel per section, each only if it has content.
 ///
 /// Summary, key points, action items, the detected question, the answer and the details were written by
-/// a model. They are drawn as they are: nothing in them is read as formatting or becomes a link.
+/// a model. All but the question are drawn through `MarkupText`: their formatting is shown as styling,
+/// and nothing in them ever becomes a link. The question is drawn as it is.
 struct SessionDetailSections: View {
     private let content: SessionDetailContent
 
@@ -78,16 +79,12 @@ struct SessionDetailSections: View {
     }
 }
 
-/// A text of the session in `type.body`, selectable.
+/// A text of the session in `type.body`, selectable, with its formatting shown.
 private struct SessionDetailText: View {
     let text: String
 
     var body: some View {
-        Text(verbatim: text)
-            .lcText(.body)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
+        MarkupText(text, role: .body)
     }
 }
 
@@ -128,11 +125,7 @@ private struct SessionDetailTurnCard: View {
             }
             SessionDetailText(text: turn.answer)
             if !turn.details.isEmpty {
-                Text(verbatim: turn.details)
-                    .lcText(.body, color: theme.ink.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
+                MarkupText(turn.details, role: .body, color: theme.ink.secondary)
             }
         }
     }

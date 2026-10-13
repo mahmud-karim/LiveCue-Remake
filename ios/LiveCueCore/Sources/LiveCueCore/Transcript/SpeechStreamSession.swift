@@ -7,7 +7,22 @@ import Foundation
 /// socket and reads it; one task sleeps for the time limit of the current wait; `start()` and `finish()`
 /// suspend on a continuation that the state change resumes. A time limit therefore never depends on the
 /// transport noticing a cancelled task: when it passes, the socket is closed and the wait ends here.
+///
+/// What counts as a clean Pause or Stop (IOS-A11, as changed in 1.1.0 after the first use on a real
+/// iPhone, where the cloud provider did not close with code 1000). Once `endStream` has left:
+/// - a close by the peer with code 1000, 1001 or no status code (1005) is completed;
+/// - when no started turn is still without its final text and nothing arrives for `quietSeconds`, the
+///   phone closes and the stream is completed (for the relay only after its `streamComplete`, because a
+///   PC model may still be working through the last audio in silence);
+/// - any other end (another close code, a drop, the 15 s limit) is completed when no started turn is
+///   without its final text, and interrupted when one is. A close whose reason is a code of the relay
+///   stays that failure.
+/// Before `endStream` has left, every end of the connection is a failure, as before.
 public actor SpeechStreamSession {
+    /// How long nothing may arrive after `endStream`, with every started turn final, before the phone
+    /// closes the stream as completed.
+    public static let quietSeconds: TimeInterval = 1.5
+
     /// Finishes when the stream has ended, after the last event.
     public nonisolated let events: AsyncStream<SpeechStreamEvent>
 
@@ -71,6 +86,18 @@ public actor SpeechStreamSession {
     private var lastPartial = ""
     private var firstTextSeen = false
     private var endStreamSent = false
+    /// True once the send of `endStream` returned. The quiet period and the leniency of the 15 s limit
+    /// need it: a stream whose `endStream` never left was not asked to end.
+    private var endStreamDelivered = false
+    /// The relay said that all audio was processed.
+    private var streamCompleteSeen = false
+    private var finalizationReported = false
+    /// While finishing: when `endStream` left, or when the provider last said something.
+    private var lastActivityAt: TimeInterval = 0
+    /// Sleeps for the quiet period after `endStream`.
+    private var quiet: Task<Void, Never>?
+    /// Names the quiet period in flight; an older one that wakes does nothing.
+    private var quietRound = 0
     private var ending = SpeechStreamEnding.interrupted
 
     private var openedAt: TimeInterval = 0
@@ -161,7 +188,9 @@ public actor SpeechStreamSession {
     }
 
     /// Flushes the remainder as one shorter frame, sends `endStream` once, then waits up to 15 s for the
-    /// close. Returns after `events` has finished. `completed` only for close code 1000 inside the limit.
+    /// end of the stream. Returns after `events` has finished. `completed` by the rule in the type's
+    /// description: a clean close, a quiet period with every started turn final, or any other end that
+    /// leaves no started turn without its final text.
     public func finish() async -> SpeechStreamEnding {
         switch phase {
         case .idle:
@@ -209,6 +238,11 @@ public actor SpeechStreamSession {
             negotiation?.markEndStreamSent()
             do {
                 try await open.send(text: endStreamMessage)
+                if phase == .finishing {
+                    endStreamDelivered = true
+                    lastActivityAt = timing.uptime()
+                    restartQuietPeriod()
+                }
             } catch {
                 await fail(SpeechStreamFailure(.sendFailed))
             }
@@ -310,7 +344,7 @@ public actor SpeechStreamSession {
                 message = try await opened.receive()
             } catch {
                 // The socket dropped with no close frame.
-                await fail(dropFailure)
+                await connectionEndedUnexplained()
                 return
             }
             await handle(message)
@@ -364,6 +398,12 @@ public actor SpeechStreamSession {
             case .relay:
                 await handleRelay(text)
             }
+        }
+
+        // The provider said something while the end is awaited: the quiet period starts again.
+        if phase == .finishing, endStreamDelivered {
+            lastActivityAt = timing.uptime()
+            restartQuietPeriod()
         }
     }
 
@@ -431,6 +471,9 @@ public actor SpeechStreamSession {
     }
 
     private func handleClose(code: Int, reason: String) async {
+        if phase == .finishing {
+            lastActivityAt = timing.uptime()
+        }
         switch dialect {
         case .relay:
             guard let state = negotiation else { return }
@@ -439,14 +482,21 @@ public actor SpeechStreamSession {
             case .completed:
                 await end(.completed, failure: nil, closeCode: CloseCode.normal)
             case .interrupted(let failure):
-                await fail(SpeechStreamFailure(.relay(failure)), closeCode: CloseCode.normal)
+                // A close the relay explained with a code of its own is that failure. One it did not
+                // explain is judged by what is still missing.
+                if failure == RelayFailure.local(.streamDropped, origin: .stream), nothingIsMissing {
+                    await complete()
+                } else {
+                    await fail(SpeechStreamFailure(.relay(failure)), closeCode: CloseCode.normal)
+                }
             }
 
         case .meta:
-            // The same rule (IOS-A11): `endStream` was sent and the close code is 1000.
-            if phase == .finishing, endStreamSent, code == CloseCode.normal {
-                reportFinalization(milliseconds: (timing.uptime() - finishBeganAt) * 1000)
-                await end(.completed, failure: nil, closeCode: CloseCode.normal)
+            // IOS-A11: after `endStream`, a close with 1000, 1001 or no status code is the provider
+            // ending the stream. Any other close is judged by what is still missing.
+            let asked = phase == .finishing && endStreamSent
+            if (asked && CloseCode.clean.contains(code)) || nothingIsMissing {
+                await complete()
             } else {
                 await fail(SpeechStreamFailure(.meta(.connection)), closeCode: CloseCode.normal)
             }
@@ -501,6 +551,7 @@ public actor SpeechStreamSession {
             processed = position
         }
         emit(.usage(.update(id: usageID, sentMs: nil, processedMs: processed, hasTranscript: false)))
+        streamCompleteSeen = true
 
         if let finalizationMs {
             reportFinalization(milliseconds: finalizationMs)
@@ -510,6 +561,7 @@ public actor SpeechStreamSession {
     }
 
     private func reportFinalization(milliseconds: Double) {
+        finalizationReported = true
         let value = max(0, milliseconds)
         emit(.usage(.finalization(milliseconds: value)))
         emit(.status(.finalized(seconds: value / 1000)))
@@ -579,8 +631,79 @@ public actor SpeechStreamSession {
     private func finishLimitPassed() async {
         guard phase == .finishing else { return }
         limit = nil
-        // Protocol 13.7 step 6: C-60 passed with no close. The same limit serves Meta.
-        await fail(dropFailure)
+        // Protocol 13.7 step 6: C-60 passed with no close. The same limit serves Meta. It is a failure
+        // when `endStream` never left or a started turn is still without its final text.
+        if endStreamDelivered, nothingIsMissing {
+            await complete()
+        } else {
+            await fail(dropFailure)
+        }
+    }
+
+    // MARK: - The end after `endStream` (IOS-A11)
+
+    /// The stream asked to end (all audio has left, `endStream` is on its way) and no started turn is
+    /// still without its final text: whatever ends the connection now, nothing that was heard is missing.
+    private var nothingIsMissing: Bool {
+        phase == .finishing && endStreamSent && !transcript.hasUnfinishedTurn
+    }
+
+    /// The phone may end the stream itself after a quiet period. The relay announces the end of its work
+    /// with `streamComplete`; until then a silent PC model may still be transcribing the last audio.
+    private var mayEndAfterQuiet: Bool {
+        guard endStreamDelivered, nothingIsMissing else { return false }
+        switch dialect {
+        case .meta:
+            return true
+        case .relay:
+            return streamCompleteSeen
+        }
+    }
+
+    /// Starts the quiet period again, or stops it while something is still expected.
+    private func restartQuietPeriod() {
+        quiet?.cancel()
+        quiet = nil
+        quietRound += 1
+        guard mayEndAfterQuiet else { return }
+
+        let round = quietRound
+        let seconds = SpeechStreamSession.quietSeconds
+        quiet = Task {
+            do {
+                try await self.timing.sleep(seconds)
+            } catch {
+                // Cancelled: something arrived, or the stream ended.
+                return
+            }
+            await self.quietPeriodPassed(round)
+        }
+    }
+
+    private func quietPeriodPassed(_ round: Int) async {
+        guard round == quietRound, mayEndAfterQuiet else { return }
+        // This runs on the quiet task, which has done its work: forget it, so that closing the socket
+        // does not cancel the task it runs on.
+        quiet = nil
+        await complete()
+    }
+
+    /// The connection dropped with no close frame.
+    private func connectionEndedUnexplained() async {
+        if nothingIsMissing {
+            await complete()
+        } else {
+            await fail(dropFailure)
+        }
+    }
+
+    /// Ends the stream as completed. Meta has no frame that says how long the finalisation took, so the
+    /// time up to the provider's last word (or to `endStream`) is reported.
+    private func complete() async {
+        if case .meta = dialect, phase == .finishing, !finalizationReported {
+            reportFinalization(milliseconds: (lastActivityAt - finishBeganAt) * 1000)
+        }
+        await end(.completed, failure: nil, closeCode: CloseCode.normal)
     }
 
     private func startCancelled() async {
@@ -636,6 +759,8 @@ public actor SpeechStreamSession {
     private func closeSocket(code: Int) async {
         limit?.cancel()
         limit = nil
+        quiet?.cancel()
+        quiet = nil
 
         let open = connection
         connection = nil
@@ -737,4 +862,7 @@ private enum CloseCode {
     static let normal = 1000
     /// The phone cut the stream itself: a limit passed, a failure, or an abort.
     static let goingAway = 1001
+    /// What the peer closes with when it ends a stream that asked to end: normal, going away, or no
+    /// status code at all (1005).
+    static let clean: Set<Int> = [1000, 1001, 1005]
 }
