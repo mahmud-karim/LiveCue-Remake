@@ -65,6 +65,15 @@ enum TranscriberStatusText {
 enum TranscriberFailureText {
     static let noMicrophone = TranscriberFailure(.noMicrophone, message: "No usable microphone.")
 
+    /// The failure of a capture that could not start. When the capture says what it found, that is the
+    /// text: no microphone given by iOS, or "No usable microphone." with the figures in brackets.
+    static func microphone(_ error: any Error) -> TranscriberFailure {
+        guard case .unusable(let report)? = error as? AudioCaptureFailure else {
+            return noMicrophone
+        }
+        return TranscriberFailure(.noMicrophone, message: AudioInputDiagnosis.message(for: report))
+    }
+
     static let microphoneInterrupted = TranscriberFailure(
         .microphoneInterrupted,
         message: "Microphone interrupted. Resume when your call or other audio finishes."

@@ -114,7 +114,7 @@ import LiveCueCore
                 run.uploadTask = Task { await StreamingTranscriberEngine.upload(streams.chunks, to: session) }
                 run.captureTask = Task { await self.watch(streams.events, run) }
             } catch {
-                run.startFailure = TranscriberFailureText.noMicrophone
+                run.startFailure = TranscriberFailureText.microphone(error)
             }
         }
 

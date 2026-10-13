@@ -47,7 +47,25 @@ enum AudioSessionPolicy {
 
     /// A format the tap can be installed with: the input reports a sample rate and at least one channel.
     static func isUsable(_ format: AVAudioFormat) -> Bool {
-        format.sampleRate > 0 && format.channelCount > 0
+        AudioInputDiagnosis.isUsable(sampleRate: format.sampleRate, channelCount: Int(format.channelCount))
+    }
+
+    /// What the session says right now, for a start that gives up. Read before the session is released.
+    /// Routes are given by port type, never by the name of a device.
+    static func report(
+        _ session: AVAudioSession,
+        stage: AudioStartReport.Stage,
+        format: AVAudioFormat?,
+        converterBuilt: Bool
+    ) -> AudioStartReport {
+        AudioStartReport(
+            stage: stage,
+            isInputAvailable: session.isInputAvailable,
+            routeInputs: session.currentRoute.inputs.map { $0.portType.rawValue },
+            sampleRate: format?.sampleRate ?? 0,
+            channelCount: Int(format?.channelCount ?? 0),
+            converterBuilt: converterBuilt
+        )
     }
 
     /// `.interrupted` when an interruption began. nil when it ended or the notification says nothing.

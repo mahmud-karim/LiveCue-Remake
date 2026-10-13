@@ -204,6 +204,31 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         await rig.end()
     }
 
+    /// 1.1.0: a capture that says what it found is quoted, so the user reads why there is no microphone.
+    @MainActor
+    func testACaptureThatSaysWhatItFoundIsQuotedInTheStartFailure() async {
+        let report = AudioStartReport(
+            stage: .input,
+            isInputAvailable: true,
+            routeInputs: ["MicrophoneBuiltIn"],
+            sampleRate: 0,
+            channelCount: 0,
+            converterBuilt: false
+        )
+        let rig = StreamingRig.meta()
+        rig.audio.startFailure = .unusable(report)
+        await rig.socket.deliver(.text(SpeechTest.metaAcknowledgement))
+        let thrown = await rig.startFailure()
+
+        XCTAssertEqual(
+            thrown,
+            TranscriberFailure(.noMicrophone, message: "No usable microphone. (input 0 Hz, 0 ch, route: MicrophoneBuiltIn)")
+        )
+        XCTAssertFalse(rig.audio.isRunning)
+        await rig.socket.waitForCloseCalls(count: 1)
+        await rig.end()
+    }
+
     @MainActor
     func testWithoutAUsableMicrophoneTheStartFailsAndTheStreamIsClosed() async {
         for failure in [AudioCaptureFailure.noUsableMicrophone, AudioCaptureFailure.couldNotStart] {

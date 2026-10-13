@@ -104,7 +104,7 @@ import LiveCueCore
             )
         } catch {
             close(run)
-            throw TranscriberFailureText.noMicrophone
+            throw TranscriberFailureText.microphone(error)
         }
 
         run.state = .listening

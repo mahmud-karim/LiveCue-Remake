@@ -81,7 +81,7 @@ import LiveCueCore
                 AudioCaptureRequest(target: .float32(sampleRate: VozTranscriber.sampleRate), queueLimit: VozTranscriber.queueLimit)
             )
         } catch {
-            throw TranscriberFailureText.noMicrophone
+            throw TranscriberFailureText.microphone(error)
         }
 
         pending.reset()

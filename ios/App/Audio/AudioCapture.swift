@@ -6,6 +6,9 @@ import AVFoundation
 /// its buffers to an `AudioTapConverter`, which owns the conversion and the two streams; this class only
 /// starts and stops things, and it does so on the main actor. Nothing here touches the microphone before
 /// `start`, so building one at launch asks for no permission.
+///
+/// A start that cannot go on says why: every failure carries what the session reported at that moment
+/// (`AudioStartReport`), and `AudioInputDiagnosis` turns it into the text the user reads.
 @MainActor final class AudioCapture: AudioCapturing {
     private var engine: AVAudioEngine?
     private var converter: AudioTapConverter?
@@ -29,20 +32,43 @@ import AVFoundation
         do {
             try AudioSessionPolicy.activate(session)
         } catch {
+            let code = (error as NSError).code
+            let report = AudioSessionPolicy.report(session, stage: .session(code: code), format: nil, converterBuilt: false)
             releaseSession()
-            throw AudioCaptureFailure.couldNotStart
+            throw AudioCaptureFailure.unusable(report)
         }
         holdsSession = true
 
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        // The format the hardware delivers. A tap installed with any other format raises an exception.
-        let format = input.outputFormat(forBus: 0)
-        guard AudioSessionPolicy.isUsable(format),
-              let converter = AudioTapConverter(inputFormat: format, request: request) else {
-            releaseSession()
-            throw AudioCaptureFailure.noUsableMicrophone
+        // The route can take a moment to settle after the activation. An input without a usable format
+        // is read again with a new engine, after a short pause. The pause blocks this start, which is
+        // synchronous by contract; it happens only on the way to a failure, and lasts 0.4 s at most.
+        var found: (engine: AVAudioEngine, format: AVAudioFormat, converter: AudioTapConverter)?
+        var lastFormat: AVAudioFormat?
+        for attempt in 1...AudioInputDiagnosis.attempts {
+            let candidate = AVAudioEngine()
+            // The format the hardware delivers. A tap installed with any other format raises an exception.
+            let format = candidate.inputNode.outputFormat(forBus: 0)
+            let usable = AudioSessionPolicy.isUsable(format)
+            let converter = usable ? AudioTapConverter(inputFormat: format, request: request) : nil
+            lastFormat = format
+            if let converter {
+                found = (candidate, format, converter)
+                break
+            }
+            guard case .retry(let seconds) = AudioInputDiagnosis.step(afterAttempt: attempt, formatUsable: usable, converterBuilt: false) else {
+                break
+            }
+            Thread.sleep(forTimeInterval: seconds)
         }
+        guard let found else {
+            let report = AudioSessionPolicy.report(session, stage: .input, format: lastFormat, converterBuilt: false)
+            releaseSession()
+            throw AudioCaptureFailure.unusable(report)
+        }
+        let engine = found.engine
+        let input = engine.inputNode
+        let format = found.format
+        let converter = found.converter
 
         input.installTap(
             onBus: 0,
@@ -54,10 +80,12 @@ import AVFoundation
         do {
             try engine.start()
         } catch {
+            let code = (error as NSError).code
+            let report = AudioSessionPolicy.report(session, stage: .engine(code: code), format: format, converterBuilt: true)
             input.removeTap(onBus: 0)
             converter.finish()
             releaseSession()
-            throw AudioCaptureFailure.couldNotStart
+            throw AudioCaptureFailure.unusable(report)
         }
 
         // Interruptions and route loss are observed for every provider (IOS-B5). The observers report

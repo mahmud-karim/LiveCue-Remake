@@ -113,8 +113,9 @@ import LiveCueCore
             )
         } catch {
             close(run)
+            let failure = TranscriberFailureText.microphone(error)
             await engine.cancel()
-            throw TranscriberFailureText.noMicrophone
+            throw failure
         }
 
         run.state = .listening
