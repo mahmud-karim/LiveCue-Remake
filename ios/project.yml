@@ -15,8 +15,8 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "3"
 
     # Swift 5 language mode with complete concurrency checking: data-race findings arrive as warnings,
     # so they do not cost a CI cycle. The core package is in Swift 6 mode through its own manifest.

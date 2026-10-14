@@ -1066,6 +1066,7 @@ The app switches to fixtures when launched with `-ui-testing`. The mechanism is 
 | Argument | Effect |
 |---|---|
 | `-on-device-ready` | Provider Parakeet with its model already loaded. |
+| `-fluid-ready` | Provider Fluid Speech Mini with its model already loaded (D-29). It comes first when both are given. |
 | `-meta-no-key` | Remove the test Meta key at launch. |
 | `-meta-key-persistence` | Leave the test Meta key as it was. |
 | `-openrouter-ui-reset` | Remove the test OpenRouter key at launch. |

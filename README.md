@@ -4,7 +4,7 @@ A from-scratch remake of LiveCue: an iPhone conversation assistant with a privat
 
 The iPhone app listens to a conversation and shows a live transcript. Tap **Assist** and it shows an answer to the latest question, either from Codex running on your own PC or from a model you choose on OpenRouter.
 
-> **Status: iPhone app 1.1.0.** Everything here is tested in simulators and on a Windows PC with automated tests. On a real iPhone, recording, Meta Muse, OpenRouter answers and History have worked; the on-device speech models, the phone talking to a real PC, and the PC speech models on a GPU have not been tried yet. 1.1.0 adds Apple speech, which no simulator can exercise (its recognition has only been tested with a stand-in), shows the formatting of answers, and fixes a false alert after Stop. Expect bugs on first use.
+> **Status: iPhone app 1.2.0.** Everything here is tested in simulators and on a Windows PC with automated tests. On a real iPhone, recording, Meta Muse, OpenRouter answers and History have worked; the on-device speech models, the phone talking to a real PC, and the PC speech models on a GPU have not been tried yet. 1.2.0 adds Fluid Speech Mini, an on-device speech model that has not been run on an iPhone yet: its download, its captions and its speed have only been tested with stand-ins. 1.1.0 added Apple speech, which no simulator can exercise (its recognition has only been tested with a stand-in), showed the formatting of answers, and fixed a false alert after Stop. Expect bugs on first use.
 
 ## What is in this repository
 
@@ -17,7 +17,7 @@ The iPhone app listens to a conversation and shows a live transcript. Tap **Assi
 
 ## How the pieces fit
 
-- **Speech to text** is chosen on the phone: Meta Muse (cloud, straight from the phone), Nemotron or Qwen3 (on your PC's GPU, through the relay), or Voz, Parakeet or Apple speech (on the phone itself). Apple speech is the live transcription built into iOS 26: free, on the device, no key and no PC. It needs iOS 26 or later and an iPhone the system supports it on; on iOS 18 to 25 it is listed as unavailable.
+- **Speech to text** is chosen on the phone: Meta Muse (cloud, straight from the phone), Nemotron or Qwen3 (on your PC's GPU, through the relay), or Voz, Parakeet, Apple speech or Fluid Speech Mini (on the phone itself). Apple speech is the live transcription built into iOS 26: free, on the device, no key and no PC. It needs iOS 26 or later and an iPhone the system supports it on; on iOS 18 to 25 it is listed as unavailable. Fluid Speech Mini is FluidVoice's English model (253 MB, iOS 18 or later): free, on the device, no key and no PC. It hears whole stretches of up to 15 seconds, so the phone transcribes the last seconds again about once a second: its captions follow speech with a short delay and can change until you pause.
 - **Answers** are chosen on the phone: Codex on your PC (through the relay; no API key) or OpenRouter (straight from the phone, with your key).
 - **The relay** runs on your PC, listens only on the PC itself, and is reached from the phone through Tailscale. The phone pairs with it by scanning a QR code.
 
@@ -45,7 +45,7 @@ The app is built unsigned, for installing through LiveContainer.
 2. If bars and sheets do not look like iOS 26 on an iOS 26 phone, turn on **Spoof SDK Version** for the app in LiveContainer.
 3. Open the app. On Home, the readiness rows show what is missing:
    - **Pair Windows PC**: scan the QR from the Windows app, then **Verify and pair**.
-   - **Transcription**: pick a speech option. Meta Muse needs your Meta API key; Voz and Parakeet need a one-time model download. Apple speech needs the system's English speech asset: if iOS already has it, it is ready at once; if not, **Model Library** offers the download, which iOS itself performs and keeps.
+   - **Transcription**: pick a speech option. Meta Muse needs your Meta API key; Voz, Parakeet and Fluid Speech Mini need a one-time model download in **Model Library**. Fluid Speech Mini's download is 253 MB; if it is interrupted, **Download & use** goes on where it stopped. Apple speech needs the system's English speech asset: if iOS already has it, it is ready at once; if not, **Model Library** offers the download, which iOS itself performs and keeps.
    - **Assistant models & timing**: pick Codex on your PC, or OpenRouter with your key and a model.
 4. Tap **Start conversation**.
 
@@ -58,11 +58,13 @@ Microphone and camera permission are asked for by LiveContainer, not by the app,
 ## Privacy
 
 - Audio is never written to disk by the phone, the relay or the speech service.
-- With Meta Muse, audio goes from the phone to Meta. With OpenRouter, transcript text goes from the phone to OpenRouter. With Codex, transcript text goes to your PC and from there to OpenAI through the Codex CLI. With a PC speech model, audio goes to your PC only. With Voz, Parakeet or Apple speech, audio stays on the phone.
+- With Meta Muse, audio goes from the phone to Meta. With OpenRouter, transcript text goes from the phone to OpenRouter. With Codex, transcript text goes to your PC and from there to OpenAI through the Codex CLI. With a PC speech model, audio goes to your PC only. With Voz, Parakeet, Apple speech or Fluid Speech Mini, audio stays on the phone.
 - API keys stay in the iPhone Keychain and are sent only to their own provider. The PC holds no API key.
 - Conversation history is stored on the phone. The Windows app keeps recent activity in memory only.
 - On-device speech uses Voz by Desert Ant Labs (desert-ant-core 3.1.0, Desert Ant Labs Source-Available License 1.0) and FluidAudio 0.15.6 (Apache License 2.0). The Voz package reports anonymous usage to its vendor, Desert Ant Labs. LiveCue cannot turn this off.
 - Apple speech uses the Speech framework of iOS 26 (`SpeechAnalyzer` with `SpeechTranscriber`). It needs no extra permission beyond the microphone; iOS downloads its language asset from Apple.
+- Fluid Speech Mini is downloaded from Hugging Face (`huggingface.co`), and only when you choose **Download & use** for it in Model Library. The download is a plain file request: no audio, no transcript and no key goes with it. Every file is checked against a pinned list before it is used, and the model then runs on the phone through FluidAudio 0.15.6.
+- Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); the app uses the model's files unchanged ([model card](https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml)).
 
 ## Security notes
 
@@ -85,4 +87,4 @@ On Windows with the .NET 10 SDK: `./scripts/publish-windows.ps1 -Output artifact
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE). Third-party packages keep their own licences.
+MIT. See [LICENSE](LICENSE). Third-party packages and models keep their own licences.
