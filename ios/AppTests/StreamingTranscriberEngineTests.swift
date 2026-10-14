@@ -780,6 +780,8 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         XCTAssertTrue(factory.makeTranscriber(for: .voz) is VozTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .parakeet) is ParakeetTranscriber)
         XCTAssertTrue(factory.makeTranscriber(for: .apple) is AppleTranscriber)
+        // Fluid Speech Mini has the transcriber of Parakeet: its recogniser streams too (D-29).
+        XCTAssertTrue(factory.makeTranscriber(for: .fluid) is ParakeetTranscriber)
         for provider in SpeechProvider.allCases {
             XCTAssertEqual(factory.makeTranscriber(for: provider).provider, provider)
         }
@@ -788,7 +790,8 @@ final class StreamingTranscriberEngineTests: XCTestCase {
         let missing = [
             (SpeechProvider.voz, "Prepare Voz first."),
             (SpeechProvider.parakeet, "Prepare Parakeet first."),
-            (SpeechProvider.apple, "Prepare Apple speech first.")
+            (SpeechProvider.apple, "Prepare Apple speech first."),
+            (SpeechProvider.fluid, "Prepare Fluid Speech Mini first.")
         ]
         for (provider, text) in missing {
             let transcriber = factory.makeTranscriber(for: provider)

@@ -312,6 +312,60 @@ final class ParakeetTranscriberTests: XCTestCase {
         XCTAssertEqual(rig.transcriber.emittedEventCount, emitted)
         await rig.end()
     }
+
+    // MARK: - Fluid Speech Mini (D-29)
+
+    @MainActor
+    func testFluidUsesTheSameTranscriberUnderItsOwnName() async throws {
+        let rig = ParakeetRig(provider: .fluid)
+        XCTAssertEqual(rig.transcriber.provider, .fluid)
+        try await rig.start()
+
+        await rig.engine.emitPartial("what is")
+        await rig.log.waitForLine("partial what is")
+        await rig.engine.setFinal("What is the main advantage?")
+        try await rig.transcriber.finalize()
+
+        await rig.log.wait(for: rig.transcriber.emittedEventCount)
+        XCTAssertEqual(rig.log.lines, [
+            "status Listening",
+            "partial what is",
+            "segment What is the main advantage? 0.00-0.00",
+            "partial ",
+            "status Paused"
+        ])
+        await rig.end()
+
+        // Without its model the start names it.
+        let missing = ParakeetRig(provider: .fluid, prepared: false)
+        let failure = await missing.startFailure()
+        XCTAssertEqual(failure, TranscriberFailure(.notPrepared, message: "Prepare Fluid Speech Mini first."))
+        XCTAssertTrue(missing.audio.requests.isEmpty)
+        await missing.end()
+    }
+
+    /// The rolling recogniser keeps most buffers for its next pass. Only a pass has a time to report.
+    @MainActor
+    func testABufferTheRecogniserOnlyKeptReportsNoTime() async throws {
+        let rig = ParakeetRig(provider: .fluid)
+        try await rig.start()
+        await rig.engine.setKeepsOnly(true)
+
+        rig.audio.feed(.float32(ParakeetRig.audio(samples: 1_600)))
+        rig.audio.feed(.float32(ParakeetRig.audio(samples: 1_600)))
+        await SpeechTest.eventually { await rig.engine.processed == 2 }
+        await SpeechTest.settle()
+        XCTAssertEqual(rig.log.lines, ["status Listening"])
+        XCTAssertEqual(rig.models.statusLine, "Listening")
+
+        // The buffer that completes a pass is timed.
+        await rig.engine.setKeepsOnly(false)
+        rig.audio.feed(.float32(ParakeetRig.audio(samples: 1_600)))
+        await rig.log.wait(for: 3)
+        XCTAssertEqual(rig.log.lines, ["status Listening", "lastChunk 0.0", "status Last buffer processing: 0 ms"])
+        XCTAssertEqual(rig.models.statusLine, "Last buffer processing: 0 ms")
+        await rig.end()
+    }
 }
 
 /// A `ParakeetTranscriber` on fakes, with the model already loaded unless a test says otherwise.
@@ -324,19 +378,28 @@ final class ParakeetTranscriberTests: XCTestCase {
     let log: TranscriberEventLog
     let generation = UUID()
 
-    init(prepared: Bool = true) {
+    /// `provider` is `.parakeet` or `.fluid`: the two that use this transcriber.
+    init(provider: SpeechProvider = .parakeet, prepared: Bool = true) {
         let clock = ManualClock()
         let audio = FakeAudioCapture()
         let engine = FakeStreamingEngine()
         let models = OnDeviceModelManager(
-            loader: FakeEngineLoader(voz: FakeBatchEngine(), parakeet: engine),
+            loader: FakeEngineLoader(voz: FakeBatchEngine(), parakeet: engine, fluid: engine),
             activity: SessionActivity(),
             clock: clock
         )
-        if prepared {
+        if prepared, provider == .fluid {
+            models.installPreloaded(variant: TranscriptionModel.fluid.variant, voz: nil, parakeet: nil, fluid: engine)
+        } else if prepared {
             models.installPreloaded(variant: TranscriptionModel.parakeet.variant, voz: nil, parakeet: engine)
         }
-        let transcriber = ParakeetTranscriber(engine: prepared ? engine : nil, audio: audio, clock: clock, models: models)
+        let transcriber = ParakeetTranscriber(
+            provider: provider,
+            engine: prepared ? engine : nil,
+            audio: audio,
+            clock: clock,
+            models: models
+        )
 
         self.clock = clock
         self.audio = audio

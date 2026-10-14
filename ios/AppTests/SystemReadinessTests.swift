@@ -53,7 +53,9 @@ final class SystemReadinessTests: XCTestCase {
             (.parakeet, .codex, true),
             (.parakeet, .openrouter, false),
             (.apple, .codex, true),
-            (.apple, .openrouter, false)
+            (.apple, .openrouter, false),
+            (.fluid, .codex, true),
+            (.fluid, .openrouter, false)
         ]
         for row in expected {
             let owners = TestOwners(provider: row.speech, answers: row.answers)
@@ -133,7 +135,7 @@ final class SystemReadinessTests: XCTestCase {
 
     @MainActor
     func testOnDeviceSpeechIsNotReadyBeforeItsModelIsLoaded() async {
-        for provider in [SpeechProvider.voz, .parakeet] {
+        for provider in [SpeechProvider.voz, .parakeet, .fluid] {
             let owners = TestOwners(provider: provider, answers: .openrouter)
             XCTAssertFalse(owners.readiness.speechReady, provider.rawValue)
             XCTAssertFalse(owners.readiness.systemReady, provider.rawValue)
@@ -148,7 +150,8 @@ final class SystemReadinessTests: XCTestCase {
 
         let cases: [(provider: SpeechProvider, model: TranscriptionModel)] = [
             (.voz, TranscriptionModel.voz),
-            (.parakeet, TranscriptionModel.parakeet)
+            (.parakeet, TranscriptionModel.parakeet),
+            (.fluid, TranscriptionModel.fluid)
         ]
         for row in cases {
             let owners = TestOwners(provider: row.provider, answers: .openrouter)

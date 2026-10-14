@@ -40,6 +40,8 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(rows(.parakeet), [.modelLibrary(value: "Not loaded"), .benchmark])
         XCTAssertEqual(rows(.voz, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
         XCTAssertEqual(rows(.parakeet, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
+        XCTAssertEqual(rows(.fluid), [.modelLibrary(value: "Not loaded"), .benchmark])
+        XCTAssertEqual(rows(.fluid, loaded: true), [.modelLibrary(value: "Ready"), .benchmark])
 
         // Apple has the same two rows; its Model Library row also says why it cannot be used (D-28).
         XCTAssertEqual(rows(.apple), [.modelLibrary(value: "Not downloaded"), .benchmark])

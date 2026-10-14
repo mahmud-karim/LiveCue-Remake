@@ -143,7 +143,7 @@ final class HomeViewModelTests: XCTestCase {
 
     @MainActor
     func testAnOnDeviceProviderWithoutItsModelOffersTheDownload() async {
-        for provider in [SpeechProvider.voz, .parakeet] {
+        for provider in [SpeechProvider.voz, .parakeet, .fluid] {
             let owners = TestOwners(provider: provider, answers: .openrouter)
             let model = makeModel(owners)
 
@@ -170,6 +170,16 @@ final class HomeViewModelTests: XCTestCase {
         voz.models.installPreloaded(variant: "voz", voz: FakeBatchEngine(), parakeet: nil)
         XCTAssertEqual(makeModel(voz).transcriptionValue, "Voz on Assist")
         XCTAssertEqual(makeModel(voz).transcriptionDetail, .onDevice(text: "Transcribes when you tap Assist"))
+
+        // Fluid Speech Mini (D-29).
+        let fluid = TestOwners(provider: .fluid, answers: .openrouter)
+        fluid.models.installPreloaded(variant: "fluid-mini", voz: nil, parakeet: nil, fluid: FakeStreamingEngine())
+        XCTAssertEqual(makeModel(fluid).startControl, .start(isBusy: false, isEnabled: true, caption: nil))
+        XCTAssertEqual(makeModel(fluid).transcriptionValue, "Live Fluid Speech Mini")
+        XCTAssertFalse(makeModel(fluid).transcriptionValueNeedsAttention)
+        XCTAssertEqual(makeModel(fluid).transcriptionDetail, .onDevice(text: "English live captions · rolling 15 s window"))
+        XCTAssertEqual(makeModel(fluid).statusChip.text, "OpenRouter direct")
+        XCTAssertTrue(fluid.readiness.speechReady)
     }
 
     @MainActor

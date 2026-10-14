@@ -1,11 +1,12 @@
 import XCTest
 @testable import LiveCueRemake
 
-/// Each of the thirteen arguments sets its flag; `-ui-testing` and the unit-test host select fixture
+/// Each of the fourteen arguments sets its flag; `-ui-testing` and the unit-test host select fixture
 /// mode; anything else is live.
 final class LaunchConfigurationTests: XCTestCase {
     private let modifiers: [(argument: String, isSet: (TestMode) -> Bool)] = [
         ("-on-device-ready", { $0.onDeviceReady }),
+        ("-fluid-ready", { $0.fluidReady }),
         ("-meta-no-key", { $0.metaNoKey }),
         ("-meta-key-persistence", { $0.metaKeyPersistence }),
         ("-openrouter-ui-reset", { $0.openRouterUIReset }),
@@ -21,9 +22,9 @@ final class LaunchConfigurationTests: XCTestCase {
     ]
 
     @MainActor
-    func testThereAreThirteenModifiers() async {
-        XCTAssertEqual(modifiers.count, 13)
-        XCTAssertEqual(Set(modifiers.map(\.argument)).count, 13)
+    func testThereAreFourteenModifiers() async {
+        XCTAssertEqual(modifiers.count, 14)
+        XCTAssertEqual(Set(modifiers.map(\.argument)).count, 14)
     }
 
     @MainActor

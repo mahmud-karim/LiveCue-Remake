@@ -485,7 +485,7 @@ final class SessionControllerStateTests: XCTestCase {
             TranscriberFailureText.microphoneInterrupted,
             TranscriberFailureText.routeChanged
         ]
-        for provider in [SpeechProvider.voz, .parakeet] {
+        for provider in [SpeechProvider.voz, .parakeet, .fluid] {
             for failure in failures {
                 let context = "\(provider.rawValue): \(failure.message)"
                 let owners = TestOwners(provider: provider)

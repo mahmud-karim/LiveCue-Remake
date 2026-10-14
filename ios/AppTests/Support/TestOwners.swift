@@ -17,6 +17,7 @@ import LiveCueCore
     let transcribers: FakeTranscriberFactory
     let vozEngine: FakeBatchEngine
     let parakeetEngine: FakeStreamingEngine
+    let fluidEngine: FakeStreamingEngine
     let clipboard: FakeClipboard
 
     // State owners.
@@ -67,6 +68,7 @@ import LiveCueCore
         let transcribers = FakeTranscriberFactory()
         let vozEngine = FakeBatchEngine()
         let parakeetEngine = FakeStreamingEngine()
+        let fluidEngine = FakeStreamingEngine()
         let clipboard = FakeClipboard()
 
         let app = AppModel()
@@ -82,7 +84,7 @@ import LiveCueCore
             activity: activity
         )
         let models = OnDeviceModelManager(
-            loader: FakeEngineLoader(voz: vozEngine, parakeet: parakeetEngine),
+            loader: FakeEngineLoader(voz: vozEngine, parakeet: parakeetEngine, fluid: fluidEngine),
             activity: activity,
             clock: clock,
             systemSpeech: systemSpeech ?? UnavailableSystemSpeech()
@@ -147,6 +149,7 @@ import LiveCueCore
         self.transcribers = transcribers
         self.vozEngine = vozEngine
         self.parakeetEngine = parakeetEngine
+        self.fluidEngine = fluidEngine
         self.clipboard = clipboard
         self.app = app
         self.activity = activity

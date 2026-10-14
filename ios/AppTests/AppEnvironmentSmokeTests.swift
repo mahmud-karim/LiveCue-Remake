@@ -27,7 +27,7 @@ final class AppEnvironmentSmokeTests: XCTestCase {
     @MainActor
     func testBuildsWithEveryModifier() async {
         let arguments = [
-            "-on-device-ready", "-meta-no-key", "-meta-key-persistence", "-openrouter-ui-reset",
+            "-on-device-ready", "-fluid-ready", "-meta-no-key", "-meta-key-persistence", "-openrouter-ui-reset",
             "-openrouter-persistence-test", "-pc-offline", "-pc-catalog-slow", "-pc-model-slow-start",
             "-pc-model-start-error", "-assist-fails-once", "-pairing-persistence-test",
             "-save-pairing-fixture", "-drop-test-keychain"
@@ -38,6 +38,32 @@ final class AppEnvironmentSmokeTests: XCTestCase {
             XCTAssertEqual(environment.mode, launch.mode, argument)
             XCTAssertFalse(environment.session.showsLiveScreen, argument)
         }
+    }
+
+    /// `-on-device-ready` starts with Parakeet loaded, `-fluid-ready` (D-29) with Fluid Speech Mini.
+    @MainActor
+    func testTheReadyModifiersStartWithTheirModelLoaded() async {
+        func make(_ argument: String?) -> AppEnvironment {
+            let arguments = ["LiveCueRemake", "-ui-testing"] + (argument.map { [$0] } ?? [])
+            return AppEnvironment.make(LaunchConfiguration(arguments: arguments, environment: [:]))
+        }
+
+        let fluid = make("-fluid-ready")
+        XCTAssertEqual(fluid.speech.provider, .fluid)
+        XCTAssertTrue(fluid.models.isLoaded(for: .fluid))
+        XCTAssertNotNil(fluid.models.fluidEngine)
+        XCTAssertNil(fluid.models.parakeetEngine)
+        XCTAssertTrue(fluid.readiness.speechReady)
+
+        let parakeet = make("-on-device-ready")
+        XCTAssertEqual(parakeet.speech.provider, .parakeet)
+        XCTAssertTrue(parakeet.models.isLoaded(for: .parakeet))
+        XCTAssertNil(parakeet.models.fluidEngine)
+
+        // A base launch has nothing loaded, and leaves Meta selected for whatever runs next.
+        let base = make(nil)
+        XCTAssertEqual(base.speech.provider, .meta)
+        XCTAssertNil(base.models.loadedVariant)
     }
 
     /// The launch path of the shipped app: it must build without a test seam, and building it must not

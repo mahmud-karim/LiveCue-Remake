@@ -16,10 +16,10 @@ final class TranscriptionViewModelTests: XCTestCase {
     }
 
     @MainActor
-    func testTheSixProvidersAreListedInCatalogueOrder() async {
+    func testTheSevenProvidersAreListedInCatalogueOrder() async {
         let model = makeModel(TestOwners())
 
-        XCTAssertEqual(model.providers, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple])
+        XCTAssertEqual(model.providers, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple, .fluid])
         XCTAssertEqual(
             model.providers.map(\.pickerTitle),
             [
@@ -28,7 +28,8 @@ final class TranscriptionViewModelTests: XCTestCase {
                 "Qwen3 1.7B · PC live",
                 "Voz · iPhone on Assist",
                 "Parakeet · iPhone live",
-                "Apple · iPhone live"
+                "Apple · iPhone live",
+                "Fluid Speech Mini · iPhone live"
             ]
         )
         XCTAssertEqual(model.selected, .meta)
@@ -54,7 +55,7 @@ final class TranscriptionViewModelTests: XCTestCase {
         }
 
         // On-device: Model Library and Speech benchmark, and nothing else.
-        for provider in [SpeechProvider.voz, .parakeet] {
+        for provider in [SpeechProvider.voz, .parakeet, .fluid] {
             model.select(provider)
             XCTAssertEqual(model.selected, provider)
             XCTAssertEqual(model.selectedTitle, provider.displayName)
@@ -94,6 +95,34 @@ final class TranscriptionViewModelTests: XCTestCase {
         await owners.gateway.setStatus(.success(ready))
         await owners.relay.checkHealthNow()
         XCTAssertEqual(model.setup.rows, [.pcSpeechModel(value: "Ready")])
+    }
+
+    // MARK: - Fluid Speech Mini (D-29)
+
+    @MainActor
+    func testFluidCanBeChosenOnEveryIPhoneAndNeedsItsModel() async throws {
+        // No system recogniser, as on iOS 18: Fluid Speech Mini does not depend on one.
+        let owners = TestOwners()
+        let model = makeModel(owners)
+        XCTAssertNil(model.unavailableReason(for: .fluid))
+
+        model.select(.fluid)
+        XCTAssertEqual(model.selected, .fluid)
+        XCTAssertEqual(owners.preferences.speechProvider, .fluid, "The choice is saved.")
+        XCTAssertEqual(model.selectedTitle, "Fluid Speech Mini · iPhone")
+        XCTAssertEqual(model.setup.rows, [.modelLibrary(value: "Not loaded"), .benchmark])
+        XCTAssertEqual(model.explanation, "Audio is transcribed on this iPhone. Only text is sent to your PC.")
+        XCTAssertFalse(owners.readiness.speechReady)
+
+        try await owners.models.prepare(.fluid)
+        XCTAssertEqual(model.setup.rows, [.modelLibrary(value: "Ready"), .benchmark])
+        XCTAssertTrue(owners.readiness.speechReady)
+
+        // Another provider releases the model: it has to be loaded again.
+        model.select(.parakeet)
+        model.select(.fluid)
+        XCTAssertEqual(model.setup.rows, [.modelLibrary(value: "Not loaded"), .benchmark])
+        await SpeechTest.eventually { await owners.fluidEngine.cleanupCount == 1 }
     }
 
     // MARK: - Apple (D-28)

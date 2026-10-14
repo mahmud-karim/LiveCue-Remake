@@ -111,6 +111,72 @@ final class ModelLibraryViewModelTests: XCTestCase {
         XCTAssertEqual(model.mainButtonTitle, "Download & use")
     }
 
+    /// D-29: the entry of Fluid Speech Mini, its download with a byte count, "Reload" and "Unload".
+    @MainActor
+    func testTheEntryOfFluidSpeechMiniIsDownloadedReloadedAndUnloaded() async throws {
+        let total: Int64 = 252_710_832
+        let downloading = ModelPreparationProgress(
+            fraction: 0.5,
+            phase: .downloading,
+            counter: .bytes(completed: total / 2, total: total)
+        )
+        let gate = FakeGate()
+        let rig = Rig(provider: .fluid, steps: [downloading], gate: gate)
+        let model = rig.model
+
+        XCTAssertEqual(model.model, TranscriptionModel.fluid)
+        XCTAssertEqual(model.model?.displayName, "Live Fluid Speech Mini")
+        XCTAssertEqual(model.model?.recommended, false)
+        XCTAssertEqual(model.descriptionText, "~253 MB · English live captions · rolling 15 s window")
+        XCTAssertEqual(model.packageLabel, "FluidAudio 0.15.6")
+        XCTAssertFalse(model.showsVozUsageSentence)
+        XCTAssertFalse(model.isLoaded)
+        XCTAssertEqual(model.mainButtonTitle, "Download & use")
+        XCTAssertFalse(model.showsUnload)
+
+        let preparing = Task { await model.prepare() }
+        await SpeechTest.waitUntil { model.block?.percentText == "50% setup" }
+        let block = try XCTUnwrap(model.block)
+        let half = ByteCountFormatter.string(fromByteCount: total / 2, countStyle: .file)
+        let whole = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+        XCTAssertEqual(block.statusLine, "Downloading Fluid Speech Mini…")
+        XCTAssertEqual(block.counterText, "\(half) / \(whole)")
+        XCTAssertFalse(block.failed)
+        XCTAssertTrue(model.isPreparing)
+
+        await gate.open()
+        await preparing.value
+        XCTAssertTrue(model.isLoaded)
+        XCTAssertNil(model.block)
+        XCTAssertEqual(model.statusLine, "Ready")
+        XCTAssertEqual(model.mainButtonTitle, "Reload")
+        XCTAssertTrue(model.showsUnload)
+        XCTAssertNil(rig.owners.app.alertMessage)
+
+        model.unload()
+        XCTAssertFalse(model.isLoaded)
+        XCTAssertEqual(model.mainButtonTitle, "Download & use")
+        XCTAssertEqual(model.statusLine, "Prepare a model")
+    }
+
+    /// D-29: a download that fails says why in the alert, and the button offers it again.
+    @MainActor
+    func testAFailedFluidDownloadShowsTheBlockAndTheAlert() async {
+        let rig = Rig(provider: .fluid, steps: [halfway], failure: ModelDownloadFailure.damagedFile)
+        let model = rig.model
+
+        await model.prepare()
+
+        XCTAssertFalse(model.isLoaded)
+        XCTAssertEqual(model.block?.failed, true)
+        XCTAssertEqual(model.statusLine, "Preparation failed")
+        XCTAssertEqual(
+            rig.owners.app.alertMessage,
+            "A model file did not arrive intact. Try again; the files already downloaded are kept."
+        )
+        XCTAssertEqual(model.mainButtonTitle, "Download & use")
+    }
+
     @MainActor
     func testAStreamingProviderHasNoEntry() async {
         for provider in [SpeechProvider.meta, .nemotron, .qwen3] {

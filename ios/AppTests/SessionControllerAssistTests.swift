@@ -824,7 +824,16 @@ final class SessionControllerAssistTests: XCTestCase {
             )
         )
 
-        // Only a Parakeet session records the last live chunk.
+        // A Fluid Speech Mini session records the time of its last pass in the same place (D-29).
+        let (fluid, fluidTranscriber, _) = try await codexSession(provider: .fluid)
+        fluidTranscriber.emit(.lastChunk(milliseconds: 310))
+        await fluid.session.waitUntilSettled()
+        await fluid.session.assist()
+        let fluidPerformance = try XCTUnwrap(fluid.session.session?.assistantTurns.first?.performance)
+        XCTAssertEqual(fluidPerformance.lastLiveChunkMs, 310)
+        XCTAssertEqual(fluidPerformance.speechModel, "fluid")
+
+        // No other session records the last live chunk.
         let (meta, metaTranscriber, _) = try await codexSession()
         metaTranscriber.emit(.lastChunk(milliseconds: 42))
         await meta.session.waitUntilSettled()
