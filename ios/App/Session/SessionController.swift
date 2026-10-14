@@ -559,7 +559,8 @@ struct SummaryRun {
         return seconds
     }
 
-    /// The last live chunk's processing time, for the timing record of a Parakeet session.
+    /// The last live chunk's processing time, for the timing record of a Parakeet or Fluid Speech Mini
+    /// session.
     var lastLiveChunkMilliseconds: Double? {
         lastChunkMilliseconds
     }

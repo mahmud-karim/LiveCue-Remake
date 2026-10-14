@@ -1,18 +1,21 @@
 import Foundation
 import LiveCueCore
 
-/// Provider `parakeet`: live captions on the phone.
+/// Providers `parakeet` and `fluid`: live captions on the phone, from a `StreamingRecognizing` engine.
 ///
 /// Every captured buffer goes to the recogniser. Its partial callback gives the text on screen; the
 /// partial is whatever the callback last reported (IOS-A1). One segment is committed per recording
 /// stretch, on Pause or Stop, from the recogniser's final text; nothing is committed at an end of
 /// utterance.
 ///
+/// Parakeet recognises every buffer as it comes. Fluid Speech Mini (D-29) keeps the buffers and
+/// transcribes them together once a second; only those passes have a time worth reporting.
+///
 /// A failure (a processing error, a full hand-off queue, an interruption, a lost route) stops the
 /// capture, keeps the audio session and emits `failed` once. The session controller then calls
 /// `finalize`, which asks the recogniser for its final text, so recognised speech is kept.
 @MainActor final class ParakeetTranscriber: SpeechTranscriber {
-    let provider: SpeechProvider = .parakeet
+    let provider: SpeechProvider
     private let channel: TranscriberEventChannel
     private let engine: (any StreamingRecognizing)?
     private let audio: any AudioCapturing
@@ -56,7 +59,14 @@ import LiveCueCore
         channel.emittedCount
     }
 
-    init(engine: (any StreamingRecognizing)?, audio: any AudioCapturing, clock: any AppClock, models: OnDeviceModelManager) {
+    init(
+        provider: SpeechProvider,
+        engine: (any StreamingRecognizing)?,
+        audio: any AudioCapturing,
+        clock: any AppClock,
+        models: OnDeviceModelManager
+    ) {
+        self.provider = provider
         self.channel = TranscriberEventChannel()
         self.engine = engine
         self.audio = audio
@@ -68,7 +78,7 @@ import LiveCueCore
 
     func start(_ start: TranscriberStart) async throws {
         guard let engine else {
-            throw TranscriberFailureText.notPrepared(.parakeet)
+            throw TranscriberFailureText.notPrepared(provider)
         }
         // One capture at a time. A run that is still there ends without a word.
         if let earlier = self.run {
@@ -169,8 +179,9 @@ import LiveCueCore
             guard case .float32(let samples) = chunk, run.state != .closed, !run.processingFailed else { continue }
             do {
                 let milliseconds = try await ParakeetTranscriber.timed(samples, with: engine, clock: clock)
-                // After a failure and while finalising the queue is still worked off, but silently.
-                if run.state == .listening {
+                // After a failure and while finalising the queue is still worked off, but silently. A
+                // buffer the recogniser only kept has no time to report.
+                if run.state == .listening, let milliseconds {
                     emit(.lastChunk(milliseconds: milliseconds), run)
                     setStatus(TranscriberStatusText.lastBuffer(milliseconds: milliseconds), run)
                 }
@@ -182,15 +193,16 @@ import LiveCueCore
         }
     }
 
-    /// Gives one buffer to the recogniser and returns how long that took, in milliseconds. It runs off
-    /// the main actor, so the time is the recogniser's and not the screen's.
+    /// Gives one buffer to the recogniser and returns how long that took, in milliseconds; nil when the
+    /// recogniser only kept the buffer. It runs off the main actor, so the time is the recogniser's and
+    /// not the screen's.
     private nonisolated static func timed(
         _ samples: [Float],
         with engine: any StreamingRecognizing,
         clock: any AppClock
-    ) async throws -> Double {
+    ) async throws -> Double? {
         let began = clock.uptime()
-        try await engine.process(samples: samples)
+        guard try await engine.process(samples: samples) else { return nil }
         return max(0, clock.uptime() - began) * 1_000
     }
 

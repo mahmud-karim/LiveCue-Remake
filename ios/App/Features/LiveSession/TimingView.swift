@@ -36,7 +36,7 @@ struct TimingView: View {
         }
     }
 
-    /// Every row but the Parakeet one, which comes after the usage caption and the warning (screens 4.6).
+    /// Every row but the live chunk one, which comes after the usage caption and the warning (screens 4.6).
     private func leadingRows(of content: TimingViewContent) -> [TimingRow] {
         content.rows.filter { $0.id != TimingViewContent.lastChunkRowID }
     }

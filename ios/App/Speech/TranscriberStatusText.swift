@@ -120,7 +120,8 @@ enum TranscriberFailureText {
         message: "Apple speech could not start on this iPhone."
     )
 
-    /// "Prepare Voz first." / "Prepare Parakeet first." / "Prepare Apple speech first."
+    /// "Prepare Voz first." / "Prepare Parakeet first." / "Prepare Apple speech first." /
+    /// "Prepare Fluid Speech Mini first."
     static func notPrepared(_ provider: SpeechProvider) -> TranscriberFailure {
         TranscriberFailure(.notPrepared, message: "Prepare \(provider.shortName) first.")
     }

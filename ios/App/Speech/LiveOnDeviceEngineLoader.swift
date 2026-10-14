@@ -1,6 +1,6 @@
 import Foundation
 
-/// Loads either on-device engine. Each engine marks its own model folder excluded from backup.
+/// Loads an on-device engine. Each engine marks its own model folder excluded from backup.
 struct LiveOnDeviceEngineLoader: OnDeviceEngineLoading {
     init() {}
 
@@ -15,6 +15,16 @@ struct LiveOnDeviceEngineLoader: OnDeviceEngineLoading {
     func loadParakeet(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
         do {
             return try await ParakeetEngine.load(progress: progress)
+        } catch {
+            throw EngineLoadFailure.readable(error)
+        }
+    }
+
+    /// Fluid Speech Mini takes whole windows; the rolling recogniser makes live captions out of it.
+    func loadFluid(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
+        do {
+            let engine = try await FluidSpeechEngine.load(progress: progress)
+            return RollingWindowRecognizer(engine: engine)
         } catch {
             throw EngineLoadFailure.readable(error)
         }

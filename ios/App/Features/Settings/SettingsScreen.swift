@@ -44,6 +44,8 @@ private enum SettingsCopy {
     static let pricingTitle = "Meta pricing & usage documentation"
     static let pricingAddress = "https://dev.meta.ai/docs/speech-to-text#pricing"
     static let speechPackages = "On-device speech uses Voz by Desert Ant Labs (desert-ant-core 3.1.0, Desert Ant Labs Source-Available License 1.0) and FluidAudio 0.15.6 (Apache License 2.0)."
+    /// The credit the model's licence asks for (D-29).
+    static let speechModel = "Fluid Speech Mini by FluidVoice. Built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Licensed under CC BY 4.0."
     static let usageReporting = "The Voz package reports anonymous usage to its vendor, Desert Ant Labs. LiveCue cannot turn this off."
     /// S-06, with the sentence decisions 6.1 adds.
     static let privacy = "Meta and OpenRouter API keys stay in this iPhone's Keychain and go only to their respective services. Cloud audio goes directly to Meta; cloud Assist text goes directly to OpenRouter. PC-local speech and Codex Assist still use your paired PC. Transcripts and replies are saved in iPhone history. Obtain permission before recording others. The Voz speech package reports anonymous usage to its vendor."
@@ -155,6 +157,7 @@ private struct SettingsAboutPanel: View {
             DetailRow("Appearance", value: "Daylight")
             DetailRow("Version", value: model.versionText)
             SettingsNote(title: "Speech packages", text: SettingsCopy.speechPackages)
+            SettingsNote(title: "Speech model", text: SettingsCopy.speechModel)
             SettingsNote(title: "Usage reporting", text: SettingsCopy.usageReporting)
         }
     }
