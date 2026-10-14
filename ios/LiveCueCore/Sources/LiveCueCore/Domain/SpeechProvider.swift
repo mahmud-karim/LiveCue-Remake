@@ -1,8 +1,9 @@
 import Foundation
 
-/// The six speech providers, in catalogue order. `apple` is the recogniser built into iOS 26 (D-28).
+/// The seven speech providers, in catalogue order. `apple` is the recogniser built into iOS 26 (D-28);
+/// `fluid` is Fluid Speech Mini, transcribed again over a rolling window (D-29).
 public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
-    case meta, nemotron, qwen3, voz, parakeet, apple
+    case meta, nemotron, qwen3, voz, parakeet, apple, fluid
 
     /// Spec 02 section 7.1. The separator is a middle dot (U+00B7) with a space on each side.
     public var displayName: String {
@@ -13,6 +14,7 @@ public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
         case .voz: return "Voz · iPhone"
         case .parakeet: return "Parakeet · iPhone"
         case .apple: return "Apple · iPhone"
+        case .fluid: return "Fluid Speech Mini · iPhone"
         }
     }
 
@@ -25,7 +27,7 @@ public enum SpeechProvider: String, Codable, CaseIterable, Sendable {
     }
 
     public var isOnDevice: Bool {
-        self == .voz || self == .parakeet || self == .apple
+        self == .voz || self == .parakeet || self == .apple || self == .fluid
     }
 
     public var streamsAudio: Bool {

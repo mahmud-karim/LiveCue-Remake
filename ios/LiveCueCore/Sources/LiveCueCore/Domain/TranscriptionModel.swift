@@ -46,12 +46,23 @@ public struct TranscriptionModel: Codable, Equatable, Sendable, Identifiable {
         recommended: false
     )
 
+    /// Fluid Speech Mini (D-29): a model that takes whole windows of up to 15 seconds. The audio not yet
+    /// committed is transcribed again as it grows, which is what makes the captions live.
+    public static let fluid = TranscriptionModel(
+        variant: "fluid-mini",
+        displayName: "Live Fluid Speech Mini",
+        approximateMegabytes: 253,
+        quality: "English live captions · rolling 15 s window",
+        recommended: false
+    )
+
     /// The catalogue entry of an on-device provider; nil for a provider that streams audio.
     public static func onDevice(for provider: SpeechProvider) -> TranscriptionModel? {
         switch provider {
         case .voz: return TranscriptionModel.voz
         case .parakeet: return TranscriptionModel.parakeet
         case .apple: return TranscriptionModel.apple
+        case .fluid: return TranscriptionModel.fluid
         case .meta, .nemotron, .qwen3: return nil
         }
     }
