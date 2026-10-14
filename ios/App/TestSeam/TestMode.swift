@@ -1,9 +1,12 @@
 import Foundation
 
-/// The thirteen modifiers of the test seam (architecture 4.11). Each is set by its launch argument.
+/// The fourteen modifiers of the test seam (architecture 4.11, and `-fluid-ready` since D-29). Each is
+/// set by its launch argument.
 struct TestMode: Equatable, Sendable {
     /// `-on-device-ready`
     var onDeviceReady = false
+    /// `-fluid-ready`
+    var fluidReady = false
     /// `-meta-no-key`
     var metaNoKey = false
     /// `-meta-key-persistence`
@@ -35,6 +38,7 @@ struct TestMode: Equatable, Sendable {
     init(arguments: [String]) {
         let given = Set(arguments)
         onDeviceReady = given.contains("-on-device-ready")
+        fluidReady = given.contains("-fluid-ready")
         metaNoKey = given.contains("-meta-no-key")
         metaKeyPersistence = given.contains("-meta-key-persistence")
         openRouterUIReset = given.contains("-openrouter-ui-reset")

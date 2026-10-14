@@ -37,7 +37,7 @@ final class FixtureTranscriberTests: XCTestCase {
 
     @MainActor
     func testAnOnDeviceProviderHasNoUsage() async throws {
-        for provider in [SpeechProvider.voz, SpeechProvider.parakeet] {
+        for provider in [SpeechProvider.voz, SpeechProvider.parakeet, SpeechProvider.fluid] {
             let rig = FixtureRig(provider)
             try await rig.start()
             await rig.tick()
@@ -202,6 +202,19 @@ final class FixtureTranscriberTests: XCTestCase {
         try await reloading.value
         XCTAssertTrue(models.isLoaded(for: .parakeet))
         XCTAssertFalse(models.isLoaded(for: .voz))
+
+        // And for Fluid Speech Mini, with half of its bytes (D-29).
+        let downloading = Task { try await models.prepare(.fluid) }
+        await clock.waitForSleepers()
+        await SpeechTest.waitUntil { models.preparation?.fraction == 0.5 }
+        XCTAssertEqual(models.statusLine, "Downloading Fluid Speech Mini…")
+        let half = ByteCountFormatter.string(fromByteCount: 126_355_416, countStyle: .file)
+        let whole = ByteCountFormatter.string(fromByteCount: 252_710_832, countStyle: .file)
+        XCTAssertEqual(models.preparation?.counterText, "\(half) / \(whole)")
+        await clock.advance(by: 2)
+        try await downloading.value
+        XCTAssertTrue(models.isLoaded(for: .fluid))
+        XCTAssertFalse(models.isLoaded(for: .parakeet))
     }
 
     @MainActor

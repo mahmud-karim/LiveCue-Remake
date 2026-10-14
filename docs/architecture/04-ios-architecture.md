@@ -22,6 +22,7 @@ Contents
 9. [Changes after review](#9-changes-after-review)
 10. [Apple speech (D-28), as built by WP-13](#10-apple-speech-d-28-as-built-by-wp-13)
 11. [Changes in 1.1.0 after the first use on a real iPhone](#11-changes-in-110-after-the-first-use-on-a-real-iphone)
+12. [Fluid Speech Mini (D-29), as built by WP-14](#12-fluid-speech-mini-d-29-as-built-by-wp-14)
 
 Conventions
 
@@ -330,7 +331,7 @@ compiler refuses two files of the same name in one module.
 | `Features/History/HistoryScreen.swift`, `HistoryViewModel.swift`, `HistoryRow.swift` | Screens 13 | WP-11 |
 | `Features/SessionDetail/SessionDetailScreen.swift`, `SessionDetailContent.swift` | Screens 13 | WP-11 |
 | `TestSeam/LaunchConfiguration.swift` | Launch-argument parsing; unit-test host detection | WP-01 |
-| `TestSeam/TestMode.swift` | The thirteen modifiers | WP-01 |
+| `TestSeam/TestMode.swift` | The thirteen modifiers, and `-fluid-ready` since D-29 | WP-01 |
 | `TestSeam/FixtureValues.swift` | Fixture texts, catalogues, synthetic pairing | WP-01 |
 | `TestSeam/FixturePairingStore.swift`, `FixturePermissions.swift` | "Always paired"; permissions always granted, and the Meta key test that opens no socket (R-34) | WP-01 |
 | `TestSeam/TestSeamLaunchActions.swift` | Key resets, pairing fixture, dropped Keychain copy | WP-06 |
@@ -3951,7 +3952,7 @@ They build owners with `TestOwners` (3.2.11) and drive time with `ManualClock`. 
 
 | File (owner) | Proves |
 |---|---|
-| `LaunchConfigurationTests` (WP-01) | Each of the thirteen arguments sets its flag; `-ui-testing` and the unit-test host select fixture mode; anything else is live |
+| `LaunchConfigurationTests` (WP-01) | Each of the fourteen arguments (thirteen, and `-fluid-ready` since D-29) sets its flag; `-ui-testing` and the unit-test host select fixture mode; anything else is live |
 | `AppEnvironmentSmokeTests` (WP-01) | `AppEnvironment` builds in fixture mode; `bootstrap()` is idempotent |
 | `KeychainStoreTests` (WP-01) | Set, read, overwrite and delete an item under a test service; deleting an absent item succeeds. This is also the check that the test build was signed: an unsigned simulator build fails here with -34018 |
 | `SessionControllerStateTests` (WP-08) | One test per row T-01 to T-21 of 4.1.1. Among them: nothing saved before T-04 and nothing left after T-05 (IOS-B2, AC-IOS-154); T-09 and T-10 for every provider with the failure of each kind (AC-IOS-043 to 046, IOS-B4, IOS-B5); no second finalisation on Stop from Paused (IOS-B7, AC-IOS-077); stale generations dropped; elapsed keeps counting while paused (AC-IOS-030); the stream offset on resume (AC-IOS-041); start checks in order with their texts (AC-IOS-016, 017, 022); controls disabled while transitioning or assisting (AC-IOS-042); title on Stop (AC-IOS-076); finalise failure on Pause is a notice and on Stop an alert (AC-IOS-047) |
@@ -4760,3 +4761,83 @@ Tests: `AnswerMarkupTests` (each construct, nesting, unclosed markers, every pre
 and images, tens of thousands of markers); `AnswerPlainTextTests` and `SessionDetailContentTests` now
 assert "no active link, no image, the address is drawn as text" where they asserted "drawn as written".
 `RelayTextPlainTextTests` is unchanged, because relay texts are still drawn as written.
+
+---
+
+## 12. Fluid Speech Mini (D-29), as built by WP-14
+
+Added in 1.2.0 at the owner's request. Where a section above says "six providers" or names the on-device
+providers, Fluid Speech Mini is the seventh provider and the fourth on the phone; this section is the
+text for it. Every other provider keeps its raw value, its texts and its behaviour.
+
+### 12.1 Files
+
+| File | What it holds |
+|---|---|
+| `LiveCueCore/Domain/SpeechProvider.swift`, `TranscriptionModel.swift` | The case `fluid`, last in the catalogue, and the entry `fluid-mini` |
+| `LiveCueCore/Transcript/RollingTranscript.swift` | The rules of the rolling window: a pure value type, tested on Linux |
+| `LiveCueCore/Domain/ModelManifest.swift` | The model's 21 files with sizes and hashes, the folder name, what a download still has to fetch, and the two checks of a downloaded file |
+| `App/Speech/RollingWindowRecognizer.swift` | `StreamingRecognizing` on top of `WindowRecognizing`: the audio that is kept, when a pass runs, the last pass of a stretch. No speech package is imported |
+| `App/Speech/FluidSpeechEngine.swift` | The second file that imports `FluidAudio`: loads the four models and the vocabulary, builds `AsrModels`, transcribes one window |
+| `App/Speech/ModelDownloader.swift` | The download into the app's own folder, the checks, the marker, and the streamed SHA-256 (CryptoKit is not in the core, which also builds on Linux) |
+| `App/Platform/URLSessionModelFileTransport.swift` | `ModelFileTransport` over a URL session download task |
+| `App/Speech/ParakeetTranscriber.swift` | Now given its provider, and used for `parakeet` and `fluid` |
+
+`StreamingRecognizing.process(samples:)` now answers whether the samples were recognised or only kept.
+Parakeet always answers true. The rolling recogniser answers true for the buffer that completes a pass, so
+"Last buffer processing" and the "Last live STT chunk" row show the time of a pass and never the time it
+takes to store a buffer.
+
+### 12.2 A pass
+
+`process` appends the samples. A pass runs, awaited inside `process`, once 16,000 new samples (1.0 s) have
+come in since the last pass and the recogniser's shortest window (4,800 samples in FluidAudio 0.15.6) is
+there. A pass is given everything that is kept, and never more than 240,000 samples: when more has come
+together, only the newest 240,000 are heard and the audio before them goes. `RollingTranscript.apply` then
+decides, in this order:
+
+| Rule | When | What is committed | Audio kept |
+|---|---|---|---|
+| Pause | There are words and the last ends 1.2 s or more before the end | Every word | The last 0.3 s |
+| Silence | No words, and the window is longer than 2 s | Nothing | The last 0.5 s |
+| Length | 11 s or more: of the gaps between two words where the earlier ends at 3 s or later and the later starts 2 s or more before the end, the widest (of equal ones the later) | The words before the gap | From the middle of the gap on |
+| Hard cut | 14 s or more and none of the above | The whole text | The last 0.2 s |
+
+The partial handler gets the committed text and the words of this pass that are not committed, with one
+space between words. A pass without word times can only be committed whole. `finish` runs one more pass
+when audio has come in since the last one (filled up with silence to the shortest window), commits what
+is open and returns the whole text; when that pass fails, the text up to it is returned, so a recording
+is not lost over its last second. `reset` starts a stretch without audio or text.
+
+### 12.3 The download
+
+The folder is `fluid-speech-mini-d81c3160dfe5` under Application Support: the model's name and the first
+12 characters of the pinned revision. It is excluded from backup. For each file that is not in place with
+the right size: download to `<name>.download`, compare the size, compare the SHA-256 where the manifest
+names one (the 12 binary files), move into place. A file that fails a check is removed and the
+preparation fails with a text of the app's own. `.complete` is written after the last file; a missing or
+wrong-sized file takes it away again before anything is fetched. Progress is `.bytes(completed:total:)`
+of 252,710,832, in the phases checking, downloading and preparing. Redirects are followed only to `https`,
+and any answer but 200 is a failure.
+
+### 12.4 Tests
+
+Core: `RollingTranscriptTests`, `ModelManifestTests`, and the provider and catalogue tests. App:
+`RollingWindowRecognizerTests` (fake window engine), `ModelDownloaderTests` (fake transport, a made-up
+model of three small files), `OnDeviceModelManagerTests`, `ParakeetTranscriberTests`, the view-model tests
+and the seam tests. UI: `OnDeviceUITests.testFluidSpeechMiniIsChosenPreparedAndUsed`, in the base launch
+and with `-fluid-ready`. No test downloads or loads the model.
+
+### 12.5 What only a real iPhone can show
+
+- Whether Core ML and FluidAudio 0.15.6 accept the model through the hand-built `AsrModels`: that was
+  worked out from the package's source and the model's files, and has never been run.
+- How long the first load takes, which includes preparing the models for the Neural Engine, and how long
+  later loads take.
+- How long a pass takes. A pass over a nearly full window must stay well under a second: a pass that
+  takes longer than the audio it waits for cannot keep up, and the session then pauses with
+  "Transcription could not keep up".
+- Memory while the model is loaded, and whether iOS ends the app in the background.
+- Whether the word times are good enough for the pause and length rules, and how the captions read when a
+  pass changes its mind about words that are on screen.
+- The download on a mobile network, and going on after an interruption.

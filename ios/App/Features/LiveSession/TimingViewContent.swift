@@ -22,7 +22,8 @@ struct TimingViewContent: Equatable {
     /// S-20 or S-21.
     let footnote: String
 
-    /// The id of the Parakeet row, which the view draws after the usage caption and the warning.
+    /// The id of the row a Parakeet or Fluid Speech Mini session adds, which the view draws after the
+    /// usage caption and the warning.
     static let lastChunkRowID = "lastChunk"
 
     /// nil without a performance record.

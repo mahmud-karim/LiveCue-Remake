@@ -235,7 +235,7 @@ enum UITestWalk {
         waitFor("speech-provider", file: file, line: line)
     }
 
-    /// Settings, then the Transcription screen with its six providers.
+    /// Settings, then the Transcription screen with its seven providers.
     @MainActor
     static func openTranscription(file: StaticString = #filePath, line: UInt = #line) {
         openSettings(file: file, line: line)

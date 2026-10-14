@@ -22,7 +22,7 @@ struct ProviderSetupState: Equatable {
             rows = [.metaKey(value: hasMetaKey ? "Saved on iPhone" : "Required", needsAttention: !hasMetaKey)]
         case .nemotron, .qwen3:
             rows = [.pcSpeechModel(value: pcModelLabel)]
-        case .voz, .parakeet:
+        case .voz, .parakeet, .fluid:
             rows = [.modelLibrary(value: isModelLoaded ? "Ready" : "Not loaded"), .benchmark]
         case .apple:
             let missing = modelNote ?? SystemSpeechText.notDownloaded

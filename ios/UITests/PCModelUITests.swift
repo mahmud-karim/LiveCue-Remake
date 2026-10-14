@@ -18,9 +18,13 @@ final class PCModelUITests: XCTestCase {
         XCTAssertTrue(UITestSupport.element("meta-key-settings").exists, "Settings has no Meta API key row for Meta.")
         XCTAssertFalse(UITestWalk.button("PC speech model").exists, "Settings has a PC speech model row for Meta.")
 
-        // AC-IOS-093, with D-28: six providers.
+        // AC-IOS-093, with D-28 and D-29: seven providers.
         UITestWalk.tap("speech-provider")
-        for identifier in ["provider-meta", "provider-nemotron", "provider-qwen3", "provider-voz", "provider-parakeet", "provider-apple"] {
+        let providers = [
+            "provider-meta", "provider-nemotron", "provider-qwen3", "provider-voz", "provider-parakeet", "provider-apple",
+            "provider-fluid"
+        ]
+        for identifier in providers {
             XCTAssertTrue(UITestSupport.element(identifier).appears(within: UITestSupport.timeout), "\"\(identifier)\" is not listed.")
         }
         XCTAssertTrue(UITestWalk.waitUntilSelected(UITestSupport.element("provider-meta")), "Meta is not the selected provider.")

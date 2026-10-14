@@ -26,7 +26,7 @@ struct TranscriptionScreen: View {
     }
 }
 
-/// The six providers as choice rows. A provider this iPhone cannot run says why and cannot be chosen.
+/// The seven providers as choice rows. A provider this iPhone cannot run says why and cannot be chosen.
 private struct TranscriptionProviderPanel: View {
     @Environment(TranscriptionViewModel.self) private var model
 
@@ -53,7 +53,7 @@ private struct TranscriptionProviderPanel: View {
     }
 
     /// `provider-meta`, `provider-nemotron`, `provider-qwen3`, `provider-voz`, `provider-parakeet`,
-    /// `provider-apple`
+    /// `provider-apple`, `provider-fluid`
     private static func identifier(of provider: SpeechProvider) -> String {
         "provider-" + provider.rawValue
     }

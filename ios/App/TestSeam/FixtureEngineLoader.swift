@@ -33,6 +33,19 @@ struct FixtureEngineLoader: OnDeviceEngineLoading {
         try await clock.sleep(seconds: FixtureValues.preparationHoldSeconds)
         return FixtureStreamingEngine()
     }
+
+    func loadFluid(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
+        // Half of the model's 252,710,832 bytes, so the block shows a byte count.
+        progress(
+            ModelPreparationProgress(
+                fraction: 0.5,
+                phase: .downloading,
+                counter: .bytes(completed: 126_355_416, total: 252_710_832)
+            )
+        )
+        try await clock.sleep(seconds: FixtureValues.preparationHoldSeconds)
+        return FixtureStreamingEngine()
+    }
 }
 
 /// A batch recogniser that hears nothing: no words, and the duration of the samples at 16 kHz. The test
@@ -81,7 +94,10 @@ struct FixtureStreamingEngine: StreamingRecognizing {
 
     func setPartialHandler(_ handler: @escaping @Sendable (String) -> Void) async {}
 
-    func process(samples: [Float]) async throws {}
+    @discardableResult
+    func process(samples: [Float]) async throws -> Bool {
+        true
+    }
 
     func finish() async throws -> String {
         ""

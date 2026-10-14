@@ -3,8 +3,8 @@ import CoreML
 import FluidAudio
 import Foundation
 
-/// The FluidAudio streaming recogniser behind `StreamingRecognizing`. The only file that imports
-/// `FluidAudio`.
+/// The FluidAudio streaming recogniser behind `StreamingRecognizing`. One of the two files that import
+/// `FluidAudio`; the other is `FluidSpeechEngine.swift`.
 ///
 /// The recogniser is an actor, so every call is awaited and its work runs off the main actor. Its
 /// progress value is never named here, because the other speech package has a type of the same name.
@@ -53,11 +53,13 @@ struct ParakeetEngine: StreamingRecognizing {
     }
 
     /// 16 kHz mono samples, wrapped in the buffer the recogniser takes. Its own result is empty: the
-    /// text arrives through the partial handler.
-    func process(samples: [Float]) async throws {
-        guard !samples.isEmpty else { return }
+    /// text arrives through the partial handler. Every buffer is recognised as it comes.
+    @discardableResult
+    func process(samples: [Float]) async throws -> Bool {
+        guard !samples.isEmpty else { return true }
         let buffer = try ParakeetEngine.makeBuffer(samples)
         _ = try await manager.process(audioBuffer: buffer)
+        return true
     }
 
     func finish() async throws -> String {

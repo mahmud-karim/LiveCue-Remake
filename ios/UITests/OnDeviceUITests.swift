@@ -1,6 +1,7 @@
 import XCTest
 
-/// T12: a conversation, then the download of an on-device model, then a conversation with Parakeet.
+/// T12: a conversation, then the download of an on-device model, then a conversation with Parakeet. With
+/// it, the providers added since: Apple speech (D-28) and Fluid Speech Mini (D-29).
 final class OnDeviceUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -28,6 +29,59 @@ final class OnDeviceUITests: XCTestCase {
         XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers a download for Apple speech.")
         XCTAssertEqual(app.alerts.count, 0, "An alert appeared.")
         shot("d28-home-apple")
+    }
+
+    /// D-29: Fluid Speech Mini is the seventh provider. Chosen, it needs its model, which the test seam
+    /// prepares without a download. With `-fluid-ready` the model is loaded at launch: a conversation
+    /// shows its text and no cost, and Assist works.
+    @MainActor
+    func testFluidSpeechMiniIsChosenPreparedAndUsed() throws {
+        UITestWalk.launchToHome()
+
+        UITestWalk.openTranscription()
+        XCTAssertTrue(UITestSupport.element("provider-fluid").appears(within: UITestSupport.timeout), "Fluid Speech Mini is not listed.")
+        UITestWalk.selectProvider("provider-fluid")
+        XCTAssertFalse(UITestSupport.element("provider-meta").isSelected, "Meta stayed selected.")
+        XCTAssertTrue(UITestWalk.button("Model Library").appears(within: UITestSupport.timeout), "Fluid Speech Mini has no Model Library row.")
+        XCTAssertFalse(UITestSupport.element("meta-key-settings").exists, "The Meta API key row stayed for Fluid Speech Mini.")
+        shot("d29-transcription-fluid")
+
+        // Home offers the download in place of Start, and it opens Model Library with the model's entry.
+        UITestWalk.openTab("Live")
+        let download = UITestWalk.waitFor("download-model")
+        XCTAssertFalse(UITestSupport.element("start-session").exists, "Home offers Start without a loaded model.")
+        download.tap()
+        let prepare = UITestWalk.button("Download & use")
+        XCTAssertTrue(prepare.appears(within: UITestSupport.timeout), "The download did not open Model Library.")
+        XCTAssertTrue(UITestWalk.anyLabelContaining("Live Fluid Speech Mini").exists, "Model Library does not name Fluid Speech Mini.")
+        shot("d29-model-library-fluid")
+
+        // A progress bar while preparing, then "Reload", and Home offers Start.
+        prepare.tap()
+        XCTAssertTrue(UITestSupport.element("model-download-progress").appears(within: UITestSupport.timeout), "No progress bar appeared.")
+        XCTAssertTrue(UITestWalk.button("Reload").appears(within: 30), "The button does not read \"Reload\" after the preparation.")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "model-download-progress"), "The progress bar stayed after the preparation.")
+        UITestWalk.back()
+        UITestWalk.waitFor("start-session")
+        XCTAssertFalse(UITestSupport.element("download-model").exists, "Home still offers the download.")
+
+        // The seam's `-fluid-ready`: the model is loaded at launch, and the conversation shows its text.
+        let app = UITestWalk.launchToHome(["-fluid-ready"])
+        XCTAssertFalse(UITestSupport.element("download-model").exists, "Home offers the download for a loaded model.")
+        UITestWalk.startSession()
+        UITestWalk.tap("expand-transcript")
+        UITestWalk.waitFor("live-transcript")
+        XCTAssertTrue(UITestWalk.anyShowing(UITestWalk.segment).appears(within: UITestSupport.timeout), "The transcript does not show the text.")
+        UITestWalk.tap("expand-transcript")
+        XCTAssertTrue(UITestWalk.waitForDisappearance(of: "live-transcript"), "The transcript did not collapse.")
+        XCTAssertFalse(UITestSupport.element("live-transcription-cost").exists, "A Fluid Speech Mini session shows a cost.")
+        XCTAssertFalse(UITestWalk.anyLabelContaining("USD").exists, "A Fluid Speech Mini session shows a cost.")
+        UITestWalk.assist(reaching: 1)
+        XCTAssertEqual(UITestWalk.text(of: UITestSupport.element("assistant-answer")), UITestWalk.answer)
+        XCTAssertFalse(UITestSupport.element("assist-error").exists, "The Assist failed in a Fluid Speech Mini session.")
+        XCTAssertEqual(app.alerts.count, 0, "An alert appeared in the Fluid Speech Mini session.")
+        shot("d29-fluid-session")
+        UITestWalk.stopSession()
     }
 
     /// T12. AC-IOS-009, 026, 075, 145, 150.

@@ -18,6 +18,7 @@ final class SpeechProviderTests: XCTestCase {
         XCTAssertFalse(SpeechProvider.voz.streamsAudio)
         XCTAssertFalse(SpeechProvider.parakeet.streamsAudio)
         XCTAssertFalse(SpeechProvider.apple.streamsAudio)
+        XCTAssertFalse(SpeechProvider.fluid.streamsAudio)
     }
 
     /// AC-CORE-081.
@@ -40,8 +41,11 @@ final class SpeechProviderTests: XCTestCase {
     // MARK: - The catalogue (spec 02 section 7.1)
 
     func testCatalogueOrderAndRawValues() {
-        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple])
-        XCTAssertEqual(SpeechProvider.allCases.map(\.rawValue), ["meta", "nemotron", "qwen3", "voz", "parakeet", "apple"])
+        XCTAssertEqual(SpeechProvider.allCases, [.meta, .nemotron, .qwen3, .voz, .parakeet, .apple, .fluid])
+        XCTAssertEqual(
+            SpeechProvider.allCases.map(\.rawValue),
+            ["meta", "nemotron", "qwen3", "voz", "parakeet", "apple", "fluid"]
+        )
         XCTAssertEqual(RelayConstants.speechModels, [SpeechProvider.nemotron.rawValue, SpeechProvider.qwen3.rawValue])
     }
 
@@ -61,7 +65,8 @@ final class SpeechProviderTests: XCTestCase {
             Row(provider: .qwen3, name: "Qwen3 1.7B \u{00B7} PC", isCloud: false, isPCLocal: true, isOnDevice: false, streamsAudio: true, sampleRate: 16_000),
             Row(provider: .voz, name: "Voz \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000),
             Row(provider: .parakeet, name: "Parakeet \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000),
-            Row(provider: .apple, name: "Apple \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000)
+            Row(provider: .apple, name: "Apple \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000),
+            Row(provider: .fluid, name: "Fluid Speech Mini \u{00B7} iPhone", isCloud: false, isPCLocal: false, isOnDevice: true, streamsAudio: false, sampleRate: 16_000)
         ]
         XCTAssertEqual(rows.map(\.provider), SpeechProvider.allCases)
         for row in rows {
@@ -75,13 +80,12 @@ final class SpeechProviderTests: XCTestCase {
         }
     }
 
-    /// D-28: the recogniser built into iOS is the sixth provider, last in the catalogue.
+    /// D-28: the recogniser built into iOS is the sixth provider.
     func testAppleIsOnDeviceAndNeedsNeitherCloudNorPC() {
         let apple = SpeechProvider.apple
         XCTAssertEqual(apple.rawValue, "apple")
         XCTAssertEqual(SpeechProvider(rawValue: "apple"), .apple)
-        XCTAssertEqual(SpeechProvider.allCases.last, .apple)
-        XCTAssertEqual(SpeechProvider.allCases.count, 6)
+        XCTAssertEqual(SpeechProvider.allCases.firstIndex(of: .apple), 5)
         XCTAssertEqual(apple.displayName, "Apple \u{00B7} iPhone")
         XCTAssertTrue(apple.isOnDevice)
         XCTAssertFalse(apple.isCloud)
@@ -93,6 +97,26 @@ final class SpeechProviderTests: XCTestCase {
         XCTAssertFalse(RelayConstants.speechModels.contains(apple.rawValue), "The PC has no model of this name.")
         XCTAssertEqual(TranscriptionUsage(provider: apple.rawValue).hourlyRateUSD, 0)
         XCTAssertFalse(PCRequirement.needsPC(speech: apple, answers: .openrouter))
+    }
+
+    /// D-29: Fluid Speech Mini is the seventh provider, last in the catalogue.
+    func testFluidIsOnDeviceAndNeedsNeitherCloudNorPC() {
+        let fluid = SpeechProvider.fluid
+        XCTAssertEqual(fluid.rawValue, "fluid")
+        XCTAssertEqual(SpeechProvider(rawValue: "fluid"), .fluid)
+        XCTAssertEqual(SpeechProvider.allCases.last, .fluid)
+        XCTAssertEqual(SpeechProvider.allCases.count, 7)
+        XCTAssertEqual(fluid.displayName, "Fluid Speech Mini \u{00B7} iPhone")
+        XCTAssertTrue(fluid.isOnDevice)
+        XCTAssertFalse(fluid.isCloud)
+        XCTAssertFalse(fluid.isPCLocal)
+        XCTAssertFalse(fluid.streamsAudio)
+        XCTAssertEqual(fluid.sampleRate, 16_000)
+        XCTAssertEqual(SpeechProvider.stored("fluid"), .fluid)
+        XCTAssertEqual(SpeechProvider.stored("fluid-mini"), .meta, "The model's variant is not the provider's raw value.")
+        XCTAssertFalse(RelayConstants.speechModels.contains(fluid.rawValue), "The PC has no model of this name.")
+        XCTAssertEqual(TranscriptionUsage(provider: fluid.rawValue).hourlyRateUSD, 0)
+        XCTAssertFalse(PCRequirement.needsPC(speech: fluid, answers: .openrouter))
     }
 
     func testEveryProviderIsExactlyOneKind() {
@@ -108,6 +132,7 @@ final class SpeechProviderTests: XCTestCase {
         XCTAssertEqual(TranscriptionModel.onDevice(for: .voz), TranscriptionModel.voz)
         XCTAssertEqual(TranscriptionModel.onDevice(for: .parakeet), TranscriptionModel.parakeet)
         XCTAssertEqual(TranscriptionModel.onDevice(for: .apple), TranscriptionModel.apple)
+        XCTAssertEqual(TranscriptionModel.onDevice(for: .fluid), TranscriptionModel.fluid)
         XCTAssertNil(TranscriptionModel.onDevice(for: .meta))
         XCTAssertNil(TranscriptionModel.onDevice(for: .nemotron))
         XCTAssertNil(TranscriptionModel.onDevice(for: .qwen3))
@@ -143,6 +168,18 @@ final class SpeechProviderTests: XCTestCase {
                 recommended: false
             )
         )
+        // Nobody has tried Fluid Speech Mini on a phone yet, so it is not recommended (D-29).
+        XCTAssertEqual(
+            TranscriptionModel.fluid,
+            TranscriptionModel(
+                variant: "fluid-mini",
+                displayName: "Live Fluid Speech Mini",
+                approximateMegabytes: 253,
+                quality: "English live captions \u{00B7} rolling 15 s window",
+                recommended: false
+            )
+        )
+        XCTAssertEqual(TranscriptionModel.fluid.id, "fluid-mini")
         XCTAssertEqual(TranscriptionModel.apple.id, SpeechProvider.apple.rawValue)
         XCTAssertEqual(TranscriptionModel.voz.id, SpeechProvider.voz.rawValue)
         XCTAssertEqual(TranscriptionModel.parakeet.id, SpeechProvider.parakeet.rawValue)
@@ -181,7 +218,9 @@ final class SpeechProviderTests: XCTestCase {
             (.parakeet, .codex, true),
             (.parakeet, .openrouter, false),
             (.apple, .codex, true),
-            (.apple, .openrouter, false)
+            (.apple, .openrouter, false),
+            (.fluid, .codex, true),
+            (.fluid, .openrouter, false)
         ]
         XCTAssertEqual(expected.count, SpeechProvider.allCases.count * AssistantProvider.allCases.count)
         for row in expected {

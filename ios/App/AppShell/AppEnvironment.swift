@@ -170,8 +170,13 @@ import Observation
             await session.cancelSummary(forSession: id)
         }
 
-        if case .fixture(let testMode) = mode, testMode.onDeviceReady {
-            models.installPreloaded(variant: "parakeet", voz: nil, parakeet: FixtureStreamingEngine())
+        // The provider the launch actions selected comes with its model loaded.
+        if case .fixture(let testMode) = mode {
+            if testMode.fluidReady {
+                models.installPreloaded(variant: "fluid-mini", voz: nil, parakeet: nil, fluid: FixtureStreamingEngine())
+            } else if testMode.onDeviceReady {
+                models.installPreloaded(variant: "parakeet", voz: nil, parakeet: FixtureStreamingEngine())
+            }
         }
     }
 

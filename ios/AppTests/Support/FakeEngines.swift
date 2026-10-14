@@ -66,6 +66,7 @@ actor FakeStreamingEngine: StreamingRecognizing {
     private var finalText = ""
     private var processFails = false
     private var finishFails = false
+    private var keepsOnly = false
 
     /// How many times `process` was called.
     private(set) var processed = 0
@@ -97,6 +98,11 @@ actor FakeStreamingEngine: StreamingRecognizing {
         finishFails = fails
     }
 
+    /// True: `process` answers that it only kept the samples, as a recogniser does that works in passes.
+    func setKeepsOnly(_ keepsOnly: Bool) {
+        self.keepsOnly = keepsOnly
+    }
+
     // MARK: - StreamingRecognizing
 
     func reset() async {
@@ -107,12 +113,14 @@ actor FakeStreamingEngine: StreamingRecognizing {
         self.handler = handler
     }
 
-    func process(samples: [Float]) async throws {
+    @discardableResult
+    func process(samples: [Float]) async throws -> Bool {
         processed += 1
         processedSamples += samples.count
         if processFails {
             throw FakeEngineFailure()
         }
+        return !keepsOnly
     }
 
     func finish() async throws -> String {
@@ -128,11 +136,94 @@ actor FakeStreamingEngine: StreamingRecognizing {
     }
 }
 
+/// A window recogniser a test scripts by hand. Each call takes the next scripted answer; once the script
+/// has run out, it hears nothing.
+actor FakeWindowEngine: WindowRecognizing {
+    nonisolated let minimumSamples: Int
+
+    private var script: [Result<WindowRecognition, any Error>] = []
+
+    /// The sample count of every `transcribe`, in order.
+    private(set) var calls: [Int] = []
+    /// The first and the last sample of every `transcribe`, in order.
+    private(set) var firsts: [Float] = []
+    private(set) var lasts: [Float] = []
+    private(set) var cleanupCount = 0
+
+    /// 4,800 samples are the 0.3 s the pinned package asks for.
+    init(minimumSamples: Int = 4_800) {
+        self.minimumSamples = minimumSamples
+    }
+
+    /// Adds answers to the end of the script.
+    func answer(_ results: Result<WindowRecognition, any Error>...) {
+        script.append(contentsOf: results)
+    }
+
+    // MARK: - WindowRecognizing
+
+    func transcribe(samples: [Float]) async throws -> WindowRecognition {
+        calls.append(samples.count)
+        firsts.append(samples.first ?? 0)
+        lasts.append(samples.last ?? 0)
+        guard !script.isEmpty else {
+            return WindowRecognition(text: "", words: [])
+        }
+        return try script.removeFirst().get()
+    }
+
+    func cleanup() async {
+        cleanupCount += 1
+    }
+}
+
+/// A model file transport that writes the bodies a test gave it, by address, and keeps what it was asked
+/// for. An address without a body fails.
+actor FakeModelFileTransport: ModelFileTransport {
+    private var bodies: [String: Data] = [:]
+    private var failures: [String: any Error] = [:]
+
+    /// Every address that was asked for, in order.
+    private(set) var requested: [String] = []
+
+    init() {}
+
+    func setBody(_ body: Data, for url: URL?) {
+        if let url {
+            bodies[url.absoluteString] = body
+        }
+    }
+
+    /// The download of this address throws `failure`, and writes nothing.
+    func setFailure(_ failure: (any Error)?, for url: URL?) {
+        if let url {
+            failures[url.absoluteString] = failure
+        }
+    }
+
+    // MARK: - ModelFileTransport
+
+    func download(_ url: URL, to destination: URL, received: @escaping @Sendable (Int64) -> Void) async throws {
+        requested.append(url.absoluteString)
+        if let failure = failures[url.absoluteString] {
+            throw failure
+        }
+        guard let body = bodies[url.absoluteString] else {
+            throw FakeEngineFailure()
+        }
+        // In two steps, as a transfer reports them.
+        received(Int64(body.count / 2))
+        try body.write(to: destination)
+        received(Int64(body.count))
+    }
+}
+
 /// An engine loader that reports `steps`, waits for `gate` when there is one, then throws `failure` or
 /// returns the fake engine.
 struct FakeEngineLoader: OnDeviceEngineLoading {
     private let voz: FakeBatchEngine
     private let parakeet: FakeStreamingEngine
+    private let fluid: FakeStreamingEngine
     private let steps: [ModelPreparationProgress]
     private let failure: (any Error)?
     private let gate: FakeGate?
@@ -140,15 +231,22 @@ struct FakeEngineLoader: OnDeviceEngineLoading {
     init(
         voz: FakeBatchEngine,
         parakeet: FakeStreamingEngine,
+        fluid: FakeStreamingEngine = FakeStreamingEngine(),
         steps: [ModelPreparationProgress] = [],
         failure: (any Error)? = nil,
         gate: FakeGate? = nil
     ) {
         self.voz = voz
         self.parakeet = parakeet
+        self.fluid = fluid
         self.steps = steps
         self.failure = failure
         self.gate = gate
+    }
+
+    func loadFluid(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
+        try await run(progress)
+        return fluid
     }
 
     func loadVoz(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any BatchRecognizing {

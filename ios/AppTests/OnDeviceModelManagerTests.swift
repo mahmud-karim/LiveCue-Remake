@@ -17,6 +17,7 @@ final class OnDeviceModelManagerTests: XCTestCase {
         XCTAssertEqual(rig.models.statusLine, "Prepare a model")
         XCTAssertNil(rig.models.vozEngine)
         XCTAssertNil(rig.models.parakeetEngine)
+        XCTAssertNil(rig.models.fluidEngine)
         for provider in SpeechProvider.allCases {
             XCTAssertFalse(rig.models.isLoaded(for: provider))
             XCTAssertNil(rig.models.loadedModel(for: provider))
@@ -121,6 +122,63 @@ final class OnDeviceModelManagerTests: XCTestCase {
         XCTAssertNil(models.preparation)
     }
 
+    /// D-29: Fluid Speech Mini reports the three phases, with the bytes of its own download.
+    @MainActor
+    func testFluidProgressShowsItsThreePhasesAndAByteCount() async throws {
+        let total: Int64 = 252_710_832
+        let checking = ModelPreparationProgress(fraction: 0.02, phase: .checking, counter: .none)
+        let downloading = ModelPreparationProgress(
+            fraction: 0.5,
+            phase: .downloading,
+            counter: .bytes(completed: total / 2, total: total)
+        )
+        let preparing = ModelPreparationProgress(fraction: 1, phase: .preparing, counter: .bytes(completed: total, total: total))
+        let whole = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+        let half = ByteCountFormatter.string(fromByteCount: total / 2, countStyle: .file)
+
+        let first = try await shown(preparing: .fluid, after: [checking])
+        XCTAssertEqual(first.block?.variant, "fluid-mini")
+        XCTAssertEqual(first.status, "Checking model files…")
+        XCTAssertNil(first.block?.counterText)
+
+        let second = try await shown(preparing: .fluid, after: [checking, downloading])
+        XCTAssertEqual(second.status, "Downloading Fluid Speech Mini…")
+        XCTAssertEqual(second.block?.counterText, "\(half) / \(whole)")
+
+        let third = try await shown(preparing: .fluid, after: [checking, downloading, preparing])
+        XCTAssertEqual(third.status, "Download complete · preparing model…")
+        XCTAssertEqual(third.block?.fraction, 1)
+        XCTAssertEqual(third.block?.counterText, "\(whole) / \(whole)")
+        XCTAssertNil(third.block?.finishedAt, "The first load goes on after the download.")
+
+        let models = third.rig.models
+        XCTAssertEqual(models.loadedVariant, "fluid-mini")
+        XCTAssertTrue(models.isLoaded(for: .fluid))
+        XCTAssertEqual(models.loadedModel(for: .fluid), TranscriptionModel.fluid)
+        XCTAssertNotNil(models.fluidEngine)
+        XCTAssertNil(models.parakeetEngine, "The other streaming recogniser stays empty.")
+        XCTAssertNil(models.vozEngine)
+        XCTAssertFalse(models.isLoaded(for: .parakeet))
+        XCTAssertEqual(models.statusLine, "Ready")
+        XCTAssertNil(models.preparation)
+    }
+
+    @MainActor
+    func testPreparingFluidSaysSoAtOnce() async throws {
+        let gate = FakeGate()
+        let rig = ModelRig(gate: gate)
+
+        let preparing = Task { try await rig.models.prepare(.fluid) }
+        await SpeechTest.waitUntil { rig.models.isPreparing }
+        XCTAssertEqual(rig.models.preparation?.variant, "fluid-mini")
+        XCTAssertEqual(rig.models.statusLine, "Downloading and preparing Live Fluid Speech Mini…")
+        XCTAssertFalse(rig.models.isLoaded(for: .fluid))
+
+        await gate.open()
+        try await preparing.value
+        XCTAssertTrue(rig.models.isLoaded(for: .fluid))
+    }
+
     @MainActor
     func testAFailedPreparationKeepsItsBlockAndRethrows() async throws {
         let gate = FakeGate()
@@ -200,6 +258,47 @@ final class OnDeviceModelManagerTests: XCTestCase {
         XCTAssertTrue(rig.models.isLoaded(for: .parakeet))
         XCTAssertFalse(rig.models.isLoaded(for: .voz))
         XCTAssertNil(rig.models.vozEngine)
+
+        // Fluid Speech Mini takes the place of Parakeet, and Parakeet takes it back (D-29).
+        try await rig.models.prepare(.fluid)
+        XCTAssertTrue(rig.models.isLoaded(for: .fluid))
+        XCTAssertFalse(rig.models.isLoaded(for: .parakeet))
+        XCTAssertNil(rig.models.parakeetEngine, "One recogniser in memory at a time.")
+        let parakeetCleanups = await rig.parakeet.cleanupCount
+        XCTAssertEqual(parakeetCleanups, 2)
+
+        try await rig.models.prepare(.parakeet)
+        XCTAssertTrue(rig.models.isLoaded(for: .parakeet))
+        XCTAssertFalse(rig.models.isLoaded(for: .fluid))
+        XCTAssertNil(rig.models.fluidEngine)
+        let fluidCleanups = await rig.fluid.cleanupCount
+        XCTAssertEqual(fluidCleanups, 1)
+    }
+
+    /// D-29: "Reload", "Unload" and a change of provider release the rolling recogniser, and with it the
+    /// model.
+    @MainActor
+    func testFluidIsReleasedOnReloadUnloadAndAChangeOfProvider() async throws {
+        let rig = ModelRig()
+        try await rig.models.prepare(.fluid)
+
+        try await rig.models.prepare(.fluid)
+        XCTAssertTrue(rig.models.isLoaded(for: .fluid))
+        let afterReload = await rig.fluid.cleanupCount
+        XCTAssertEqual(afterReload, 1, "The recogniser that was loaded was cleaned up before the reload.")
+
+        rig.models.unload()
+        XCTAssertFalse(rig.models.isLoaded(for: .fluid))
+        XCTAssertNil(rig.models.fluidEngine)
+        XCTAssertNil(rig.models.loadedVariant)
+        XCTAssertEqual(rig.models.statusLine, "Prepare a model")
+        await SpeechTest.eventually { await rig.fluid.cleanupCount == 2 }
+
+        try await rig.models.prepare(.fluid)
+        rig.models.providerChanged(to: .parakeet)
+        XCTAssertFalse(rig.models.isLoaded(for: .fluid))
+        XCTAssertNil(rig.models.fluidEngine)
+        await SpeechTest.eventually { await rig.fluid.cleanupCount == 3 }
     }
 
     @MainActor
@@ -371,6 +470,27 @@ final class OnDeviceModelManagerTests: XCTestCase {
         XCTAssertFalse(rig.models.isPreparing)
     }
 
+    /// D-29: what the seam's `-fluid-ready` does.
+    @MainActor
+    func testAPreloadedFluidModelCountsAsLoaded() async {
+        let rig = ModelRig()
+        rig.models.installPreloaded(variant: "fluid-mini", voz: nil, parakeet: nil, fluid: FixtureStreamingEngine())
+
+        XCTAssertEqual(rig.models.loadedVariant, "fluid-mini")
+        XCTAssertTrue(rig.models.isLoaded(for: .fluid))
+        XCTAssertEqual(rig.models.loadedModel(for: .fluid), TranscriptionModel.fluid)
+        XCTAssertFalse(rig.models.isLoaded(for: .parakeet))
+        XCTAssertFalse(rig.models.isLoaded(for: .voz))
+        XCTAssertNotNil(rig.models.fluidEngine)
+        XCTAssertNil(rig.models.parakeetEngine)
+        XCTAssertEqual(rig.models.statusLine, "Ready")
+
+        // A recogniser under another model's name is not the model that is asked for.
+        rig.models.installPreloaded(variant: "parakeet", voz: nil, parakeet: nil, fluid: FixtureStreamingEngine())
+        XCTAssertFalse(rig.models.isLoaded(for: .fluid))
+        XCTAssertFalse(rig.models.isLoaded(for: .parakeet))
+    }
+
     // MARK: - The text of a failed load
 
     @MainActor
@@ -429,6 +549,7 @@ final class OnDeviceModelManagerTests: XCTestCase {
     let activity: SessionActivity
     let voz: FakeBatchEngine
     let parakeet: FakeStreamingEngine
+    let fluid: FakeStreamingEngine
     let models: OnDeviceModelManager
 
     init(steps: [ModelPreparationProgress] = [], failure: (any Error)? = nil, gate: FakeGate? = nil) {
@@ -436,12 +557,14 @@ final class OnDeviceModelManagerTests: XCTestCase {
         let activity = SessionActivity()
         let voz = FakeBatchEngine()
         let parakeet = FakeStreamingEngine()
+        let fluid = FakeStreamingEngine()
         self.clock = clock
         self.activity = activity
         self.voz = voz
         self.parakeet = parakeet
+        self.fluid = fluid
         self.models = OnDeviceModelManager(
-            loader: FakeEngineLoader(voz: voz, parakeet: parakeet, steps: steps, failure: failure, gate: gate),
+            loader: FakeEngineLoader(voz: voz, parakeet: parakeet, fluid: fluid, steps: steps, failure: failure, gate: gate),
             activity: activity,
             clock: clock
         )
@@ -478,6 +601,11 @@ private actor ReportingLoader: OnDeviceEngineLoading {
     }
 
     func loadParakeet(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
+        await began(progress)
+        return FakeStreamingEngine()
+    }
+
+    func loadFluid(progress: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws -> any StreamingRecognizing {
         await began(progress)
         return FakeStreamingEngine()
     }

@@ -30,9 +30,11 @@ struct ModelPreparation: Equatable, Sendable {
     private(set) var preparation: ModelPreparation? = nil
     private(set) var statusLine: String = "Prepare a model"
 
-    /// At most one of the two is set.
+    /// At most one of the three is set.
     private var voz: (any BatchRecognizing)? = nil
     private var parakeet: (any StreamingRecognizing)? = nil
+    /// Fluid Speech Mini behind its rolling recogniser (D-29).
+    private var fluid: (any StreamingRecognizing)? = nil
 
     /// What the system last said about its own recogniser. `.unknown` until it was asked.
     private(set) var systemSpeechAvailability: SystemSpeechAvailability
@@ -57,6 +59,10 @@ struct ModelPreparation: Equatable, Sendable {
 
     var parakeetEngine: (any StreamingRecognizing)? {
         parakeet
+    }
+
+    var fluidEngine: (any StreamingRecognizing)? {
+        fluid
     }
 
     /// The system recogniser, once its language asset is installed.
@@ -98,6 +104,8 @@ struct ModelPreparation: Equatable, Sendable {
             return voz != nil && loadedVariant == TranscriptionModel.voz.variant
         case .parakeet:
             return parakeet != nil && loadedVariant == TranscriptionModel.parakeet.variant
+        case .fluid:
+            return fluid != nil && loadedVariant == TranscriptionModel.fluid.variant
         case .apple:
             return systemSpeechAvailability == .installed
         case .meta, .nemotron, .qwen3:
@@ -124,10 +132,7 @@ struct ModelPreparation: Equatable, Sendable {
 
         // One recogniser in memory at a time: whatever is loaded is released first. That includes this
         // model when the button read "Reload"; its files stay cached, so it loads again from the cache.
-        let released = parakeet
-        voz = nil
-        parakeet = nil
-        loadedVariant = nil
+        let released = takeLoaded()
 
         let id = UUID()
         runningPreparation = id
@@ -156,12 +161,14 @@ struct ModelPreparation: Equatable, Sendable {
         }
 
         var loadedVoz: (any BatchRecognizing)?
-        var loadedParakeet: (any StreamingRecognizing)?
+        var loadedStreaming: (any StreamingRecognizing)?
         do {
             if provider == .voz {
                 loadedVoz = try await loader.loadVoz(progress: report)
+            } else if provider == .fluid {
+                loadedStreaming = try await loader.loadFluid(progress: report)
             } else {
-                loadedParakeet = try await loader.loadParakeet(progress: report)
+                loadedStreaming = try await loader.loadParakeet(progress: report)
             }
         } catch {
             reporter.finish()
@@ -177,19 +184,23 @@ struct ModelPreparation: Equatable, Sendable {
 
         guard runningPreparation == id else {
             // Unloaded while it was loading: the recogniser is released again.
-            await loadedParakeet?.cleanup()
+            await loadedStreaming?.cleanup()
             return
         }
         runningPreparation = nil
         voz = loadedVoz
-        parakeet = loadedParakeet
+        if provider == .fluid {
+            fluid = loadedStreaming
+        } else {
+            parakeet = loadedStreaming
+        }
         loadedVariant = model.variant
         statusLine = OnDeviceModelManager.readyStatus
         preparation = nil
     }
 
-    /// Releases both recognisers. Deletes no file. Does nothing during a session: the transcriber of a
-    /// running session is using the recogniser.
+    /// Releases the loaded recogniser. Deletes no file. Does nothing during a session: the transcriber
+    /// of a running session is using the recogniser.
     func unload() {
         guard !activity.isActive else { return }
         release()
@@ -227,12 +238,18 @@ struct ModelPreparation: Equatable, Sendable {
         statusLine = line
     }
 
-    /// Fixture wiring only (`-on-device-ready`).
-    func installPreloaded(variant: String, voz: (any BatchRecognizing)?, parakeet: (any StreamingRecognizing)?) {
+    /// Fixture wiring only (`-on-device-ready`, `-fluid-ready`).
+    func installPreloaded(
+        variant: String,
+        voz: (any BatchRecognizing)?,
+        parakeet: (any StreamingRecognizing)?,
+        fluid: (any StreamingRecognizing)? = nil
+    ) {
         runningPreparation = nil
         preparation = nil
         self.voz = voz
         self.parakeet = parakeet
+        self.fluid = fluid
         loadedVariant = variant
         statusLine = OnDeviceModelManager.readyStatus
     }
@@ -320,10 +337,7 @@ struct ModelPreparation: Equatable, Sendable {
     // MARK: - Pieces
 
     private func release() {
-        let released = parakeet
-        voz = nil
-        parakeet = nil
-        loadedVariant = nil
+        let released = takeLoaded()
         if runningPreparation != nil {
             // A preparation in flight is abandoned; its result is released when it arrives.
             runningPreparation = nil
@@ -333,6 +347,17 @@ struct ModelPreparation: Equatable, Sendable {
         if let released {
             Task { await released.cleanup() }
         }
+    }
+
+    /// Forgets whatever is loaded and returns the recogniser that has something to clean up. Voz has
+    /// nothing of the kind.
+    private func takeLoaded() -> (any StreamingRecognizing)? {
+        let streaming = parakeet ?? fluid
+        voz = nil
+        parakeet = nil
+        fluid = nil
+        loadedVariant = nil
+        return streaming
     }
 
     /// One report of the loader, for the preparation it belongs to.
@@ -373,7 +398,7 @@ struct ModelPreparation: Equatable, Sendable {
         case .checking:
             return "Checking model files…"
         case .downloading:
-            return "Downloading Parakeet…"
+            return provider == .fluid ? "Downloading Fluid Speech Mini…" : "Downloading Parakeet…"
         case .preparing:
             return "Download complete · preparing model…"
         }
@@ -393,6 +418,9 @@ struct ModelPreparation: Equatable, Sendable {
         }
         if variant == TranscriptionModel.apple.variant {
             return .apple
+        }
+        if variant == TranscriptionModel.fluid.variant {
+            return .fluid
         }
         return nil
     }

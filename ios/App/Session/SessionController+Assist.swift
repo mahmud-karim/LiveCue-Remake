@@ -105,7 +105,7 @@ extension SessionController {
                 contextMs: contextMs,
                 roundTripMs: max(0, (finishedAt - sentAt) * 1_000),
                 totalMs: max(0, (finishedAt - startedAt) * 1_000),
-                lastLiveChunkMs: speechProvider == .parakeet ? lastLiveChunkMilliseconds : nil,
+                lastLiveChunkMs: speechProvider == .parakeet || speechProvider == .fluid ? lastLiveChunkMilliseconds : nil,
                 transcriptCharacters: request.transcript.count + (request.partialTranscript?.count ?? 0),
                 execution: response.execution
             )

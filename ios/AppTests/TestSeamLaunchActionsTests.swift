@@ -71,6 +71,20 @@ final class TestSeamLaunchActionsTests: XCTestCase {
         XCTAssertEqual(stores.secrets.read(.metaAPIKey), FixtureValues.metaKey)
     }
 
+    /// D-29: the seam can start with Fluid Speech Mini selected. It comes first when both are given.
+    @MainActor
+    func testFluidReadySelectsFluidSpeechMini() async {
+        let stores = Stores()
+        stores.launch(["-fluid-ready"])
+        XCTAssertEqual(stores.preferences.speechProvider, .fluid)
+        XCTAssertEqual(stores.preferences.resetCount, 1)
+        XCTAssertEqual(stores.secrets.read(.metaAPIKey), FixtureValues.metaKey)
+
+        let both = Stores()
+        both.launch(["-on-device-ready", "-fluid-ready"])
+        XCTAssertEqual(both.preferences.speechProvider, .fluid)
+    }
+
     @MainActor
     func testOpenRouterPersistenceKeepsTheSavedSelection() async {
         let stores = Stores()
@@ -142,13 +156,13 @@ final class TestSeamLaunchActionsTests: XCTestCase {
     func testEveryActionRunsWhenEveryArgumentIsGiven() async {
         let stores = Stores()
         stores.launch([
-            "-on-device-ready", "-meta-no-key", "-meta-key-persistence", "-openrouter-ui-reset",
+            "-on-device-ready", "-fluid-ready", "-meta-no-key", "-meta-key-persistence", "-openrouter-ui-reset",
             "-openrouter-persistence-test", "-pc-offline", "-pc-catalog-slow", "-pc-model-slow-start",
             "-pc-model-start-error", "-assist-fails-once", "-pairing-persistence-test",
             "-save-pairing-fixture", "-drop-test-keychain"
         ])
 
-        XCTAssertEqual(stores.preferences.speechProvider, .parakeet)
+        XCTAssertEqual(stores.preferences.speechProvider, .fluid)
         XCTAssertEqual(stores.preferences.resetCount, 0)
         XCTAssertEqual(stores.preferences.assistantConfiguration, stores.earlierSelection)
         XCTAssertNil(stores.secrets.read(.metaAPIKey))
